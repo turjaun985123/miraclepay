@@ -13,6 +13,7 @@ pub mod settings;
 pub mod settlement;
 pub mod stats;
 pub mod subscription;
+pub mod totp;
 pub mod transaction;
 pub mod user;
 pub mod analytics;

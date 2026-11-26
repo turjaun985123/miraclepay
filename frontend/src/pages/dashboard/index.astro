@@ -180,6 +180,34 @@ import DashboardNav from '../../components/DashboardNav.astro';
         <p id="tx-empty" class="empty" hidden>No transactions yet for this merchant.</p>
         <p id="tx-error" class="alert alert-error" role="alert" hidden></p>
       </section>
+
+      <section class="card" aria-labelledby="twofa-heading">
+        <h2 id="twofa-heading">Two-factor authentication (2FA)</h2>
+        <p id="twofa-status" class="muted">Loading…</p>
+        <div id="twofa-setup" hidden>
+          <p class="small">
+            Add this secret to your authenticator app (or scan the
+            otpauth URI as a QR code in the app), then enter the
+            current 6-digit code to enable 2FA:
+          </p>
+          <p class="mono" id="twofa-secret" style="overflow-wrap:anywhere"></p>
+          <p class="mono small muted" id="twofa-uri" style="overflow-wrap:anywhere"></p>
+        </div>
+        <form id="twofa-form" novalidate>
+          <div class="field">
+            <label class="label" for="twofa-code">Authenticator code</label>
+            <input id="twofa-code" class="input" type="text" inputmode="numeric"
+              autocomplete="one-time-code" placeholder="123456" style="max-width:200px" />
+          </div>
+          <p id="twofa-error" class="alert alert-error" role="alert" hidden></p>
+          <p id="twofa-ok" class="alert alert-success" role="status" hidden></p>
+          <div class="row">
+            <button id="twofa-start" class="btn btn-ghost" type="button">Set up 2FA</button>
+            <button id="twofa-enable" class="btn" type="submit" hidden>Enable 2FA</button>
+            <button id="twofa-disable" class="btn btn-ghost" type="button" hidden>Disable 2FA</button>
+          </div>
+        </form>
+      </section>
     </div>
   </main>
 
@@ -207,6 +235,10 @@ import DashboardNav from '../../components/DashboardNav.astro';
       listGateways,
       createPayment,
       formatMoney,
+      me,
+      totpSetup,
+      totpEnable,
+      totpDisable,
     } from '../../lib/api';
 
     const MERCHANT_KEY = 'mp_merchant';
@@ -372,6 +404,102 @@ import DashboardNav from '../../components/DashboardNav.astro';
       els.switcher.hidden = merchants.length === 0;
     }
 
+    // -- Two-factor authentication panel (Wave 26) -----------------
+    const twofa = {
+      status: $('twofa-status'),
+      setup: $('twofa-setup'),
+      secret: $('twofa-secret'),
+      uri: $('twofa-uri'),
+      code: $('twofa-code'),
+      error: $('twofa-error'),
+      ok: $('twofa-ok'),
+      start: $('twofa-start'),
+      enable: $('twofa-enable'),
+      disable: $('twofa-disable'),
+      form: $('twofa-form'),
+    };
+
+    function twofaMsg(el, text) {
+      if (!el) return;
+      el.textContent = text;
+      el.hidden = !text;
+    }
+
+    async function loadTwoFa() {
+      try {
+        const user = await me();
+        const enabled = (user as { totp_enabled?: boolean }).totp_enabled === true;
+        if (twofa.status) {
+          twofa.status.textContent = enabled
+            ? '2FA is ON — a code from your authenticator app is required at login.'
+            : '2FA is off. Set it up to require an authenticator code at login.';
+        }
+        if (twofa.start) twofa.start.hidden = enabled;
+        if (twofa.disable) twofa.disable.hidden = !enabled;
+        if (twofa.enable) twofa.enable.hidden = true;
+        if (twofa.setup) twofa.setup.hidden = true;
+      } catch {
+        if (twofa.status) twofa.status.textContent = 'Could not load 2FA status.';
+      }
+    }
+
+    twofa.start?.addEventListener('click', async () => {
+      twofaMsg(twofa.error, '');
+      twofaMsg(twofa.ok, '');
+      try {
+        const res = await totpSetup();
+        if (twofa.secret) twofa.secret.textContent = res.secret;
+        if (twofa.uri) twofa.uri.textContent = res.otpauth_uri;
+        if (twofa.setup) twofa.setup.hidden = false;
+        if (twofa.enable) twofa.enable.hidden = false;
+        if (twofa.start) twofa.start.hidden = true;
+      } catch (err) {
+        twofaMsg(twofa.error, err instanceof Error ? err.message : 'Setup failed.');
+      }
+    });
+
+    twofa.form?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      twofaMsg(twofa.error, '');
+      twofaMsg(twofa.ok, '');
+      const code = (twofa.code?.value ?? '').trim();
+      if (!code) {
+        twofaMsg(twofa.error, 'Enter the 6-digit code from your authenticator app.');
+        return;
+      }
+      try {
+        await totpEnable(code);
+        twofaMsg(twofa.ok, '2FA enabled. Your next login will ask for a code.');
+        await loadTwoFa();
+      } catch (err) {
+        twofaMsg(
+          twofa.error,
+          err instanceof Error && err.message.includes('totp_invalid')
+            ? 'That code did not verify — check the app and try the current code.'
+            : err instanceof Error
+              ? err.message
+              : 'Could not enable 2FA.',
+        );
+      }
+    });
+
+    twofa.disable?.addEventListener('click', async () => {
+      twofaMsg(twofa.error, '');
+      twofaMsg(twofa.ok, '');
+      const code = (twofa.code?.value ?? '').trim();
+      if (!code) {
+        twofaMsg(twofa.error, 'Enter a current code to disable 2FA.');
+        return;
+      }
+      try {
+        await totpDisable(code);
+        twofaMsg(twofa.ok, '2FA disabled.');
+        await loadTwoFa();
+      } catch (err) {
+        twofaMsg(twofa.error, err instanceof Error ? err.message : 'Could not disable 2FA.');
+      }
+    });
+
     async function init() {
       if (!getToken()) {
         window.location.href = '/login';
@@ -404,6 +532,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
       els.createSection.hidden = true;
       els.content.hidden = false;
       await Promise.all([loadGateways(), loadDashboard()]);
+      void loadTwoFa();
     }
 
     els.merchantSelect.addEventListener('change', () => {

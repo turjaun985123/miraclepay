@@ -62,6 +62,13 @@ pub struct User {
     pub role: UserRole,
     /// Whether the user has verified ownership of `email`.
     pub email_verified: bool,
+    /// TOTP shared secret (base32), set at 2FA setup (Wave 26).
+    /// Never serialised, like `password_hash`.
+    #[serde(default, skip_serializing)]
+    pub totp_secret: Option<String>,
+    /// Whether TOTP 2FA is enforced at login for this user.
+    #[serde(default)]
+    pub totp_enabled: bool,
     /// When the user record was created.
     pub created_at: DateTime<Utc>,
 }
@@ -147,6 +154,8 @@ mod tests {
             password_hash: "$argon2id$stored-hash-value".to_string(),
             role: UserRole::Merchant,
             email_verified: true,
+            totp_secret: None,
+            totp_enabled: false,
             created_at: Utc::now(),
         }
     }

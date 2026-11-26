@@ -34,6 +34,8 @@ pub struct RegisterReq {
 pub struct LoginReq {
     pub email: String,
     pub password: String,
+    /// TOTP code, required when the user has 2FA enabled (Wave 26).
+    pub totp_code: Option<String>,
 }
 
 /// Snake-case string form of a [`UserRole`], matching its serde
@@ -57,6 +59,7 @@ fn user_json(user: &User) -> Value {
         "email": user.email,
         "role": user.role,
         "email_verified": user.email_verified,
+        "totp_enabled": user.totp_enabled,
         "created_at": user.created_at,
     })
 }
@@ -95,6 +98,8 @@ pub async fn register(
         password_hash,
         role: UserRole::Merchant,
         email_verified: false,
+            totp_secret: None,
+            totp_enabled: false,
         created_at: chrono::Utc::now(),
     };
 
@@ -164,6 +169,20 @@ pub async fn login(
         miraclepay_domain::password::verify_password(&req.password, &user.password_hash);
     if !candidate_ok {
         return Err(ApiError::Unauthorized);
+    }
+
+    // Wave 26: TOTP second factor, when the user enabled it.
+    if user.totp_enabled {
+        let secret = user.totp_secret.as_deref().unwrap_or("");
+        match req.totp_code.as_deref() {
+            None => return Err(ApiError::TotpRequired),
+            Some(code) => {
+                let now = chrono::Utc::now().timestamp().max(0) as u64;
+                if !miraclepay_domain::totp::verify(secret, code, now) {
+                    return Err(ApiError::TotpInvalid);
+                }
+            }
+        }
     }
 
     let token = create_token(&user.id, role_str(&user.role), &state.jwt_secret);
@@ -250,6 +269,106 @@ pub async fn logout(
     Ok(Json(json!({ "revoked": revoked })))
 }
 
+/// `POST /auth/2fa/setup` (Wave 26) — generate a TOTP secret for
+/// the signed-in user and return it (once) with the otpauth URI.
+/// The secret is stored as *pending*: login does not require a
+/// code until `POST /auth/2fa/enable` confirms possession.
+pub async fn totp_setup(
+    auth: AuthUser,
+    State(state): State<AppState>,
+) -> Result<Json<Value>, ApiError> {
+    let secret = miraclepay_domain::totp::generate_secret();
+    let mut users = state.users.write().await;
+    let user = users
+        .get_mut(&auth.user_id)
+        .ok_or(ApiError::Unauthorized)?;
+    user.totp_secret = Some(secret.clone());
+    let email = user.email.clone();
+    drop(users);
+    state.audit(
+        Some(auth.user_id.clone()),
+        None,
+        "auth.2fa.setup",
+        "user",
+        Some(auth.user_id.clone()),
+    );
+    Ok(Json(json!({
+        "secret": secret,
+        "otpauth_uri": miraclepay_domain::totp::otpauth_uri(&secret, &email, "MiraclePay"),
+        "enabled": false,
+    })))
+}
+
+/// Body of the 2FA enable/disable endpoints.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct TotpCodeReq {
+    pub code: String,
+}
+
+/// `POST /auth/2fa/enable` (Wave 26) — confirm a code from the
+/// authenticator app against the pending secret, then enforce
+/// TOTP at login.
+pub async fn totp_enable(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Json(req): Json<TotpCodeReq>,
+) -> Result<Json<Value>, ApiError> {
+    let mut users = state.users.write().await;
+    let user = users
+        .get_mut(&auth.user_id)
+        .ok_or(ApiError::Unauthorized)?;
+    let secret = user
+        .totp_secret
+        .clone()
+        .ok_or_else(|| ApiError::BadRequest("2fa setup has not been started".to_string()))?;
+    let now = chrono::Utc::now().timestamp().max(0) as u64;
+    if !miraclepay_domain::totp::verify(&secret, &req.code, now) {
+        return Err(ApiError::TotpInvalid);
+    }
+    user.totp_enabled = true;
+    drop(users);
+    state.audit(
+        Some(auth.user_id.clone()),
+        None,
+        "auth.2fa.enable",
+        "user",
+        Some(auth.user_id.clone()),
+    );
+    Ok(Json(json!({ "enabled": true })))
+}
+
+/// `POST /auth/2fa/disable` (Wave 26) — turn 2FA off after proving
+/// possession with a current code; clears the stored secret.
+pub async fn totp_disable(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Json(req): Json<TotpCodeReq>,
+) -> Result<Json<Value>, ApiError> {
+    let mut users = state.users.write().await;
+    let user = users
+        .get_mut(&auth.user_id)
+        .ok_or(ApiError::Unauthorized)?;
+    if !user.totp_enabled {
+        return Err(ApiError::BadRequest("2fa is not enabled".to_string()));
+    }
+    let secret = user.totp_secret.clone().unwrap_or_default();
+    let now = chrono::Utc::now().timestamp().max(0) as u64;
+    if !miraclepay_domain::totp::verify(&secret, &req.code, now) {
+        return Err(ApiError::TotpInvalid);
+    }
+    user.totp_enabled = false;
+    user.totp_secret = None;
+    drop(users);
+    state.audit(
+        Some(auth.user_id.clone()),
+        None,
+        "auth.2fa.disable",
+        "user",
+        Some(auth.user_id.clone()),
+    );
+    Ok(Json(json!({ "enabled": false })))
+}
+
 /// `GET /auth/me`
 ///
 /// Returns the currently authenticated user as JSON. The response
@@ -311,6 +430,8 @@ mod tests {
             password_hash: "stored-hash-value".to_string(),
             role: UserRole::Merchant,
             email_verified: false,
+            totp_secret: None,
+            totp_enabled: false,
             created_at: chrono::Utc::now(),
         };
         let value = user_json(&user);

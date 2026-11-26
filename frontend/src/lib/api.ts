@@ -494,11 +494,15 @@ export interface DashboardStats {
 // Auth
 // ---------------------------------------------------------------------------
 
-export async function login(email: string, password: string): Promise<AuthResponse> {
+export async function login(
+  email: string,
+  password: string,
+  totpCode?: string,
+): Promise<AuthResponse> {
   const result = await apiFetch<AuthResponse>('/api/v1/auth/login', {
     method: 'POST',
     auth: false,
-    body: jsonBody({ email, password }),
+    body: jsonBody({ email, password, totp_code: totpCode }),
   });
   // Store the pair centrally (Wave 25); pages may still call
   // setToken themselves — it writes the same value.
@@ -561,6 +565,23 @@ export function register(
 
 export function me(): Promise<User> {
   return apiFetch<User>('/api/v1/auth/me');
+}
+
+// Two-factor authentication (Wave 26)
+
+/** Start TOTP setup: returns the one-time secret + otpauth URI. */
+export function totpSetup(): Promise<{ secret: string; otpauth_uri: string; enabled: boolean }> {
+  return apiFetch('/api/v1/auth/2fa/setup', { method: 'POST', body: jsonBody({}) });
+}
+
+/** Enable TOTP by proving possession with a current code. */
+export function totpEnable(code: string): Promise<{ enabled: boolean }> {
+  return apiFetch('/api/v1/auth/2fa/enable', { method: 'POST', body: jsonBody({ code }) });
+}
+
+/** Disable TOTP with a current code; clears the server-side secret. */
+export function totpDisable(code: string): Promise<{ enabled: boolean }> {
+  return apiFetch('/api/v1/auth/2fa/disable', { method: 'POST', body: jsonBody({ code }) });
 }
 
 // ---------------------------------------------------------------------------

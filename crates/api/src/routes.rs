@@ -69,6 +69,9 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/auth/me", get(auth::me))
         .route("/api/v1/auth/refresh", post(auth::refresh))
         .route("/api/v1/auth/logout", post(auth::logout))
+        .route("/api/v1/auth/2fa/setup", post(auth::totp_setup))
+        .route("/api/v1/auth/2fa/enable", post(auth::totp_enable))
+        .route("/api/v1/auth/2fa/disable", post(auth::totp_disable))
         // ---------------------------------------------------------
         // Merchants
         // ---------------------------------------------------------

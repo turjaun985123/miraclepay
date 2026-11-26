@@ -269,6 +269,8 @@ impl AppState {
             password_hash,
             role: UserRole::Admin,
             email_verified: true,
+            totp_secret: None,
+            totp_enabled: false,
             created_at: Utc::now(),
         };
         users.insert(id, admin);

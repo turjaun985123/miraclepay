@@ -31,6 +31,12 @@ pub enum ApiError {
     BadRequest(String),
     /// The caller is not authenticated — HTTP 401.
     Unauthorized,
+    /// Login needs a TOTP code that was not supplied — HTTP 401
+    /// with message `totp_required` (Wave 26).
+    TotpRequired,
+    /// The supplied TOTP code did not verify — HTTP 401 with
+    /// message `totp_invalid` (Wave 26).
+    TotpInvalid,
     /// The caller is authenticated but not allowed — HTTP 403.
     Forbidden(String),
     /// The requested resource does not exist — HTTP 404.
@@ -48,6 +54,12 @@ impl IntoResponse for ApiError {
             ApiError::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             ApiError::Unauthorized => {
                 (StatusCode::UNAUTHORIZED, "unauthorized".to_string())
+            }
+            ApiError::TotpRequired => {
+                (StatusCode::UNAUTHORIZED, "totp_required".to_string())
+            }
+            ApiError::TotpInvalid => {
+                (StatusCode::UNAUTHORIZED, "totp_invalid".to_string())
             }
             ApiError::Forbidden(message) => (StatusCode::FORBIDDEN, message),
             ApiError::NotFound(message) => (StatusCode::NOT_FOUND, message),

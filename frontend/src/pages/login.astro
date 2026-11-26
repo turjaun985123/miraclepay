@@ -46,6 +46,18 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           />
         </div>
 
+        <div class="field" id="totp-field" hidden>
+          <label for="totp-code">Two-factor code</label>
+          <input
+            id="totp-code"
+            name="totp_code"
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            placeholder="6-digit code from your authenticator app"
+          />
+        </div>
+
         <p id="login-error" class="login-error" role="alert" hidden></p>
 
         <button id="login-submit" type="submit" class="login-submit">
@@ -213,8 +225,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     if (submitButton) submitButton.disabled = true;
 
+    const totpField = document.getElementById('totp-field');
+    const totpInput = document.getElementById('totp-code') as HTMLInputElement | null;
+    const totpCode = totpInput?.value.trim() || undefined;
+
     try {
-      const result: unknown = await login(email, password);
+      const result: unknown = await login(email, password, totpCode);
       // `login` resolves with the API response ({ token, user }) in
       // the canonical client; tolerate a bare token string as well.
       const token =
@@ -229,11 +245,23 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       setToken(token);
       window.location.href = '/dashboard';
     } catch (error) {
-      showError(
+      const message =
         error instanceof Error
           ? error.message
-          : 'Login failed. Please check your email and password and try again.',
-      );
+          : 'Login failed. Please check your email and password and try again.';
+      // Wave 26: the API answers 401 `totp_required` / `totp_invalid`
+      // for 2FA accounts — reveal the code field and explain.
+      if (message.includes('totp_required') || message.includes('totp_invalid')) {
+        if (totpField) totpField.hidden = false;
+        totpInput?.focus();
+        showError(
+          message.includes('totp_required')
+            ? 'This account has two-factor authentication enabled. Enter the 6-digit code from your authenticator app.'
+            : 'That two-factor code did not verify. Please try the current code from your authenticator app.',
+        );
+      } else {
+        showError(message);
+      }
       if (submitButton) submitButton.disabled = false;
     }
   });
