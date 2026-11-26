@@ -563,3 +563,6 @@ v0.0.2 + GitHub Release.
 - **W74 fallback:** in-memory mode unchanged — persist functions are no-ops without a pool (unit-tested); the existing suite passes with no database.
 - **W75 observability + docs:** `/health` gains `persisted_collections` / `persisted_records`; `docs/operations/persistence.md` documents the model, the ≤15 s crash window, and the verification path.
 - Local: 683 workspace tests pass (678 + 3 persist unit + 2 PG integration), fmt + clippy -D warnings clean.
+
+### Waves 53–75 — first CI run: Rust job failed, cause fixed in the next commit
+- Run **45770915471** (commit `26357a2`): Frontend/Android/Docker/audit success; **Rust job failed** — both `persistence_pg` tests hit Postgres `28P01 password authentication failed` against the CI service container (they pass against local Postgres 16 with identical credentials). The service password env and the test URL match character-for-character, so this is the service-init/auth path, not the code: the CI service now uses `POSTGRES_HOST_AUTH_METHOD: trust` (runner-local, job-scoped, throwaway test DB only). Verdict for 53–75 waits for the re-run.

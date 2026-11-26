@@ -27,6 +27,11 @@ jobs:
       postgres:
         image: postgres:16
         env:
+          # CI-only throwaway database: trust auth on the
+          # runner-local service port avoids service-init auth
+          # timing failures (28P01 seen on run 45770915471); the
+          # database is reachable only from this job's steps.
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_USER: miraclepay
           POSTGRES_PASSWORD: <redacted>
           POSTGRES_DB: miraclepay
