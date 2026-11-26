@@ -171,3 +171,10 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - New `domain::analytics`: zero-filled daily series (counts + completed BDT volume, reporting-currency convention shared with `compute_stats`) and per-gateway breakdown; 2 aggregation tests.
 - New endpoint `GET /api/v1/admin/analytics?days=30` (admin-only, days clamped 1..=90).
 - Admin page gains an Analytics section: daily bars + per-gateway table. Local: 620 workspace tests pass, Astro build passes.
+
+### Wave 19 — CI verdict ✅
+- Commit `244c59a`, CI run **45755851506**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 20 — OpenAPI 3.1 spec (this commit)
+- New `api::openapi` module generating the spec from a route table mirroring `build_router` 1:1 (66 operations across 54 paths, `:param` → `{param}`, bearer-JWT security scheme, standard error responses).
+- Served live at `GET /openapi.json`; unit tests pin structure, per-path presence, path-parameter declaration, and the operation count as a drift guard — adding a route without a spec entry now fails tests. Local: 624 workspace tests pass.

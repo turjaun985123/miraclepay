@@ -45,6 +45,11 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
     }))
 }
 
+/// OpenAPI document: `GET /openapi.json` (Wave 20).
+async fn openapi_spec() -> impl IntoResponse {
+    Json(crate::openapi::spec())
+}
+
 /// Build the complete MiraclePay API router.
 ///
 /// Wires 51 method handlers across 42 distinct paths and binds the
@@ -55,6 +60,7 @@ pub fn build_router(state: AppState) -> Router {
         // Health
         // ---------------------------------------------------------
         .route("/health", get(health))
+        .route("/openapi.json", get(openapi_spec))
         // ---------------------------------------------------------
         // Auth
         // ---------------------------------------------------------

@@ -4,6 +4,7 @@ pub mod auth_middleware;
 pub mod db;
 pub mod dto;
 pub mod handlers;
+pub mod openapi;
 pub mod pagination;
 pub mod rate_limit;
 pub mod routes;
