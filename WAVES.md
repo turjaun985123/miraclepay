@@ -135,3 +135,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - Backend: `GET /admin/audit` gains `action` (prefix), `entity_type`, `actor_user_id` filters + Wave 11 paging (legacy `limit` behaviour preserved).
 - Frontend: typed `AuditEntry` + `listAudit()` in `api.ts` matching the domain shape; admin page uses it, renders `actor_user_id` (null → "system"), and gains action/entity filter controls.
 - Local: api tests pass; Astro build passes (13 pages).
+
+### Wave 13 — CI verdict ✅
+- Commit `215a188`, CI run **45754423703**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 14 — Invoice PDF (this commit)
+- New `domain::invoice_pdf`: dependency-free one-page PDF renderer (correct xref offsets, PDF string escaping, totals from the domain's own subtotal/discount/tax/total) with 4 unit tests including an xref-offset check.
+- New endpoint `GET /api/v1/invoices/:id/pdf` (owner-scoped, `application/pdf`, attachment filename = invoice number).
+- Local: 608 workspace tests pass.

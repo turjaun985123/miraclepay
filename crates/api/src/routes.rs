@@ -113,6 +113,7 @@ pub fn build_router(state: AppState) -> Router {
             post(invoices::create_invoice).get(invoices::list_invoices),
         )
         .route("/api/v1/invoices/:id", get(invoices::get_invoice))
+        .route("/api/v1/invoices/:id/pdf", get(invoices::get_invoice_pdf))
         .route("/api/v1/invoices/:id/send", post(invoices::send_invoice))
         .route("/api/v1/invoices/:id/pay", post(invoices::pay_invoice))
         .route(

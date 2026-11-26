@@ -354,6 +354,31 @@ pub async fn list_invoices(
     Ok(Json(views).into_response())
 }
 
+/// `GET /invoices/{id}/pdf` — download the invoice as a PDF
+/// (Wave 14). Owner-scoped exactly like [`get_invoice`]; the PDF is
+/// rendered by `miraclepay_domain::invoice_pdf`.
+pub async fn get_invoice_pdf(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Response, ApiError> {
+    let invoice = load_owned_invoice(&state, &auth, &id).await?;
+    let pdf = miraclepay_domain::invoice_pdf::render_invoice_pdf(&invoice);
+    let filename = format!("{}.pdf", invoice.number);
+    Ok((
+        StatusCode::OK,
+        [
+            (axum::http::header::CONTENT_TYPE, "application/pdf".to_string()),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{filename}\""),
+            ),
+        ],
+        pdf,
+    )
+        .into_response())
+}
+
 /// `GET /invoices/{id}` — fetch one of the caller's invoices.
 pub async fn get_invoice(
     auth: AuthUser,
