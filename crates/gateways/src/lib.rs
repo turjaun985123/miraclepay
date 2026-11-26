@@ -1,6 +1,7 @@
 //! MiraclePay gateway adapters — one module per gateway, all implementing
 //! the shared `PaymentGateway` trait (individually callable operations).
 pub mod bkash;
+pub mod bkash_tokenized;
 pub mod easypaisa;
 pub mod jazzcash;
 pub mod manual;

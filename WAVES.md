@@ -92,3 +92,9 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 ### Wave 6 — Webhook delivery persistence + dead-letter (this commit)
 - New `worker::delivery_store::FileDeliveryStore`: JSON-file persistence (atomic tmp+rename), automatic dead-letter separation, `due(now)` scheduling query, dead-letter requeue. Retry/backoff policy itself already lived in domain (8 attempts, exponential backoff to 24h cap) and is reused unchanged.
 - Local: 573 workspace tests pass (5 new store tests; one parallel-test temp-file race found and fixed during the wave).
+
+### Wave 6 — CI verdict ✅
+- Commit `2ca7cfe`, CI run **45752654856**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 7 — bKash tokenized checkout shaping (this commit)
+- New `gateways::bkash_tokenized`: grant-token / create-payment / execute-payment request specs + response parsers for bKash's documented tokenized API (sandbox default, live opt-in), credentials only from env (`BKASH_USERNAME/PASSWORD/APP_KEY/APP_SECRET`), missing credentials → `NotConfigured` naming them. No HTTP performed and no URL fabricated — transport stays with the caller, so the flow is fully unit-tested (6 new tests; 121 gateway tests pass locally).
