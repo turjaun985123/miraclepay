@@ -86,7 +86,7 @@ x-device-key: mp_live_<32 hex characters>
 
 ### 2.4 Public endpoints
 
-Labelled **Public** in the tables: `GET /health`, `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/gateways`, the checkout pair (`GET /api/v1/checkout/{id}`, `POST /api/v1/checkout/{id}/submit`), the public pay page (`GET|POST /pay/{slug}`), and invoice payment (`POST /api/v1/invoices/{id}/pay`). These take no `AuthUser` argument in their handlers; the resource ID / slug in the path is the capability.
+Labelled **Public** in the tables: `GET /health`, `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/gateways`, the checkout pair (`GET /api/v1/checkout/{id}`, `POST /api/v1/checkout/{id}/submit`), the public payment-link pair (`GET /api/v1/payment-links/public/{slug}`, `POST /api/v1/payment-links/public/{slug}/pay`), and invoice payment (`POST /api/v1/invoices/{id}/pay`). These take no `AuthUser` argument in their handlers; the resource ID / slug in the path is the capability.
 
 ---
 
@@ -195,8 +195,8 @@ Gateway IDs are lowercase strings: `bkash`, `nagad`, `rocket`, `upay`, `surecash
 | GET | `/api/v1/payment-links` | JWT | List payment links; optional `merchant_id` filter. |
 | GET | `/api/v1/payment-links/{id}` | JWT | Get one payment link. |
 | POST | `/api/v1/payment-links/{id}/deactivate` | JWT | Deactivate a payment link so its public page no longer accepts payment. |
-| GET | `/pay/{slug}` | Public | Public pay page data for a link: title, description, fixed amount (or `null` for open-amount), and the merchant's trading name. |
-| POST | `/pay/{slug}` | Public | Pay a link. Body: `amount_minor` (required for open-amount links, ignored when the link has a fixed amount), optional `customer_phone` / `customer_email`. Returns `{transaction_id, status}` with `status` starting as `pending`. |
+| GET | `/api/v1/payment-links/public/{slug}` | Public | Public pay page data for a link: title, description, fixed amount (or `null` for open-amount), the merchant's trading name, branding, and the gateway ids offered. Payer-safe fields only — no merchant id, credentials, or config. (The browser page itself is `/pay/{slug}`, served by the embedded frontend.) |
+| POST | `/api/v1/payment-links/public/{slug}/pay` | Public | Pay a link. Body: `gateway` (required), `amount_minor` (required for open-amount links, ignored when the link has a fixed amount), optional `customer_phone` / `customer_email`. Returns `{transaction_id, status}` with `status` starting as `pending`. |
 
 ### 4.7 Invoices
 

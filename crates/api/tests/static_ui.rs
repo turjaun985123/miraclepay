@@ -99,6 +99,38 @@ async fn a_real_page_route_serves_its_html() {
 }
 
 #[tokio::test]
+async fn pay_and_checkout_urls_serve_their_page_shells() {
+    if static_files::is_placeholder_bundle() {
+        // Placeholder bundle has no page shells; the resolver's
+        // shell fallback is fixture-tested in static_files unit
+        // tests and CI smoke-tests the real bundle's binary.
+        return;
+    }
+    assert!(static_files::has_embedded("pay/pay/index.html"));
+    assert!(static_files::has_embedded("checkout/checkout/index.html"));
+    // Dynamic segments resolve to the placeholder-built shells —
+    // the pages' JS reads the real slug/id from the URL. Before
+    // v0.0.3.3, /pay/<slug> was shadowed by a JSON API route and
+    // /checkout/<id> was an HTML 404.
+    for path in [
+        "/pay/demo-store-pay/",
+        "/pay/demo-store-pay",
+        "/checkout/txn_abc123",
+    ] {
+        let (status, content_type, _, body) = get(path).await;
+        assert_eq!(status, StatusCode::OK, "GET {path}");
+        assert!(
+            content_type
+                .as_deref()
+                .unwrap_or("")
+                .starts_with("text/html"),
+            "GET {path} content-type: {content_type:?}"
+        );
+        assert!(body.contains("MiraclePay"), "GET {path} body");
+    }
+}
+
+#[tokio::test]
 async fn health_stays_json_with_the_strict_api_csp() {
     let (status, content_type, csp, body) = get("/health").await;
     assert_eq!(status, StatusCode::OK);

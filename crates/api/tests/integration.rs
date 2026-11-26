@@ -599,3 +599,253 @@ async fn responses_carry_security_headers() {
     // no Access-Control-Allow-Origin may be emitted.
     assert!(!headers.contains_key("access-control-allow-origin"));
 }
+
+// ---------------------------------------------------------------------------
+// (8) Public payment-link contract (v0.0.3.3): the hosted pay flow
+//     against the bare app — public fetch with a payer-safe field
+//     audit, public pay creating a pending payment, checkout submit,
+//     and the SMS device flow settling it to completed.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn public_payment_link_flow_settles_via_sms() {
+    let app = app();
+    let (token, merchant_id) = setup_merchant_with_bkash(&app, "link-owner@example.com").await;
+
+    // Create a fixed-amount link through the authenticated API.
+    let (status, body) = send(
+        &app,
+        request(
+            Method::POST,
+            "/api/v1/payment-links",
+            Some(&token),
+            None,
+            Some(json!({
+                "merchant_id": merchant_id,
+                "title": "Integration Store Pay",
+                "description": "One integration widget",
+                "amount_minor": AMOUNT_MINOR,
+                "currency": "BDT",
+                "collect_phone": true,
+                "collect_email": false,
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "create link: {body}");
+    let link_id = body["id"].as_str().expect("link id").to_string();
+    let slug = body["slug"].as_str().expect("link slug").to_string();
+    assert!(!slug.is_empty());
+
+    // The authenticated :id route must still resolve (the new static
+    // `public` segment must not swallow it).
+    let (status, body) = send(
+        &app,
+        request(
+            Method::GET,
+            &format!("/api/v1/payment-links/{link_id}"),
+            Some(&token),
+            None,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "get link by id: {body}");
+    assert_eq!(body["slug"], json!(slug));
+
+    // (a) Public fetch — unauthenticated, 200, payer-safe field audit.
+    let (status, body) = send(
+        &app,
+        request(
+            Method::GET,
+            &format!("/api/v1/payment-links/public/{slug}"),
+            None,
+            None,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "public link fetch: {body}");
+    let object = body.as_object().expect("public view must be an object");
+    let allowed = [
+        "title",
+        "description",
+        "amount",
+        "merchant_name",
+        "collect_phone",
+        "collect_email",
+        "gateways",
+        "branding",
+    ];
+    for key in object.keys() {
+        assert!(
+            allowed.contains(&key.as_str()),
+            "public view leaks unexpected field {key:?}: {body}"
+        );
+    }
+    let serialized = body.to_string().to_lowercase();
+    for forbidden in [
+        "merchant_id",
+        "owner",
+        "api_key",
+        "api_secret",
+        "secret",
+        "password",
+    ] {
+        assert!(
+            !serialized.contains(forbidden),
+            "public view must not contain {forbidden:?}: {body}"
+        );
+    }
+    assert_eq!(body["title"], json!("Integration Store Pay"));
+    assert_eq!(body["merchant_name"], json!("Dhaka Integration Shop"));
+    assert_eq!(body["amount"]["amount_minor"], json!(AMOUNT_MINOR));
+    let gateways = body["gateways"]
+        .as_array()
+        .expect("public view must list offered gateways");
+    assert!(
+        gateways.iter().any(|g| g == &json!("bkash")),
+        "bkash must be offered: {body}"
+    );
+    let branding = body["branding"].as_object().expect("branding object");
+    for key in branding.keys() {
+        assert!(
+            [
+                "display_name",
+                "brand_color",
+                "logo_url",
+                "checkout_message"
+            ]
+            .contains(&key.as_str()),
+            "branding leaks unexpected field {key:?}: {body}"
+        );
+    }
+
+    // Unknown slugs are a plain 404 (and reveal nothing).
+    let (status, _) = send(
+        &app,
+        request(
+            Method::GET,
+            "/api/v1/payment-links/public/no-such-link",
+            None,
+            None,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // (b) Public pay — creates the pending payment.
+    let (status, body) = send(
+        &app,
+        request(
+            Method::POST,
+            &format!("/api/v1/payment-links/public/{slug}/pay"),
+            None,
+            None,
+            Some(json!({
+                "gateway": "bkash",
+                "customer_phone": CUSTOMER_PHONE,
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "public pay: {body}");
+    assert_eq!(body["status"], json!("pending"));
+    let transaction_id = body["transaction_id"]
+        .as_str()
+        .expect("pay response must carry the transaction id")
+        .to_string();
+
+    // Checkout submit (sender + TrxID), as the hosted checkout does.
+    let (status, body) = send(
+        &app,
+        request(
+            Method::POST,
+            &format!("/api/v1/checkout/{transaction_id}/submit"),
+            None,
+            None,
+            Some(json!({
+                "sender_number": CUSTOMER_PHONE,
+                "provider_trx_id": "9HX7K2LMNP",
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "checkout submit: {body}");
+    assert_eq!(body["transaction"]["status"], json!("processing"));
+
+    // Device key + forwarded bKash SMS — the auto-approve step.
+    let (status, body) = send(
+        &app,
+        request(
+            Method::POST,
+            "/api/v1/api-keys",
+            Some(&token),
+            None,
+            Some(json!({
+                "merchant_id": merchant_id,
+                "name": "Android SMS forwarder",
+                "scopes": ["payments_write"],
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "create api key: {body}");
+    let device_key = body["key"].as_str().expect("raw device key").to_string();
+
+    let (status, body) = send(
+        &app,
+        request(
+            Method::POST,
+            "/api/v1/sms",
+            None,
+            Some(&device_key),
+            Some(json!({
+                "device_id": "integration-android-device",
+                "sender": "bKash",
+                "body": BKASH_SMS_BODY,
+                "received_at": "2026-11-26T03:16:00Z",
+                "sim_slot": null,
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "sms intake: {body}");
+    assert_eq!(body["outcome"], json!("verified"), "sms outcome: {body}");
+    assert_eq!(body["transaction_id"], json!(transaction_id));
+
+    // The payment is now completed — read it back publicly via the
+    // checkout view and privately via the payments API.
+    let (status, body) = send(
+        &app,
+        request(
+            Method::GET,
+            &format!("/api/v1/checkout/{transaction_id}"),
+            None,
+            None,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "checkout details: {body}");
+    assert_eq!(
+        body["status"],
+        json!("completed"),
+        "checkout status: {body}"
+    );
+
+    let (status, body) = send(
+        &app,
+        request(
+            Method::GET,
+            &format!("/api/v1/payments/{transaction_id}"),
+            Some(&token),
+            None,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "get payment: {body}");
+    assert_eq!(body["transaction"]["status"], json!("completed"));
+}

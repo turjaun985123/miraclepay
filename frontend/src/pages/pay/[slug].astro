@@ -259,6 +259,7 @@ import Icon from '../../components/Icon.astro';
     } | null;
     collect_phone?: boolean;
     collect_email?: boolean;
+    gateways?: string[];
     amount_minor?: number | null;
     currency?: string;
     amount?: { amount_minor?: number; currency?: string } | null;
@@ -445,6 +446,29 @@ import Icon from '../../components/Icon.astro';
       currency = (link.currency ?? link.amount?.currency ?? 'BDT').toUpperCase();
       collectPhone = link.collect_phone === true;
       collectEmail = link.collect_email === true;
+
+      // Gateways offered by this merchant (public link view): hide
+      // the radio cards that are not offered, and keep a visible
+      // card selected. An absent/empty list leaves every card.
+      if (Array.isArray(link.gateways) && link.gateways.length > 0) {
+        const offered = new Set(link.gateways.map((g) => String(g).toLowerCase()));
+        let firstVisible: HTMLInputElement | null = null;
+        document
+          .querySelectorAll<HTMLInputElement>('input[name="gateway"]')
+          .forEach((input) => {
+            const card = input.closest('label') as HTMLElement | null;
+            const isOffered = offered.has(input.value.toLowerCase());
+            if (card) card.hidden = !isOffered;
+            if (isOffered && !firstVisible) firstVisible = input;
+          });
+        const checked = document.querySelector<HTMLInputElement>(
+          'input[name="gateway"]:checked',
+        );
+        const checkedCard = checked?.closest('label') as HTMLElement | null;
+        if (checked && checkedCard?.hidden && firstVisible) {
+          (firstVisible as HTMLInputElement).checked = true;
+        }
+      }
 
       if (titleEl) titleEl.textContent = link.title ?? t('pay_title_default');
       document.title = `MiraclePay — Pay — ${link.title ?? 'Payment'}`;

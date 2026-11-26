@@ -202,9 +202,21 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/payment-links/:id/deactivate",
             post(payment_links::deactivate_link),
         )
+        // Public (unauthenticated) payment-link API — the canonical
+        // contract the hosted pay page calls. It lives under
+        // /api/v1 like every other API route; the browser page path
+        // /pay/:slug is NOT an API route (the embedded frontend
+        // serves that shell from the static fallback). Until
+        // v0.0.3.2 these handlers were mounted on /pay/:slug, which
+        // both broke the frontend's /api/v1 calls (404) and shadowed
+        // the pay page's own URL with a JSON response.
         .route(
-            "/pay/:slug",
-            get(payment_links::public_link).post(payment_links::pay_link),
+            "/api/v1/payment-links/public/:slug",
+            get(payment_links::public_link),
+        )
+        .route(
+            "/api/v1/payment-links/public/:slug/pay",
+            post(payment_links::pay_link),
         )
         // ---------------------------------------------------------
         // Invoices

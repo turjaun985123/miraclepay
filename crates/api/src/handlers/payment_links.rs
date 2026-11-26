@@ -12,8 +12,15 @@
 //! * `GET    /payment-links`               — [`list_links`]
 //! * `GET    /payment-links/{id}`          — [`get_link`]
 //! * `POST   /payment-links/{id}/deactivate` — [`deactivate_link`]
-//! * `GET    /pay/{slug}`                  — [`public_link`]
-//! * `POST   /pay/{slug}`                  — [`pay_link`]
+//! * `GET    /payment-links/public/{slug}`      — [`public_link`]
+//! * `POST   /payment-links/public/{slug}/pay`  — [`pay_link`]
+//!
+//! (Before v0.0.3.3 the two public handlers were mounted on
+//! `/pay/{slug}` — outside the versioned API, and shadowing the
+//! hosted pay page's own browser URL. The canonical contract is
+//! the `/api/v1/payment-links/public/…` pair above, which is what
+//! the frontend has always called; `/pay/{slug}` is now purely
+//! the browser page, served by the embedded frontend.)
 
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -122,6 +129,11 @@ pub struct PublicLinkView {
     pub collect_phone: bool,
     /// Whether checkout must collect the customer's email address.
     pub collect_email: bool,
+    /// Gateway ids the payer may choose from: the merchant's
+    /// configured gateways when they have configured any, otherwise
+    /// every supported gateway (the merchant has not restricted the
+    /// choice). Ids only — never credentials or config values.
+    pub gateways: Vec<String>,
     /// Per-merchant checkout branding (Wave 37).
     pub branding: PublicBranding,
 }
@@ -137,7 +149,7 @@ pub struct PublicBranding {
     pub checkout_message: Option<String>,
 }
 
-/// Body of `POST /pay/{slug}`.
+/// Body of `POST /payment-links/public/{slug}/pay`.
 #[derive(Debug, Deserialize)]
 pub struct PayLinkRequest {
     /// Amount in minor units. Required for open-amount links;
@@ -151,8 +163,8 @@ pub struct PayLinkRequest {
     pub gateway: String,
 }
 
-/// Response of `POST /pay/{slug}`: the pending transaction that the
-/// payment attempt created.
+/// Response of `POST /payment-links/public/{slug}/pay`: the pending
+/// transaction that the payment attempt created.
 #[derive(Debug, Serialize)]
 pub struct PayLinkResponse {
     /// Identifier of the newly created transaction.
@@ -422,6 +434,18 @@ pub async fn public_link(
         }
     };
 
+    // Gateways offered to the payer: the merchant's configured
+    // gateways when any are configured, else every supported
+    // gateway in their registry (unconfigured = unrestricted).
+    let registry = state.registry_for(&link.merchant_id);
+    let configured = registry.configured_ids();
+    let offered = if configured.is_empty() {
+        registry.list()
+    } else {
+        configured
+    };
+    let gateways: Vec<String> = offered.iter().map(|id| id.as_str().to_string()).collect();
+
     Ok(Json(PublicLinkView {
         title: link.title.clone(),
         description: link.description.clone(),
@@ -429,6 +453,7 @@ pub async fn public_link(
         merchant_name: merchant_name(&state, &link.merchant_id),
         collect_phone: link.collect_phone,
         collect_email: link.collect_email,
+        gateways,
         branding,
     }))
 }

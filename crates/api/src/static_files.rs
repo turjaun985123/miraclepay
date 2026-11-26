@@ -31,6 +31,13 @@
 //!   the structured JSON 404 from `crate::versioning::api_fallback`.
 //! - Asset resolution for the Astro `directory` output format:
 //!   exact file → `<path>/index.html` → `/` serves `index.html`.
+//! - Dynamic page shells (v0.0.3.3): the pay and checkout pages are
+//!   Astro dynamic routes (`pay/[slug]`, `checkout/[id]`) built
+//!   once with a placeholder segment, so the bundle contains
+//!   `pay/pay/index.html` and `checkout/checkout/index.html`. A
+//!   two-segment path `<seg>/<value>` with no exact/dir match
+//!   falls back to the `<seg>/<seg>/index.html` shell when it
+//!   exists — the page's JS reads the real slug/id from the URL.
 //! - Anything else gets a small HTML 404 page.
 //!
 //! Cache policy: hashed `_astro/` assets are immutable for a year;
@@ -75,6 +82,18 @@ pub fn resolve_with(path: &str, exists: impl Fn(&str) -> bool) -> Option<String>
     let dir_index = format!("{clean}/index.html");
     if exists(&dir_index) {
         return Some(dir_index);
+    }
+    // Dynamic page shells: /pay/<slug> → pay/pay/index.html and
+    // /checkout/<id> → checkout/checkout/index.html (the bundle's
+    // placeholder-built shell for the dynamic route). Only for
+    // exactly two segments, and only when that shell exists —
+    // real files and real directory pages always win above.
+    let segments: Vec<&str> = clean.split('/').collect();
+    if segments.len() == 2 {
+        let shell = format!("{0}/{0}/index.html", segments[0]);
+        if exists(&shell) {
+            return Some(shell);
+        }
     }
     None
 }
@@ -210,6 +229,8 @@ mod tests {
                 | "favicon.svg"
                 | "_astro/app.abc123.js"
                 | "_astro/site.def456.css"
+                | "pay/pay/index.html"
+                | "checkout/checkout/index.html"
         )
     }
 
@@ -245,6 +266,33 @@ mod tests {
             resolve_with("/_astro/app.abc123.js", fixture).as_deref(),
             Some("_astro/app.abc123.js")
         );
+    }
+
+    #[test]
+    fn dynamic_routes_resolve_to_their_page_shell() {
+        // /pay/<slug> and /checkout/<id> serve the placeholder-built
+        // shell for their dynamic route; the page JS reads the real
+        // slug/id from the browser URL.
+        assert_eq!(
+            resolve_with("/pay/demo-store-pay", fixture).as_deref(),
+            Some("pay/pay/index.html")
+        );
+        assert_eq!(
+            resolve_with("/pay/demo-store-pay/", fixture).as_deref(),
+            Some("pay/pay/index.html")
+        );
+        assert_eq!(
+            resolve_with("/checkout/txn_abc123", fixture).as_deref(),
+            Some("checkout/checkout/index.html")
+        );
+        // The placeholder's own URL still resolves as a plain
+        // directory page, and deeper/unknown paths do not fall back.
+        assert_eq!(
+            resolve_with("/pay/pay", fixture).as_deref(),
+            Some("pay/pay/index.html")
+        );
+        assert_eq!(resolve_with("/pay/a/b", fixture), None);
+        assert_eq!(resolve_with("/unknown/thing", fixture), None);
     }
 
     #[test]
