@@ -413,6 +413,27 @@ const ROUTES: &[(&str, &[&str], &str, &str, bool)] = &[
         false,
     ),
     (
+        "/api/v1/webhooks/stripe",
+        &["post"],
+        "Stripe webhook receiver (signature-verified)",
+        "Provider webhooks",
+        false,
+    ),
+    (
+        "/api/v1/webhooks/paypal",
+        &["post"],
+        "PayPal webhook receiver (verified via PayPal API)",
+        "Provider webhooks",
+        false,
+    ),
+    (
+        "/api/v1/callbacks/bkash",
+        &["post"],
+        "bKash tokenized callback (execute-verified)",
+        "Provider webhooks",
+        false,
+    ),
+    (
         "/api/v1/sms/parse",
         &["post"],
         "Preview SMS parsing",
@@ -641,11 +662,11 @@ mod tests {
 
     #[test]
     fn operation_count_matches_the_router_surface() {
-        // routes::build_router registers 90 method handlers as of
-        // Wave 44 — 89 in this table plus GET /openapi.json itself.
+        // routes::build_router registers 93 method handlers as of
+        // Wave 82 — 92 in this table plus GET /openapi.json itself.
         // If you add a route, add it to ROUTES above and update
         // this number.
-        assert_eq!(operation_count(), 89);
+        assert_eq!(operation_count(), 92);
     }
 
     #[test]

@@ -27,7 +27,7 @@ use axum::{
 
 use crate::handlers::{
     admin, api_keys, auth, disputes, fx, gateways, invoices, kyc, merchants, payment_links,
-    payments, settlements, sms, subscriptions, transactions, webhooks,
+    payments, provider_webhooks, settlements, sms, subscriptions, transactions, webhooks,
 };
 use crate::state::AppState;
 
@@ -260,6 +260,21 @@ pub fn build_router(state: AppState) -> Router {
         // SMS verification intake
         // ---------------------------------------------------------
         .route("/api/v1/sms", post(sms::receive_sms))
+        // Provider receivers (Waves 80-82): Stripe/PayPal webhooks
+        // and the bKash tokenized callback. Public by necessity —
+        // each verifies the provider's own proof before settling.
+        .route(
+            "/api/v1/webhooks/stripe",
+            post(provider_webhooks::stripe_webhook),
+        )
+        .route(
+            "/api/v1/webhooks/paypal",
+            post(provider_webhooks::paypal_webhook),
+        )
+        .route(
+            "/api/v1/callbacks/bkash",
+            post(provider_webhooks::bkash_callback),
+        )
         .route("/api/v1/sms/parse", post(sms::parse_preview))
         // ---------------------------------------------------------
         // Plans & subscriptions

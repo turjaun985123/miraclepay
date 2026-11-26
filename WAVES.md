@@ -566,3 +566,16 @@ v0.0.2 + GitHub Release.
 
 ### Waves 53–75 — first CI run: Rust job failed, cause fixed in the next commit
 - Run **45770915471** (commit `26357a2`): Frontend/Android/Docker/audit success; **Rust job failed** — both `persistence_pg` tests hit Postgres `28P01 password authentication failed` against the CI service container (they pass against local Postgres 16 with identical credentials). The service password env and the test URL match character-for-character, so this is the service-init/auth path, not the code: the CI service now uses `POSTGRES_HOST_AUTH_METHOD: trust` (runner-local, job-scoped, throwaway test DB only). Verdict for 53–75 waits for the re-run.
+
+### Waves 53–75 — CI verdict ✅ (after the trust-auth fix)
+- Fix commit `b14d663`, CI run **45771441519**: verified twice at job+step level — all 5 jobs success (0 failed steps), including the Rust job running both Postgres persistence tests against the CI Postgres 16 service.
+
+### Waves 76–85 — Live gateway calls, sandbox-first (this commit)
+- **W76–79, 83 transport:** new `gateways::transport` — `HttpTransport` trait + `ReqwestTransport` (rustls, 15 s timeout) and live flows composing the Wave 7/9/10/30 specs: bKash grant→create→execute, Stripe Checkout Session create, PayPal OAuth→Orders create, Razorpay Orders create, Nagad payment verify (`NAGAD_API_BASE` has no default — merchant-issued, never guessed). Non-2xx → `Provider` error with status + excerpt; missing credentials → `NotConfigured` before any network call. All flows proven against a scripted mock transport (9 transport tests) — no network in tests.
+- **W80 Stripe webhook:** `POST /api/v1/webhooks/stripe` — `Stripe-Signature` HMAC verified (300 s window, constant-time compare) against `STRIPE_WEBHOOK_SECRET`; unconfigured → 503, never settles unverified. `checkout.session.completed` settles by `client_reference_id`.
+- **W81 PayPal webhook:** `POST /api/v1/webhooks/paypal` — verified through PayPal's verify-webhook-signature API (token + verdict `SUCCESS` required); unconfigured → 503. `PAYMENT.CAPTURE.COMPLETED` settles by `custom_id`.
+- **W82 bKash callback:** `POST /api/v1/callbacks/bkash` — on success callbacks it grants + executes against bKash and settles only on `transactionStatus: Completed`; without credentials the callback is audit-logged and answered `verified: false` — accepted, never settled on trust.
+- Settlement is shared (`settle_by_reference`): idempotent vs provider retries, emits `payment.completed` + audit, mirrors the SMS path. OpenAPI now 92 operations.
+- **W84 hardening:** sandbox-by-default audit test (default configs target sandbox hosts), 15 s transport timeout, provider idempotency keys documented per flow.
+- **W85 docs:** `docs/gateways-live.md` — env matrix, receiver proof table, never-fake-success rules.
+- Local: 692 workspace tests pass, fmt + clippy -D warnings clean.

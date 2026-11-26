@@ -27,6 +27,7 @@ pub mod stripe;
 pub mod stripe_checkout;
 pub mod surecash;
 pub mod traits;
+pub mod transport;
 pub mod types;
 pub mod upay;
 pub mod upi;
