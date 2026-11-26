@@ -47,6 +47,10 @@ pub struct ListEventsQuery {
     /// is an admin) — filtering by an unowned merchant yields an
     /// empty list, never that merchant's events.
     pub merchant_id: Option<String>,
+    /// Wave 11: optional 1-based page number (see `pagination`).
+    pub page: Option<u32>,
+    /// Wave 11: optional page size (clamped to 1..=100).
+    pub per_page: Option<u32>,
 }
 
 /// Query parameters for [`list_deliveries`].
@@ -54,6 +58,10 @@ pub struct ListEventsQuery {
 pub struct ListDeliveriesQuery {
     /// Restrict the result to deliveries of a single event, when given.
     pub event_id: Option<String>,
+    /// Wave 11: optional 1-based page number (see `pagination`).
+    pub page: Option<u32>,
+    /// Wave 11: optional page size (clamped to 1..=100).
+    pub per_page: Option<u32>,
 }
 
 /// Request body for [`test_signature`].
@@ -146,7 +154,11 @@ pub async fn list_events(
 
     // Newest first, capped so one response stays bounded.
     events.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-    events.truncate(100);
+    if query.page.is_some() || query.per_page.is_some() {
+        events = crate::pagination::apply_page(events, query.page, query.per_page);
+    } else {
+        events.truncate(100);
+    }
 
     Ok(Json(events))
 }
@@ -190,6 +202,7 @@ pub async fn list_deliveries(
         })
         .cloned()
         .collect();
+    let deliveries = crate::pagination::apply_page(deliveries, query.page, query.per_page);
 
     Ok(Json(deliveries))
 }

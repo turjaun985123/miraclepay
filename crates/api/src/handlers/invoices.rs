@@ -74,6 +74,10 @@ pub struct ListInvoicesQuery {
     /// the domain type: `draft`, `sent`, `paid`, `overdue`,
     /// `cancelled` or `void`.
     pub status: Option<String>,
+    /// Wave 11: optional 1-based page number (see `pagination`).
+    pub page: Option<u32>,
+    /// Wave 11: optional page size (clamped to 1..=100).
+    pub per_page: Option<u32>,
 }
 
 /// Body of `POST /invoices/{id}/pay`.
@@ -345,6 +349,7 @@ pub async fn list_invoices(
             .cmp(&a.invoice.created_at)
             .then_with(|| a.invoice.id.cmp(&b.invoice.id))
     });
+    let views = crate::pagination::apply_page(views, query.page, query.per_page);
 
     Ok(Json(views).into_response())
 }

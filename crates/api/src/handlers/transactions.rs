@@ -56,6 +56,12 @@ pub struct ListQ {
     /// Maximum number of transactions to return. Defaults to 50 and
     /// is capped at 200.
     pub limit: Option<usize>,
+    /// Wave 11: 1-based page number. When `page` or `per_page` is
+    /// supplied, paging (see `pagination::apply_page`) replaces the
+    /// `limit` behaviour.
+    pub page: Option<u32>,
+    /// Wave 11: page size (clamped to 1..=100 by `PageQuery`).
+    pub per_page: Option<u32>,
 }
 
 /// Query parameters for `list_refunds`.
@@ -178,7 +184,11 @@ pub async fn list_transactions(
         .collect();
     // Newest first.
     items.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-    items.truncate(limit);
+    if query.page.is_some() || query.per_page.is_some() {
+        items = crate::pagination::apply_page(items, query.page, query.per_page);
+    } else {
+        items.truncate(limit);
+    }
     Ok(Json(items))
 }
 

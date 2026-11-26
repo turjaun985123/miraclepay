@@ -66,6 +66,10 @@ pub struct CreateLinkRequest {
 pub struct ListLinksQuery {
     /// Restrict the listing to a single merchant, when given.
     pub merchant_id: Option<String>,
+    /// Wave 11: optional 1-based page number (see `pagination`).
+    pub page: Option<u32>,
+    /// Wave 11: optional page size (clamped to 1..=100).
+    pub per_page: Option<u32>,
 }
 
 /// Public, unauthenticated view of a usable payment link.
@@ -273,6 +277,7 @@ pub async fn list_links(
         .cloned()
         .collect();
     out.sort_by_key(|link| link.created_at);
+    let out = crate::pagination::apply_page(out, query.page, query.per_page);
     Ok(Json(out))
 }
 

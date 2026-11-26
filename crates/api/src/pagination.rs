@@ -128,6 +128,19 @@ pub fn paginate<T: Clone>(items: &[T], query: &PageQuery) -> (Vec<T>, PageMeta) 
     (items[start..end].to_vec(), meta)
 }
 
+/// Apply optional `page`/`per_page` query parameters to a list
+/// (Wave 11). When neither parameter is supplied the list is
+/// returned unchanged, so endpoints keep their legacy behaviour
+/// (including any cap they apply themselves) until a client opts
+/// into paging. When either is supplied, the [`paginate`] window
+/// for the effective [`PageQuery`] is returned.
+pub fn apply_page<T: Clone>(items: Vec<T>, page: Option<u32>, per_page: Option<u32>) -> Vec<T> {
+    if page.is_none() && per_page.is_none() {
+        return items;
+    }
+    paginate(&items, &PageQuery::new(page, per_page)).0
+}
+
 /// A paginated list response: one page of data plus its metadata.
 ///
 /// Generic over the item type so any list endpoint can return a
@@ -277,5 +290,30 @@ mod tests {
         assert!(response.data.is_empty());
         assert_eq!(response.meta.total, 0);
         assert_eq!(response.meta.total_pages, 0);
+    }
+}
+
+#[cfg(test)]
+mod apply_page_tests {
+    use super::*;
+
+    #[test]
+    fn no_params_returns_list_unchanged() {
+        let items = vec![1, 2, 3, 4, 5];
+        assert_eq!(apply_page(items, None, None), vec![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn page_and_per_page_window_the_list() {
+        let items: Vec<i32> = (1..=25).collect();
+        assert_eq!(apply_page(items.clone(), Some(2), Some(10)), (11..=20).collect::<Vec<_>>());
+        assert_eq!(apply_page(items.clone(), Some(3), Some(10)), (21..=25).collect::<Vec<_>>());
+        assert!(apply_page(items, Some(9), Some(10)).is_empty());
+    }
+
+    #[test]
+    fn per_page_alone_starts_at_first_page() {
+        let items: Vec<i32> = (1..=5).collect();
+        assert_eq!(apply_page(items, None, Some(2)), vec![1, 2]);
     }
 }

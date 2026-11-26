@@ -113,3 +113,10 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 ### Wave 9 — Stripe Checkout Session shaping ✅
 - Commit `f64ee91`, CI run **45753443736**: verified twice at job+step level — all 4 jobs success (0 failed steps).
 - `gateways::stripe_checkout`: create-session request spec (form-encoded, Bearer, metadata/client_reference_id = payment reference) + response parser; `STRIPE_SECRET_KEY` env-gated, non-`sk_` keys rejected as InvalidConfig, no fabricated checkout URLs. 5 new tests.
+
+### Wave 10 — PayPal Orders v2 shaping ✅
+- Commit `a0e6e21`, CI run **45753717070**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+- `gateways::paypal_checkout`: OAuth token request (Basic, base64 implemented in-crate with known-vector tests) + create-order spec (CAPTURE, custom_id = reference, PayPal-Request-Id idempotency) + response parsers with payer-action link extraction; env-gated (`PAYPAL_CLIENT_ID/SECRET`, sandbox default). 5 new tests.
+
+### Wave 11 — Pagination completeness (this commit)
+- The `pagination` module existed but no handler used it. Added `pagination::apply_page` (no params → legacy behaviour unchanged) and wired `page`/`per_page` into transactions, invoices, payment-links, webhook events and webhook deliveries list endpoints. Local: api tests 77 pass (3 new apply_page tests).
