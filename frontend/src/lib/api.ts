@@ -50,6 +50,30 @@ export function clearToken(): void {
   if (typeof localStorage === 'undefined') return;
   try {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
+  } catch {
+    // Ignore unavailable storage.
+  }
+}
+
+// Refresh tokens (Wave 25): stored beside the access token; on a
+// 401 the client exchanges the refresh token once for a fresh pair
+// (the server rotates it — see POST /api/v1/auth/refresh).
+const REFRESH_KEY = 'mp_refresh_token';
+
+export function getRefreshToken(): string | null {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    return localStorage.getItem(REFRESH_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setRefreshToken(token: string): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(REFRESH_KEY, token);
   } catch {
     // Ignore unavailable storage.
   }
@@ -66,6 +90,8 @@ export interface ApiFetchOptions extends RequestInit {
    * checkout / payment-link pages, ...).
    */
   auth?: boolean;
+  /** Internal: set on the single retry after a token refresh. */
+  __retried?: boolean;
 }
 
 interface ApiErrorBody {
@@ -113,6 +139,20 @@ export async function apiFetch<T>(
     : `${API_URL}${path.startsWith('/') ? '' : '/'}${path}`;
 
   const response = await fetch(url, { ...rest, headers: finalHeaders });
+
+  // Wave 25: an expired access token triggers exactly one refresh
+  // exchange and one retry; auth endpoints themselves never loop.
+  if (
+    response.status === 401 &&
+    auth !== false &&
+    !options.__retried &&
+    !path.includes('/auth/') &&
+    getRefreshToken()
+  ) {
+    if (await tryRefresh()) {
+      return apiFetch<T>(path, { ...options, __retried: true });
+    }
+  }
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`;
@@ -174,6 +214,8 @@ export interface User {
 
 export interface AuthResponse {
   token: string;
+  /** Rotating refresh token (Wave 25); present on login/refresh. */
+  refresh_token?: string;
   user: User;
   [key: string]: unknown;
 }
@@ -452,12 +494,57 @@ export interface DashboardStats {
 // Auth
 // ---------------------------------------------------------------------------
 
-export function login(email: string, password: string): Promise<AuthResponse> {
-  return apiFetch<AuthResponse>('/api/v1/auth/login', {
+export async function login(email: string, password: string): Promise<AuthResponse> {
+  const result = await apiFetch<AuthResponse>('/api/v1/auth/login', {
     method: 'POST',
     auth: false,
     body: jsonBody({ email, password }),
   });
+  // Store the pair centrally (Wave 25); pages may still call
+  // setToken themselves — it writes the same value.
+  if (result.token) setToken(result.token);
+  if (result.refresh_token) setRefreshToken(result.refresh_token);
+  return result;
+}
+
+/**
+ * Exchange the stored refresh token for a fresh pair (Wave 25).
+ * Returns false — and clears the stored pair — when the refresh
+ * token is unknown, revoked, or expired.
+ */
+export async function tryRefresh(): Promise<boolean> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return false;
+  try {
+    const result = await apiFetch<AuthResponse>('/api/v1/auth/refresh', {
+      method: 'POST',
+      auth: false,
+      body: jsonBody({ refresh_token: refreshToken }),
+    });
+    if (result.token) setToken(result.token);
+    if (result.refresh_token) setRefreshToken(result.refresh_token);
+    return Boolean(result.token);
+  } catch {
+    clearToken();
+    return false;
+  }
+}
+
+/** Revoke the stored refresh token server-side and clear the pair. */
+export async function logout(): Promise<void> {
+  const refreshToken = getRefreshToken();
+  if (refreshToken) {
+    try {
+      await apiFetch('/api/v1/auth/logout', {
+        method: 'POST',
+        auth: false,
+        body: jsonBody({ refresh_token: refreshToken }),
+      });
+    } catch {
+      // Server unreachable: local sign-out still proceeds.
+    }
+  }
+  clearToken();
 }
 
 export function register(

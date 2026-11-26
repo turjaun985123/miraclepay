@@ -210,3 +210,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - New outermost `api::security` middleware: every response (incl. 429s/errors) carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, CSP `default-src 'none'; frame-ancestors 'none'`, `Referrer-Policy: no-referrer`, HSTS 1y.
 - CORS off by default (same-origin deployment); `CORS_ALLOWED_ORIGINS` env allowlist enables it with origin echo (never a bare wildcard on credentialed requests), preflight answered by the middleware without consuming rate-limit budget.
 - Tests: origin parse/match unit tests + an integration test asserting the headers on a live router response and the absence of CORS headers by default.
+
+### Wave 24 — CI verdict ✅
+- Commit `94ed2bb`, CI run **45757259481**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 25 — Refresh tokens with rotation (this commit)
+- New `api::refresh`: opaque CSPRNG refresh tokens (`mprt_` + OsRng), 30-day TTL, only SHA-256 hashes stored, **rotation on every use** (presented token revoked, replay rejected), logout revocation. State gains a hash-keyed refresh-token store.
+- `POST /api/v1/auth/login` now returns `{token, refresh_token}`; new `POST /auth/refresh` and `POST /auth/logout` (OpenAPI table updated: 68 operations).
+- Frontend client: stores the pair at login, on any 401 exchanges the refresh token once and retries the request once, `logout()` revokes server-side then clears locally. Local: 629 workspace tests pass, Astro build passes.

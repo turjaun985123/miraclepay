@@ -67,6 +67,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/auth/register", post(auth::register))
         .route("/api/v1/auth/login", post(auth::login))
         .route("/api/v1/auth/me", get(auth::me))
+        .route("/api/v1/auth/refresh", post(auth::refresh))
+        .route("/api/v1/auth/logout", post(auth::logout))
         // ---------------------------------------------------------
         // Merchants
         // ---------------------------------------------------------

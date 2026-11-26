@@ -87,6 +87,9 @@ pub struct AppState {
     pub notifications: Arc<RwLock<Vec<notification::Notification>>>,
     /// Append-only audit log, oldest first.
     pub audit_log: Arc<RwLock<Vec<audit::AuditEntry>>>,
+    /// Refresh tokens (Wave 25), keyed by the SHA-256 hash of the
+    /// raw token; the raw token is never stored.
+    pub refresh_tokens: Arc<RwLock<HashMap<String, crate::refresh::RefreshRecord>>>,
     /// Provider transaction references already consumed by the SMS
     /// verification flow.
     ///
@@ -130,6 +133,7 @@ impl AppState {
             deliveries: Arc::new(RwLock::new(Vec::new())),
             notifications: Arc::new(RwLock::new(Vec::new())),
             audit_log: Arc::new(RwLock::new(Vec::new())),
+            refresh_tokens: Arc::new(RwLock::new(HashMap::new())),
             used_trx: Arc::new(RwLock::new(HashSet::new())),
             settings: Arc::new(RwLock::new(settings::PlatformSettings::default())),
             jwt_secret,

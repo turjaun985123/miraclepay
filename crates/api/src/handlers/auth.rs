@@ -167,6 +167,8 @@ pub async fn login(
     }
 
     let token = create_token(&user.id, role_str(&user.role), &state.jwt_secret);
+    // Wave 25: a rotating refresh token alongside the 24h JWT.
+    let refresh_token = crate::refresh::issue_refresh_token(&state, &user.id).await;
 
     state.audit(
         Some(user.id.clone()),
@@ -178,12 +180,74 @@ pub async fn login(
 
     Ok(Json(json!({
         "token": token,
+        "refresh_token": refresh_token,
         "user": {
             "id": user.id,
             "email": user.email,
             "role": user.role,
         },
     })))
+}
+
+/// Body of `POST /auth/refresh` and `POST /auth/logout`.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct RefreshReq {
+    pub refresh_token: String,
+}
+
+/// `POST /auth/refresh` (Wave 25) — exchange a live refresh token
+/// for a fresh `{token, refresh_token}` pair. The presented token
+/// is revoked by the rotation (see `crate::refresh`), so a stolen
+/// old token cannot be replayed after a legitimate refresh.
+pub async fn refresh(
+    State(state): State<AppState>,
+    Json(req): Json<RefreshReq>,
+) -> Result<Json<Value>, ApiError> {
+    let user_id = crate::refresh::rotate_refresh_token(&state, &req.refresh_token)
+        .await
+        .map_err(|_| ApiError::Unauthorized)?;
+
+    let user = {
+        let users = state.users.read().await;
+        users.get(&user_id).cloned()
+    };
+    let user = match user {
+        Some(user) => user,
+        None => return Err(ApiError::Unauthorized),
+    };
+
+    let token = create_token(&user.id, role_str(&user.role), &state.jwt_secret);
+    let refresh_token = crate::refresh::issue_refresh_token(&state, &user.id).await;
+
+    state.audit(
+        Some(user.id.clone()),
+        None,
+        "auth.refresh",
+        "user",
+        Some(user.id.clone()),
+    );
+
+    Ok(Json(json!({
+        "token": token,
+        "refresh_token": refresh_token,
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "role": user.role,
+        },
+    })))
+}
+
+/// `POST /auth/logout` (Wave 25) — revoke the presented refresh
+/// token. Idempotent: unknown or already-revoked tokens still
+/// return 200 with `revoked: false`, so clients can call it
+/// unconditionally at sign-out.
+pub async fn logout(
+    State(state): State<AppState>,
+    Json(req): Json<RefreshReq>,
+) -> Result<Json<Value>, ApiError> {
+    let revoked = crate::refresh::revoke_refresh_token(&state, &req.refresh_token).await;
+    Ok(Json(json!({ "revoked": revoked })))
 }
 
 /// `GET /auth/me`

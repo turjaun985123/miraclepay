@@ -7,6 +7,7 @@ pub mod handlers;
 pub mod openapi;
 pub mod pagination;
 pub mod rate_limit;
+pub mod refresh;
 pub mod routes;
 pub mod security;
 pub mod state;
