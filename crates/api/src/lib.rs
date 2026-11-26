@@ -5,6 +5,7 @@ pub mod db;
 pub mod dto;
 pub mod handlers;
 pub mod pagination;
+pub mod rate_limit;
 pub mod routes;
 pub mod state;
 pub mod validation;

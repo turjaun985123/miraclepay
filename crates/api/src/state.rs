@@ -102,6 +102,9 @@ pub struct AppState {
     /// succeeded (Wave 2); `None` means the in-memory store is the
     /// active backend. See [`crate::db`].
     pub db_pool: Option<sqlx::PgPool>,
+    /// Fixed-window rate limiter (Wave 12), enforced by middleware
+    /// in `routes::build_router`.
+    pub rate_limiter: Arc<crate::rate_limit::RateLimiter>,
 }
 
 impl AppState {
@@ -131,6 +134,7 @@ impl AppState {
             settings: Arc::new(RwLock::new(settings::PlatformSettings::default())),
             jwt_secret,
             db_pool: None,
+            rate_limiter: Arc::new(crate::rate_limit::RateLimiter::new()),
         }
     }
 

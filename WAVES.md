@@ -120,3 +120,9 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 
 ### Wave 11 — Pagination completeness (this commit)
 - The `pagination` module existed but no handler used it. Added `pagination::apply_page` (no params → legacy behaviour unchanged) and wired `page`/`per_page` into transactions, invoices, payment-links, webhook events and webhook deliveries list endpoints. Local: api tests 77 pass (3 new apply_page tests).
+
+### Wave 11 — CI verdict ✅
+- Commit `aae84e5`, CI run **45753968581**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 12 — Rate limiting (this commit)
+- New `api::rate_limit`: fixed-window limiter (pure clock-injected core, 3 unit tests) + Axum middleware on the whole router. Budgets per client (first X-Forwarded-For hop) per minute: auth 10, SMS ingest 120, general API 600; non-API paths unlimited. Over-budget → 429 JSON `{error:"rate_limited", class}`. Local: api tests 80 pass, HTTP integration tests unaffected.

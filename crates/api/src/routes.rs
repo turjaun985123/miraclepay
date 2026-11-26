@@ -225,6 +225,12 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/admin/settings",
             get(admin::get_settings).put(admin::update_settings),
         )
+        // Wave 12: rate-limit middleware (auth 10/min, SMS ingest
+        // 120/min, general API 600/min per client; see `rate_limit`).
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::rate_limit::rate_limit_middleware,
+        ))
         // Shared state for every handler above.
         .with_state(state)
 }
