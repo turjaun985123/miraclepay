@@ -3,6 +3,9 @@ package com.miraclepay.app;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -30,6 +33,7 @@ public final class ConfigStore {
     private static final String KEY_DEVICE_ID = "device_id";
     private static final String KEY_MERCHANT_LABEL = "merchant_label";
     private static final String KEY_ENABLED = "enabled";
+    private static final String KEY_ALLOWED_SENDERS = "allowed_senders";
 
     private static final String DEVICE_ID_PREFIX = "android-";
 
@@ -138,6 +142,79 @@ public final class ConfigStore {
     /** Enables or disables the app's background features. */
     public void setEnabled(boolean enabled) {
         prefs.edit().putBoolean(KEY_ENABLED, enabled).apply();
+    }
+
+    // ------------------------------------------------------------------
+    // Allowed senders (Wave 109)
+    // ------------------------------------------------------------------
+
+    /**
+     * Returns the raw allowed-senders setting exactly as stored: sender
+     * IDs / numbers separated by commas and/or newlines. An empty string
+     * means no restriction — every sender is allowed (the default).
+     */
+    public String getAllowedSenders() {
+        String stored = prefs.getString(KEY_ALLOWED_SENDERS, "");
+        return stored == null ? "" : stored;
+    }
+
+    /**
+     * Stores the allowed-senders setting. The value is kept as entered
+     * (trimmed at the ends); entries may be separated by commas and/or
+     * newlines. {@code null} or an empty value clears the restriction.
+     */
+    public void setAllowedSenders(String allowedSenders) {
+        prefs.edit()
+                .putString(KEY_ALLOWED_SENDERS,
+                        allowedSenders == null ? "" : allowedSenders.trim())
+                .apply();
+    }
+
+    /**
+     * Returns the parsed allowed-senders list: the raw setting split on
+     * commas and newlines, with blank entries dropped and surrounding
+     * whitespace trimmed. Empty when no restriction is configured.
+     */
+    public List<String> getAllowedSenderList() {
+        List<String> out = new ArrayList<>();
+        String raw = getAllowedSenders();
+        if (raw.trim().isEmpty()) {
+            return out;
+        }
+        for (String part : raw.split("[,\\n\\r]+")) {
+            String entry = part.trim();
+            if (!entry.isEmpty()) {
+                out.add(entry);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Wave 109 sender filter: returns {@code true} when a message from
+     * {@code sender} may be forwarded. An empty allowed-senders list
+     * allows every sender. Otherwise the sender matches when it equals
+     * an entry or ends with it (case-insensitive), so both alphanumeric
+     * IDs such as {@code "bKash"} and full or partial numbers such as
+     * {@code "+8801..."} work as entries.
+     */
+    public boolean isSenderAllowed(String sender) {
+        List<String> allowed = getAllowedSenderList();
+        if (allowed.isEmpty()) {
+            return true;
+        }
+        if (sender == null || sender.trim().isEmpty()) {
+            return false;
+        }
+        String candidate = sender.trim().toLowerCase(Locale.US);
+        for (String entry : allowed) {
+            String rule = entry.trim().toLowerCase(Locale.US);
+            if (!rule.isEmpty()
+                    && (candidate.equals(rule) || candidate.endsWith(rule))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ------------------------------------------------------------------

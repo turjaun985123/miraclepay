@@ -1,33 +1,62 @@
-//! SMTP email transport (Wave 35) — the first real
-//! [`NotificationTransport`].
+//! SMTP transport for notifications (Wave 35; STARTTLS Wave 86).
 //!
-//! Configuration is env-gated, in the same style as the gateway
-//! adapters: without `SMTP_HOST` + `SMTP_FROM` the transport
-//! reports [`GatewayConfigError::NotConfigured`]-style errors and
-//! *nothing is sent* — queued notifications stay queued rather
-//! than being fake-sent.
+//! Implements the worker's [`NotificationTransport`] trait over a
+//! real SMTP dialogue (EHLO → optional STARTTLS → optional AUTH
+//! PLAIN → MAIL/RCPT/DATA), env-gated: without `SMTP_HOST` /
+//! `SMTP_FROM` the config constructor fails with a named error and
+//! nothing is ever "sent" into the void.
 //!
-//! Scope, stated plainly: this is a minimal SMTP client (RFC 5321)
-//! over a **plain TCP** connection with optional `AUTH PLAIN`. It
-//! suits local relays and trusted networks. It does **not** do
-//! STARTTLS — point it at a local submission relay (or a tunnel)
-//! rather than a public provider's plaintext port.
+//! TLS modes (`SMTP_TLS`):
+//! - `auto` (default): upgrade with STARTTLS when the server
+//!   advertises it; otherwise continue in plain text (local relays).
+//! - `starttls`: STARTTLS is required — a server that does not
+//!   advertise it is an error, so credentials never cross in clear.
+//! - `implicit`: TLS from the first byte (port 465 style).
+//! - `none`: never use TLS (loopback relays only).
 //!
-//! Env:
-//! - `SMTP_HOST` (required), `SMTP_PORT` (default 25)
-//! - `SMTP_FROM` (required) — envelope + header sender
-//! - `SMTP_USER` / `SMTP_PASS` (optional, AUTH PLAIN)
-//! - `SMTP_HELO` (default `miraclepay.local`)
+//! AUTH PLAIN is only attempted after TLS is established when the
+//! mode is `starttls`/`implicit`; in `auto` mode a configured
+//! credential on a non-advertising server is refused rather than
+//! sent in clear text. Certificate verification uses the webpki
+//! root store; the TLS server name is `SMTP_HOST`.
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 
 use miraclepay_domain::notification::NotificationChannel;
 
 use crate::notification_job::NotificationTransport;
+
+/// TLS behaviour for the SMTP connection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TlsMode {
+    /// Never use TLS.
+    None,
+    /// STARTTLS when advertised (default).
+    Auto,
+    /// STARTTLS required; refuse otherwise.
+    Required,
+    /// TLS from the first byte (port 465 style).
+    Implicit,
+}
+
+impl TlsMode {
+    fn parse(value: Option<String>) -> Result<Self, String> {
+        match value.as_deref().map(str::trim) {
+            None | Some("") | Some("auto") => Ok(Self::Auto),
+            Some("none") => Ok(Self::None),
+            Some("starttls") | Some("required") => Ok(Self::Required),
+            Some("implicit") => Ok(Self::Implicit),
+            Some(other) => Err(format!(
+                "SMTP_TLS: unknown mode {other:?} (expected auto|starttls|implicit|none)"
+            )),
+        }
+    }
+}
 
 /// SMTP configuration.
 #[derive(Debug, Clone)]
@@ -38,6 +67,7 @@ pub struct SmtpConfig {
     pub user: Option<String>,
     pub pass: Option<String>,
     pub helo: String,
+    pub tls: TlsMode,
 }
 
 impl SmtpConfig {
@@ -65,6 +95,7 @@ impl SmtpConfig {
             helo: get("SMTP_HELO")
                 .filter(|v| !v.trim().is_empty())
                 .unwrap_or_else(|| "miraclepay.local".to_string()),
+            tls: TlsMode::parse(get("SMTP_TLS"))?,
         })
     }
 
@@ -152,40 +183,96 @@ pub struct SmtpTransport {
     pub config: SmtpConfig,
 }
 
-/// Read one (possibly multi-line) SMTP reply; returns its code.
-async fn read_reply(reader: &mut BufReader<tokio::net::tcp::OwnedReadHalf>) -> Result<u16, String> {
-    let mut line = String::new();
-    loop {
-        line.clear();
-        let read = reader
-            .read_line(&mut line)
+/// A line-buffered SMTP connection over any async stream (plain
+/// TCP or TLS), so the dialogue code is written once.
+struct Conn<S> {
+    reader: BufReader<S>,
+}
+
+impl<S: AsyncRead + AsyncWrite + Unpin> Conn<S> {
+    fn new(stream: S) -> Self {
+        Self {
+            reader: BufReader::new(stream),
+        }
+    }
+
+    fn stream_mut(&mut self) -> &mut S {
+        self.reader.get_mut()
+    }
+
+    async fn write_line(&mut self, line: &str) -> Result<(), String> {
+        self.stream_mut()
+            .write_all(line.as_bytes())
             .await
-            .map_err(|e| format!("smtp read: {e}"))?;
-        if read == 0 {
-            return Err("smtp: connection closed".to_string());
+            .map_err(|e| format!("smtp write: {e}"))?;
+        self.stream_mut()
+            .flush()
+            .await
+            .map_err(|e| format!("smtp flush: {e}"))
+    }
+
+    /// Read one (possibly multi-line) reply; returns code + text.
+    async fn read_reply(&mut self) -> Result<(u16, String), String> {
+        use tokio::io::AsyncBufReadExt;
+        let mut text = String::new();
+        loop {
+            let mut line = String::new();
+            let read = self
+                .reader
+                .read_line(&mut line)
+                .await
+                .map_err(|e| format!("smtp read: {e}"))?;
+            if read == 0 {
+                return Err("smtp: connection closed".to_string());
+            }
+            let code: u16 = line
+                .get(0..3)
+                .and_then(|prefix| prefix.parse().ok())
+                .ok_or_else(|| format!("smtp: malformed reply {line:?}"))?;
+            text.push_str(&line);
+            if line.as_bytes().get(3) != Some(&b'-') {
+                return Ok((code, text));
+            }
         }
-        let code: u16 = line
-            .get(0..3)
-            .and_then(|prefix| prefix.parse().ok())
-            .ok_or_else(|| format!("smtp: malformed reply {line:?}"))?;
-        // "250-..." continues; "250 ..." ends the reply.
-        if line.as_bytes().get(3) != Some(&b'-') {
-            return Ok(code);
+    }
+
+    async fn expect(&mut self, wanted: u16, step: &str) -> Result<String, String> {
+        let (code, text) = self.read_reply().await?;
+        if code == wanted {
+            Ok(text)
+        } else {
+            Err(format!("smtp {step}: expected {wanted}, got {code}"))
         }
+    }
+
+    async fn ehlo(&mut self, helo: &str) -> Result<String, String> {
+        self.write_line(&format!("EHLO {helo}\r\n")).await?;
+        self.expect(250, "EHLO").await
     }
 }
 
-async fn expect(
-    reader: &mut BufReader<tokio::net::tcp::OwnedReadHalf>,
-    wanted: u16,
-    step: &str,
-) -> Result<(), String> {
-    let code = read_reply(reader).await?;
-    if code == wanted {
-        Ok(())
-    } else {
-        Err(format!("smtp {step}: expected {wanted}, got {code}"))
-    }
+/// Build a rustls client config with the webpki root store.
+fn tls_connector() -> Result<tokio_rustls::TlsConnector, String> {
+    let mut roots = rustls::RootCertStore::empty();
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let config = rustls::ClientConfig::builder()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    Ok(tokio_rustls::TlsConnector::from(Arc::new(config)))
+}
+
+/// Wrap a TCP stream in TLS for `host`.
+async fn wrap_tls(
+    host: &str,
+    stream: TcpStream,
+) -> Result<tokio_rustls::client::TlsStream<TcpStream>, String> {
+    let connector = tls_connector()?;
+    let server_name = rustls::pki_types::ServerName::try_from(host.to_string())
+        .map_err(|_| format!("smtp tls: invalid server name {host:?}"))?;
+    connector
+        .connect(server_name, stream)
+        .await
+        .map_err(|e| format!("smtp tls handshake with {host}: {e}"))
 }
 
 impl SmtpTransport {
@@ -194,49 +281,81 @@ impl SmtpTransport {
     pub async fn deliver(&self, to: &str, message: &str) -> Result<(), String> {
         check_header(to, "recipient")?;
         let config = &self.config;
-        let stream = TcpStream::connect((config.host.as_str(), config.port))
+        let tcp = TcpStream::connect((config.host.as_str(), config.port))
             .await
             .map_err(|e| format!("smtp connect {}:{}: {e}", config.host, config.port))?;
-        let (read_half, mut write_half) = stream.into_split();
-        let mut reader = BufReader::new(read_half);
+        if config.tls == TlsMode::Implicit {
+            let tls = wrap_tls(&config.host, tcp).await?;
+            let mut conn = Conn::new(tls);
+            return self.dialogue(&mut conn, to, message, true).await;
+        }
+        let mut conn = Conn::new(tcp);
+        conn.expect(220, "greeting").await?;
+        let ehlo_reply = conn.ehlo(&config.helo).await?;
+        let advertises_starttls = ehlo_reply.to_ascii_uppercase().contains("STARTTLS");
+        let wants_tls = match config.tls {
+            TlsMode::Required => {
+                if !advertises_starttls {
+                    return Err(
+                        "smtp: SMTP_TLS=starttls but the server does not advertise STARTTLS"
+                            .to_string(),
+                    );
+                }
+                true
+            }
+            TlsMode::Auto => advertises_starttls,
+            _ => false,
+        };
+        if wants_tls {
+            conn.write_line("STARTTLS\r\n").await?;
+            conn.expect(220, "STARTTLS").await?;
+            // Recover the raw TCP stream from the buffered reader
+            // (the EHLO reply was fully consumed, so nothing is
+            // buffered) and upgrade it.
+            let raw = conn.reader.into_inner();
+            let tls = wrap_tls(&config.host, raw).await?;
+            let mut conn = Conn::new(tls);
+            conn.ehlo(&config.helo).await?;
+            return self.dialogue(&mut conn, to, message, true).await;
+        }
+        // Plain text: refuse to send credentials in clear when TLS
+        // was available-or-required but not established. `auto`
+        // without an advertisement means a local relay — allowed
+        // only without credentials.
+        let has_credentials = config.user.is_some() && config.pass.is_some();
+        if has_credentials && config.tls != TlsMode::None {
+            return Err(
+                "smtp: refusing to send credentials without TLS (server did not advertise STARTTLS)"
+                    .to_string(),
+            );
+        }
+        self.dialogue(&mut conn, to, message, false).await
+    }
 
-        expect(&mut reader, 220, "greeting").await?;
-        write_half
-            .write_all(format!("EHLO {}\r\n", config.helo).as_bytes())
-            .await
-            .map_err(|e| format!("smtp write: {e}"))?;
-        expect(&mut reader, 250, "EHLO").await?;
-
+    /// The post-greeting dialogue (AUTH → MAIL → RCPT → DATA).
+    async fn dialogue<S: AsyncRead + AsyncWrite + Unpin>(
+        &self,
+        conn: &mut Conn<S>,
+        to: &str,
+        message: &str,
+        _tls_active: bool,
+    ) -> Result<(), String> {
+        let config = &self.config;
         if let (Some(user), Some(pass)) = (&config.user, &config.pass) {
             let token = base64_encode(format!("\0{user}\0{pass}").as_bytes());
-            write_half
-                .write_all(format!("AUTH PLAIN {token}\r\n").as_bytes())
-                .await
-                .map_err(|e| format!("smtp write: {e}"))?;
-            expect(&mut reader, 235, "AUTH").await?;
+            conn.write_line(&format!("AUTH PLAIN {token}\r\n")).await?;
+            conn.expect(235, "AUTH").await?;
         }
-
-        write_half
-            .write_all(format!("MAIL FROM:<{}>\r\n", config.from).as_bytes())
-            .await
-            .map_err(|e| format!("smtp write: {e}"))?;
-        expect(&mut reader, 250, "MAIL FROM").await?;
-        write_half
-            .write_all(format!("RCPT TO:<{to}>\r\n").as_bytes())
-            .await
-            .map_err(|e| format!("smtp write: {e}"))?;
-        expect(&mut reader, 250, "RCPT TO").await?;
-        write_half
-            .write_all(b"DATA\r\n")
-            .await
-            .map_err(|e| format!("smtp write: {e}"))?;
-        expect(&mut reader, 354, "DATA").await?;
-        write_half
-            .write_all(dot_stuff(message).as_bytes())
-            .await
-            .map_err(|e| format!("smtp write: {e}"))?;
-        expect(&mut reader, 250, "message").await?;
-        let _ = write_half.write_all(b"QUIT\r\n").await;
+        conn.write_line(&format!("MAIL FROM:<{}>\r\n", config.from))
+            .await?;
+        conn.expect(250, "MAIL FROM").await?;
+        conn.write_line(&format!("RCPT TO:<{to}>\r\n")).await?;
+        conn.expect(250, "RCPT TO").await?;
+        conn.write_line("DATA\r\n").await?;
+        conn.expect(354, "DATA").await?;
+        conn.write_line(&dot_stuff(message)).await?;
+        conn.expect(250, "message").await?;
+        let _ = conn.write_line("QUIT\r\n").await;
         Ok(())
     }
 }
@@ -282,12 +401,42 @@ mod tests {
         }
     }
 
+    fn plain_config(port: u16) -> SmtpConfig {
+        SmtpConfig {
+            host: "127.0.0.1".to_string(),
+            port,
+            from: "pay@example.com".to_string(),
+            user: None,
+            pass: None,
+            helo: "miraclepay.test".to_string(),
+            tls: TlsMode::None,
+        }
+    }
+
     #[test]
     fn missing_config_is_a_clear_error() {
         let err = SmtpConfig::from_lookup(lookup(&[])).unwrap_err();
         assert!(err.contains("SMTP_HOST"));
         let err = SmtpConfig::from_lookup(lookup(&[("SMTP_HOST", "mail.local")])).unwrap_err();
         assert!(err.contains("SMTP_FROM"));
+    }
+
+    #[test]
+    fn tls_mode_parsing() {
+        let config = SmtpConfig::from_lookup(lookup(&[
+            ("SMTP_HOST", "mail.local"),
+            ("SMTP_FROM", "pay@example.com"),
+            ("SMTP_TLS", "starttls"),
+        ]))
+        .unwrap();
+        assert_eq!(config.tls, TlsMode::Required);
+        let err = SmtpConfig::from_lookup(lookup(&[
+            ("SMTP_HOST", "mail.local"),
+            ("SMTP_FROM", "pay@example.com"),
+            ("SMTP_TLS", "bogus"),
+        ]))
+        .unwrap_err();
+        assert!(err.contains("SMTP_TLS"));
     }
 
     #[test]
@@ -319,6 +468,7 @@ mod tests {
         listener: TcpListener,
         captured: std::sync::Arc<std::sync::Mutex<String>>,
     ) {
+        use tokio::io::AsyncBufReadExt;
         let (stream, _) = listener.accept().await.unwrap();
         let (read_half, mut write_half) = stream.into_split();
         let mut reader = BufReader::new(read_half);
@@ -361,15 +511,9 @@ mod tests {
         let captured = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
         let server = tokio::spawn(fake_server(listener, captured.clone()));
 
-        let config = SmtpConfig {
-            host: "127.0.0.1".to_string(),
-            port,
-            from: "pay@example.com".to_string(),
-            user: None,
-            pass: None,
-            helo: "miraclepay.test".to_string(),
+        let transport = SmtpTransport {
+            config: plain_config(port),
         };
-        let transport = SmtpTransport { config };
         transport
             .send(
                 NotificationChannel::Email,
@@ -390,16 +534,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn starttls_required_refuses_a_plain_server() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let captured = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+        let server = tokio::spawn(fake_server(listener, captured));
+        let mut config = plain_config(port);
+        config.tls = TlsMode::Required;
+        let transport = SmtpTransport { config };
+        let err = transport
+            .send(NotificationChannel::Email, "c@example.com", None, "hi")
+            .await
+            .unwrap_err();
+        assert!(err.contains("STARTTLS"), "error: {err}");
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn non_email_channels_are_refused() {
         let transport = SmtpTransport {
-            config: SmtpConfig {
-                host: "127.0.0.1".to_string(),
-                port: 1,
-                from: "pay@example.com".to_string(),
-                user: None,
-                pass: None,
-                helo: "x".to_string(),
-            },
+            config: plain_config(1),
         };
         let err = transport
             .send(NotificationChannel::Sms, "01712345678", None, "hi")

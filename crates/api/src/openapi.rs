@@ -69,6 +69,48 @@ const ROUTES: &[(&str, &[&str], &str, &str, bool)] = &[
         false,
     ),
     (
+        "/api/v1/auth/password-reset/request",
+        &["post"],
+        "Request a password reset token (always 200)",
+        "Auth",
+        false,
+    ),
+    (
+        "/api/v1/auth/password-reset/confirm",
+        &["post"],
+        "Reset the password with a token; revokes all sessions",
+        "Auth",
+        false,
+    ),
+    (
+        "/api/v1/auth/email-verification/request",
+        &["post"],
+        "Request an email verification token",
+        "Auth",
+        true,
+    ),
+    (
+        "/api/v1/auth/email-verification/confirm",
+        &["post"],
+        "Confirm email verification with a token",
+        "Auth",
+        false,
+    ),
+    (
+        "/api/v1/auth/sessions",
+        &["get"],
+        "List the caller's sessions",
+        "Auth",
+        true,
+    ),
+    (
+        "/api/v1/auth/sessions/{id}",
+        &["delete"],
+        "Revoke one session",
+        "Auth",
+        true,
+    ),
+    (
         "/api/v1/auth/2fa/setup",
         &["post"],
         "Start TOTP 2FA setup",
@@ -662,11 +704,11 @@ mod tests {
 
     #[test]
     fn operation_count_matches_the_router_surface() {
-        // routes::build_router registers 93 method handlers as of
-        // Wave 82 — 92 in this table plus GET /openapi.json itself.
+        // routes::build_router registers 99 method handlers as of
+        // Wave 90 — 98 in this table plus GET /openapi.json itself.
         // If you add a route, add it to ROUTES above and update
         // this number.
-        assert_eq!(operation_count(), 92);
+        assert_eq!(operation_count(), 98);
     }
 
     #[test]

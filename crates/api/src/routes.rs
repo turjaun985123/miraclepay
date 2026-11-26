@@ -20,14 +20,16 @@
 
 use axum::{
     extract::State,
+    http::StatusCode,
     response::IntoResponse,
     routing::{delete, get, post},
     Json, Router,
 };
 
 use crate::handlers::{
-    admin, api_keys, auth, disputes, fx, gateways, invoices, kyc, merchants, payment_links,
-    payments, provider_webhooks, settlements, sms, subscriptions, transactions, webhooks,
+    admin, api_keys, auth, auth_flows, disputes, fx, gateways, invoices, kyc, merchants,
+    payment_links, payments, provider_webhooks, settlements, sms, subscriptions, transactions,
+    webhooks,
 };
 use crate::state::AppState;
 
@@ -61,6 +63,34 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
     }))
 }
 
+/// Liveness probe: `GET /health/live` — the process is up.
+async fn health_live() -> impl IntoResponse {
+    Json(serde_json::json!({"status": "ok", "version": "0.0.2"}))
+}
+
+/// Readiness probe: `GET /health/ready` — dependencies are
+/// reachable. In Postgres mode this pings the database; a failed
+/// ping answers 503 so orchestrators stop routing traffic.
+async fn health_ready(State(state): State<AppState>) -> impl IntoResponse {
+    let db_ok = match &state.db_pool {
+        Some(pool) => sqlx::query("SELECT 1").execute(pool).await.is_ok(),
+        None => true,
+    };
+    let status = if db_ok {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+    (
+        status,
+        Json(serde_json::json!({
+            "status": if db_ok { "ready" } else { "not_ready" },
+            "db": state.db_mode().as_str(),
+            "db_reachable": db_ok,
+        })),
+    )
+}
+
 /// OpenAPI document: `GET /openapi.json` (Wave 20; served from a
 /// once-built cache since Wave 28).
 async fn openapi_spec() -> impl IntoResponse {
@@ -77,6 +107,9 @@ pub fn build_router(state: AppState) -> Router {
         // Health
         // ---------------------------------------------------------
         .route("/health", get(health))
+        // Wave 94: liveness (process up) vs readiness (deps up).
+        .route("/health/live", get(health_live))
+        .route("/health/ready", get(health_ready))
         .route("/metrics", get(crate::metrics::metrics_handler))
         .route("/openapi.json", get(openapi_spec))
         // ---------------------------------------------------------
@@ -87,6 +120,27 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/auth/me", get(auth::me))
         .route("/api/v1/auth/refresh", post(auth::refresh))
         .route("/api/v1/auth/logout", post(auth::logout))
+        .route(
+            "/api/v1/auth/password-reset/request",
+            post(auth_flows::password_reset_request),
+        )
+        .route(
+            "/api/v1/auth/password-reset/confirm",
+            post(auth_flows::password_reset_confirm),
+        )
+        .route(
+            "/api/v1/auth/email-verification/request",
+            post(auth_flows::email_verification_request),
+        )
+        .route(
+            "/api/v1/auth/email-verification/confirm",
+            post(auth_flows::email_verification_confirm),
+        )
+        .route("/api/v1/auth/sessions", get(auth_flows::list_sessions))
+        .route(
+            "/api/v1/auth/sessions/:id",
+            delete(auth_flows::revoke_session),
+        )
         .route("/api/v1/auth/2fa/setup", post(auth::totp_setup))
         .route("/api/v1/auth/2fa/enable", post(auth::totp_enable))
         .route("/api/v1/auth/2fa/disable", post(auth::totp_disable))

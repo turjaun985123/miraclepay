@@ -1,6 +1,7 @@
 pub mod admin;
 pub mod api_keys;
 pub mod auth;
+pub mod auth_flows;
 pub mod disputes;
 pub mod fx;
 pub mod gateways;

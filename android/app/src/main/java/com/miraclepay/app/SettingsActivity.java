@@ -23,6 +23,7 @@ package com.miraclepay.app;
 //   EditText  @id/serverUrlEdit      — server base URL
 //   EditText  @id/deviceKeyEdit      — device API key
 //   EditText  @id/merchantLabelEdit  — optional merchant label
+//   EditText  @id/allowedSendersEdit — allowed senders, one per line (Wave 109)
 //   TextView  @id/deviceIdText       — read-only device ID
 //   Button    @id/saveButton         — validate + persist the fields
 //   Button    @id/testButton         — probe the saved server URL
@@ -43,6 +44,7 @@ public class SettingsActivity extends AppCompatActivity {
     private EditText serverUrlEdit;
     private EditText deviceKeyEdit;
     private EditText merchantLabelEdit;
+    private EditText allowedSendersEdit;
     private TextView deviceIdText;
     private Button saveButton;
     private Button testButton;
@@ -64,6 +66,7 @@ public class SettingsActivity extends AppCompatActivity {
         serverUrlEdit = findViewById(R.id.serverUrlEdit);
         deviceKeyEdit = findViewById(R.id.deviceKeyEdit);
         merchantLabelEdit = findViewById(R.id.merchantLabelEdit);
+        allowedSendersEdit = findViewById(R.id.allowedSendersEdit);
         deviceIdText = findViewById(R.id.deviceIdText);
         saveButton = findViewById(R.id.saveButton);
         testButton = findViewById(R.id.testButton);
@@ -73,6 +76,16 @@ public class SettingsActivity extends AppCompatActivity {
         serverUrlEdit.setText(configStore.getServerUrl());
         deviceKeyEdit.setText(configStore.getDeviceKey());
         merchantLabelEdit.setText(configStore.getMerchantLabel());
+        // Wave 109: show the allowed senders one per line, whatever
+        // separator the stored value used.
+        StringBuilder allowedText = new StringBuilder();
+        for (String sender : configStore.getAllowedSenderList()) {
+            if (allowedText.length() > 0) {
+                allowedText.append('\n');
+            }
+            allowedText.append(sender);
+        }
+        allowedSendersEdit.setText(allowedText.toString());
 
         // The device ID is generated once by ConfigStore and never edited
         // here; it is shown so it can be registered in the dashboard.
@@ -111,6 +124,9 @@ public class SettingsActivity extends AppCompatActivity {
         }
 
         configStore.save(serverUrl, deviceKey, merchantLabel);
+        // Wave 109: the allowed-senders field is saved separately —
+        // ConfigStore.save(...) does not cover it. Empty = allow all.
+        configStore.setAllowedSenders(textOf(allowedSendersEdit));
         Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show();
     }
 

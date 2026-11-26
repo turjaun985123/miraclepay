@@ -119,6 +119,9 @@ public class SmsForwardWorker extends Worker {
         String outboxId = input.getString(KEY_OUTBOX_ID);
         OutboxStore outbox = outboxId == null
                 ? null : new OutboxStore(getApplicationContext());
+        // Wave 110: cumulative history counters, updated alongside
+        // the outbox outcome reporting below.
+        StatsStore stats = new StatsStore(getApplicationContext());
 
         // A forward with no sender or no body is not a real SMS and
         // the backend can only reject it; fail permanently instead of
@@ -126,6 +129,7 @@ public class SmsForwardWorker extends Worker {
         if (sender == null || sender.trim().isEmpty()
                 || body == null || body.trim().isEmpty()) {
             Log.w(TAG, "Dropping SMS forward with missing sender or body");
+            stats.recordFailure("missing sender or body");
             return Result.failure();
         }
 
@@ -147,6 +151,7 @@ public class SmsForwardWorker extends Worker {
             if (outbox != null) {
                 outbox.markFailed(outboxId, "app not configured");
             }
+            stats.recordFailure("app not configured");
             return Result.failure();
         }
 
@@ -162,6 +167,7 @@ public class SmsForwardWorker extends Worker {
             if (outbox != null) {
                 outbox.markDone(outboxId);
             }
+            stats.recordSuccess();
             return Result.success();
         }
 
@@ -176,9 +182,13 @@ public class SmsForwardWorker extends Worker {
             if (outbox != null) {
                 outbox.markFailed(outboxId, "HTTP " + status + ": " + result.errorMessage);
             }
+            stats.recordFailure("HTTP " + status + ": " + result.errorMessage);
             return Result.failure();
         }
 
+        // Wave 110: a transient failure is not counted in the stats
+        // yet — WorkManager will retry, and the retry's eventual
+        // success or permanent failure is what gets recorded.
         if (outbox != null) {
             outbox.markAttempt(outboxId,
                     status == ApiClient.NO_STATUS

@@ -5,6 +5,17 @@ use miraclepay_api::{build_router, AppState};
 
 #[tokio::main]
 async fn main() {
+    // Wave 93: validate configuration before anything starts.
+    let production = miraclepay_api::config::is_production();
+    let problems =
+        miraclepay_api::config::validate_env(|name| std::env::var(name).ok(), production);
+    for problem in &problems {
+        eprintln!("[miraclepay] config: {problem}");
+    }
+    if production && !problems.is_empty() {
+        eprintln!("[miraclepay] refusing to start in production with invalid configuration");
+        std::process::exit(2);
+    }
     let db = miraclepay_api::db::init_from_env().await;
     let state = AppState::from_env().with_db_pool(db.pool);
     match miraclepay_api::persist::hydrate(&state).await {
@@ -36,10 +47,35 @@ async fn main() {
         .ok()
         .and_then(|p| p.parse().ok())
         .unwrap_or(8080);
-    let app = build_router(state);
+    let app = build_router(state.clone());
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port))
         .await
         .expect("bind");
     println!("MiraclePay API v0.0.2 listening on port {port}");
-    axum::serve(listener, app).await.expect("serve");
+    // Wave 92: graceful shutdown on Ctrl-C / SIGTERM, then a final
+    // persistence snapshot so the snapshot window closes to zero
+    // on a clean stop.
+    let shutdown = async {
+        let ctrl_c = tokio::signal::ctrl_c();
+        #[cfg(unix)]
+        let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("sigterm handler");
+        #[cfg(unix)]
+        tokio::select! {
+            _ = ctrl_c => {},
+            _ = sigterm.recv() => {},
+        }
+        #[cfg(not(unix))]
+        let _ = ctrl_c.await;
+        println!("[miraclepay] shutdown signal received — draining");
+    };
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown)
+        .await
+        .expect("serve");
+    match miraclepay_api::persist::snapshot(&state).await {
+        Ok(0) => {}
+        Ok(n) => println!("[miraclepay] final persistence snapshot: {n} records"),
+        Err(err) => eprintln!("[miraclepay] final persistence snapshot failed: {err}"),
+    }
 }

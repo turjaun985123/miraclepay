@@ -90,6 +90,9 @@ pub struct AppState {
     /// Refresh tokens (Wave 25), keyed by the SHA-256 hash of the
     /// raw token; the raw token is never stored.
     pub refresh_tokens: Arc<RwLock<HashMap<String, crate::refresh::RefreshRecord>>>,
+    /// One-time auth tokens (Waves 88-89: password reset + email
+    /// verification), keyed by the SHA-256 hash of the raw token.
+    pub auth_tokens: Arc<RwLock<HashMap<String, crate::auth_tokens::AuthTokenRecord>>>,
     /// Merchant KYC profiles (Wave 33), keyed by merchant id.
     pub kyc_profiles: Arc<RwLock<HashMap<String, miraclepay_domain::kyc::KycProfile>>>,
     /// Per-merchant settings incl. checkout branding (Wave 37).
@@ -145,6 +148,7 @@ impl AppState {
             notifications: Arc::new(RwLock::new(Vec::new())),
             audit_log: Arc::new(RwLock::new(Vec::new())),
             refresh_tokens: Arc::new(RwLock::new(HashMap::new())),
+            auth_tokens: Arc::new(RwLock::new(HashMap::new())),
             kyc_profiles: Arc::new(RwLock::new(HashMap::new())),
             merchant_settings: Arc::new(RwLock::new(HashMap::new())),
             disputes: Arc::new(RwLock::new(HashMap::new())),

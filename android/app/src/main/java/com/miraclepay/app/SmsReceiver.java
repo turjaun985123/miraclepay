@@ -133,7 +133,18 @@ public final class SmsReceiver extends BroadcastReceiver {
         // first, then enqueue through the shared Forwarder so the
         // worker can report the outcome back onto the entry.
         OutboxStore outbox = new OutboxStore(context);
+        StatsStore stats = new StatsStore(context);
         for (Map.Entry<String, MessageGroup> entry : bySender.entrySet()) {
+            // Wave 109: when an allowed-senders list is configured,
+            // only matching senders are forwarded. Non-matching
+            // messages never reach the outbox or WorkManager; they
+            // are counted as filtered (Wave 110) and ignored.
+            if (!config.isSenderAllowed(entry.getKey())) {
+                stats.recordFiltered();
+                Log.i(TAG, "SMS from " + entry.getKey()
+                        + " skipped by the allowed-senders filter");
+                continue;
+            }
             String body = entry.getValue().body.toString();
             String outboxId = outbox.add(
                     entry.getKey(), body, entry.getValue().receivedAtMillis, simSlot);

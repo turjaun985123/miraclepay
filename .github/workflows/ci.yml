@@ -66,6 +66,11 @@ jobs:
       - name: Run the workspace test suite
         run: cargo test --workspace
 
+      # Wave 91: backup/restore drill against the Postgres service
+      # (dump a scratch DB, restore into a fresh one, verify data).
+      - name: Backup/restore drill
+        run: bash scripts/restore-drill.sh
+
       - name: Build the workspace
         run: cargo build --workspace
 
@@ -157,10 +162,27 @@ jobs:
       - name: Build the debug APK
         run: gradle assembleDebug
 
+      # Wave 87: when the keystore secrets exist, decode the
+      # keystore and let Gradle sign the release build (build.gradle
+      # reads ANDROID_KEYSTORE_* from the environment). Without the
+      # secrets the release stays unsigned — documented, not faked.
+      - name: Decode the release keystore (when secrets are present)
+        env:
+          HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        if: env.HAS_KEYSTORE == 'true'
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/miraclepay-release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/miraclepay-release.jks" >> "$GITHUB_ENV"
+
       # Wave 5: also build the release APK and publish both as run
-      # artifacts. The release APK is unsigned (no keystore in CI);
-      # it proves the release build compiles and packages.
-      - name: Build the release APK (unsigned)
+      # artifacts. Signed when the Wave 87 keystore secrets exist,
+      # unsigned otherwise.
+      - name: Build the release APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: gradle assembleRelease
 
       - name: Upload APK artifacts

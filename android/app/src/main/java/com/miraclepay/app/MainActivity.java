@@ -26,6 +26,10 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SwitchCompat;
@@ -46,6 +50,7 @@ public class MainActivity extends AppCompatActivity {
 
     private TextView statusText;
     private TextView configSummaryText;
+    private TextView statsText;
     private SwitchCompat enableSwitch;
     private Button settingsButton;
     private Button testButton;
@@ -62,6 +67,7 @@ public class MainActivity extends AppCompatActivity {
 
         statusText = findViewById(R.id.statusText);
         configSummaryText = findViewById(R.id.configSummaryText);
+        statsText = findViewById(R.id.statsText);
         enableSwitch = findViewById(R.id.enableSwitch);
         settingsButton = findViewById(R.id.settingsButton);
         testButton = findViewById(R.id.testButton);
@@ -154,6 +160,32 @@ public class MainActivity extends AppCompatActivity {
         int failed = outbox.countByStatus(OutboxStore.STATUS_FAILED);
         statusText.append("\nQueue: " + pending + " waiting · " + failed + " failed");
         retryButton.setVisibility(pending + failed > 0 ? View.VISIBLE : View.GONE);
+
+        // Forwarding history (Wave 110): cumulative counters from
+        // StatsStore. refreshStatus() runs from onResume(), so this
+        // block is refreshed whenever the activity comes back.
+        StatsStore stats = new StatsStore(this);
+        String statsLine =
+                "Forwarded: " + stats.getTotalForwarded()
+                        + " · Failed: " + stats.getTotalFailed()
+                        + " · Filtered: " + stats.getTotalFiltered()
+                        + " · Last success: " + formatStatsTime(stats.getLastSuccessAtMillis());
+        long lastFailureAt = stats.getLastFailureAtMillis();
+        if (lastFailureAt > 0L) {
+            String reason = stats.getLastFailureReason();
+            statsLine += "\nLast failure: " + formatStatsTime(lastFailureAt)
+                    + (isEmpty(reason) ? "" : " (" + reason + ")");
+        }
+        statsText.setText(statsLine);
+    }
+
+    /** Format an epoch-millis stats timestamp, or "—" when unset (0). */
+    private static String formatStatsTime(long millis) {
+        if (millis <= 0L) {
+            return "—";
+        }
+        return new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
+                .format(new Date(millis));
     }
 
     /** Re-enqueue every waiting/failed outbox entry (Wave 43). */

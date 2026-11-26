@@ -74,6 +74,24 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:labelFor="@id/allowedSendersEdit"
+            android:text="Allowed senders (one per line, empty = all)"
+            android:textAppearance="?attr/textAppearanceSubtitle2" />
+
+        <EditText
+            android:id="@+id/allowedSendersEdit"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="16dp"
+            android:gravity="top"
+            android:hint="bKash"
+            android:inputType="textMultiLine"
+            android:minLines="3" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:text="Device ID"
             android:textAppearance="?attr/textAppearanceSubtitle2" />
 

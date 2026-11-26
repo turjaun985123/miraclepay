@@ -63,6 +63,7 @@ pub const COLLECTIONS: &[&str] = &[
     "kyc_profiles",
     "merchant_settings",
     "refresh_tokens",
+    "auth_tokens",
 ];
 
 fn to_value<T: Serialize>(item: &T) -> serde_json::Value {
@@ -226,6 +227,7 @@ pub async fn collect(state: &AppState) -> Vec<(&'static str, CollectionData)> {
         "refresh_tokens",
         map_entries(&state.refresh_tokens.read().await),
     ));
+    out.push(("auth_tokens", map_entries(&state.auth_tokens.read().await)));
     out
 }
 
@@ -366,6 +368,7 @@ pub async fn apply(state: &AppState, collection: &str, entries: &CollectionData)
         "kyc_profiles" => apply_map(&state.kyc_profiles, entries).await,
         "merchant_settings" => apply_map(&state.merchant_settings, entries).await,
         "refresh_tokens" => apply_map(&state.refresh_tokens, entries).await,
+        "auth_tokens" => apply_map(&state.auth_tokens, entries).await,
         _ => {}
     }
 }
