@@ -136,9 +136,7 @@ impl PluginManifest {
         if parse_version(&self.min_api_version).is_none() {
             return Err(invalid("min_api_version must look like \"1.0\""));
         }
-        if matches!(self.kind, PluginKind::Gateway | PluginKind::Http)
-            && self.provides.is_empty()
-        {
+        if matches!(self.kind, PluginKind::Gateway | PluginKind::Http) && self.provides.is_empty() {
             return Err(invalid(
                 "gateway plugins must list at least one id in provides",
             ));
