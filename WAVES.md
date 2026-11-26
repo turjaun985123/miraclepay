@@ -226,3 +226,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - New `domain::totp`: RFC 6238 TOTP over HMAC-SHA1 (new `sha1` dep), base32 secrets from OsRng, ±1-step skew tolerance, otpauth URI — proven against the RFC 6238 Appendix B test vectors.
 - User records gain `totp_secret` (never serialised) + `totp_enabled`. Endpoints: `POST /auth/2fa/setup` (pending secret + URI, shown once), `/enable` (code confirms possession), `/disable` (code required, secret cleared). Login enforces the second factor with distinct 401s (`totp_required` / `totp_invalid`); OpenAPI now 71 operations.
 - UI: login reveals a code field on `totp_required`; dashboard gains a 2FA panel (status from `/auth/me`, setup/enable/disable). Local: 633 workspace tests pass, Astro build passes.
+
+### Wave 26 — CI verdict ✅
+- Commit `3bb9371`, CI run **45757981597**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 27 — Backup & restore tooling (this commit)
+- `scripts/backup.sh`: pg_dump → timestamped `backups/<stamp>/` (gzip dump + env var *names* only + commit id); **refuses with a clear error in in-memory mode** (verified locally: exit 1, no fake backup produced) and when `pg_dump` is missing.
+- `scripts/restore.sh`: restores into an empty database only (checks table count; `--force-empty` + confirmation required otherwise), `--yes` for automation.
+- `docs/operations/backup-restore.md`: state inventory (DB vs in-memory vs worker file store vs secrets), nightly cron example with retention, off-host copy rule, quarterly restore-drill procedure, RPO 24h / RTO ~15min targets for the single-host v0.0.1.
