@@ -1,4 +1,4 @@
-//! MiraclePay API server binary (v0.0.3.1).
+//! MiraclePay API server binary (v0.0.3.2).
 //! Env: PORT (default 8080), JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD,
 //! DATABASE_URL (optional; unset = in-memory store, see `api::db`).
 use miraclepay_api::{build_router, AppState};
@@ -75,7 +75,7 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port))
         .await
         .expect("bind");
-    println!("MiraclePay API v0.0.3.1 listening on port {port}");
+    println!("MiraclePay API v0.0.3.2 listening on port {port}");
     // Wave 92: graceful shutdown on Ctrl-C / SIGTERM, then a final
     // persistence snapshot so the snapshot window closes to zero
     // on a clean stop.
