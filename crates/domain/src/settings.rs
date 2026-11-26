@@ -40,6 +40,10 @@ pub struct PlatformSettings {
     pub maintenance_mode: bool,
     /// Public support contact email shown to merchants and customers.
     pub support_email: String,
+    /// FX rates against BDT for reporting conversions (Wave 34;
+    /// see `crate::fx`). Defaults to the built-in indicative table.
+    #[serde(default = "crate::fx::default_rates")]
+    pub fx_rates: Vec<crate::fx::FxRate>,
 }
 
 impl Default for PlatformSettings {
@@ -55,6 +59,7 @@ impl Default for PlatformSettings {
             checkout_session_minutes: 30,
             maintenance_mode: false,
             support_email: "support@example.com".to_string(),
+            fx_rates: crate::fx::default_rates(),
         }
     }
 }
@@ -165,6 +170,7 @@ mod tests {
             checkout_session_minutes: 15,
             maintenance_mode: true,
             support_email: "help@example.com".to_string(),
+            fx_rates: crate::fx::default_rates(),
         };
         assert_eq!(settings.default_currency, Currency::USD);
         assert!(settings.maintenance_mode);

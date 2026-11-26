@@ -284,3 +284,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - Endpoints: `PUT/GET /merchants/:id/kyc` (owner submit/read, admin read), `GET /admin/kyc/pending` (review queue), `POST /admin/merchants/:id/kyc/decision`. OpenAPI now 75 operations.
 - Enforcement (narrow, documented in the module): a KYC-**rejected** merchant cannot be activated (409 at the admin status endpoint); no-profile merchants keep pre-KYC behaviour.
 - UI: dashboard KYC card (status + submit/resubmit form per merchant) and an admin review queue with Verify/Reject (rejection requires a note shown to the merchant). Workspace: 652 tests pass, Astro build passes.
+
+### Wave 33 — CI verdict ✅
+- Commit `f90d2d9`, CI run **45760109322**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 34 — Multi-currency groundwork: FX conversion (this commit)
+- New `domain::fx`: rational rate table (units per 1 BDT as `num/den` — integer math only, no floats near money), `convert()` with round-half-up, identity conversions rate-free, missing/invalid rates are errors, never guesses. Indicative Nov-2026 defaults (USD 0.00837, INR 0.701, PKR 2.33, EUR 0.00771 per BDT), documented as reporting-only, never a dealing rate.
+- Platform settings gain `fx_rates` (serde-defaulted, admin-overridable via the existing settings endpoints).
+- New endpoints `GET /api/v1/fx/rates` and `GET /api/v1/fx/convert` (auth; unknown currency/negative amount → 400). OpenAPI now 77 operations. Workspace: 657 tests pass.

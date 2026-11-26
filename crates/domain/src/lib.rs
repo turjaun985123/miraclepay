@@ -2,6 +2,7 @@
 pub mod audit;
 pub mod errors;
 pub mod ids;
+pub mod fx;
 pub mod invoice;
 pub mod kyc;
 pub mod invoice_pdf;
