@@ -28,6 +28,7 @@ const links: NavLink[] = [
   { key: "gateways", label: "Gateways", href: "/dashboard/gateways" },
   { key: "webhooks", label: "Webhooks", href: "/dashboard/webhooks" },
   { key: "api-keys", label: "API Keys", href: "/dashboard/api-keys" },
+  { key: "settings", label: "Settings", href: "/dashboard/settings" },
   { key: "admin", label: "Admin", href: "/admin" },
 ];
 
@@ -54,6 +55,7 @@ const current = active ?? derivedActive;
               class:list={["dashboard-nav-link", { "is-active": isActive }]}
               href={link.href}
               aria-current={isActive ? "page" : undefined}
+              data-i18n={`nav_${link.key.replaceAll("-", "_")}`}
             >
               {link.label}
             </a>
@@ -61,8 +63,25 @@ const current = active ?? derivedActive;
         );
       })
     }
+    <li class="dashboard-nav-item">
+      <button id="mp-lang-toggle" class="dashboard-nav-link" type="button" aria-label="Switch language / ভাষা বদলান" style="background:none;border:none;cursor:pointer;font:inherit">বাংলা</button>
+    </li>
   </ul>
 </nav>
+
+<script>
+  import { applyI18n, getLang, otherLang, setLang, toggleLabel } from "../lib/i18n";
+  applyI18n();
+  const toggle = document.getElementById("mp-lang-toggle");
+  function syncToggle(): void {
+    if (toggle) toggle.textContent = toggleLabel(getLang());
+  }
+  syncToggle();
+  toggle?.addEventListener("click", () => {
+    setLang(otherLang(getLang()));
+    syncToggle();
+  });
+</script>
 
 <style>
   .dashboard-nav {

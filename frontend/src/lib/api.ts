@@ -596,6 +596,10 @@ export interface MerchantSettings {
   brand_color?: string | null;
   logo_url?: string | null;
   checkout_message?: string | null;
+  /** Payout schedule (Wave 101): manual | daily | weekly | monthly. */
+  payout_schedule?: string | null;
+  /** Day for weekly (1..=7) or monthly (1..=28) payout schedules. */
+  payout_day?: number | null;
   [key: string]: unknown;
 }
 

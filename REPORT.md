@@ -103,3 +103,40 @@ plus Gradle/XML/TS/docs/config), excluding node_modules/target/dist.
 - **CI-only (not run locally):** Android `assembleDebug` (no Android SDK
   on this VM) and the GitHub Actions workflow itself (no repo/push yet).
   `docker-compose.yml` references a root `Dockerfile` that is a follow-up.
+
+---
+
+# Addendum — v0.0.2 (Waves 51–150)
+
+The report above documents the v0.0.1 build. v0.0.2 (100 more
+waves, all logged in `WAVES.md`) changed the platform's
+foundations:
+
+- **Runtime Postgres persistence** (Waves 53–75): all state in
+  28 snapshot/hydrate collections over `mp_records`, real-PG
+  integration tests in CI, in-memory fallback retained.
+- **Live gateway calls** (Waves 76–85): bKash/Stripe/PayPal/
+  Razorpay real HTTP (sandbox default, env-gated), signed
+  webhook receivers, bKash callback.
+- **Production hardening** (Waves 86–95): SMTP STARTTLS,
+  password reset + email verification + sessions, graceful
+  shutdown, config validation, health split, restore drill.
+- **Product depth** (Waves 96–115): onboarding, teams, API-key
+  scope enforcement, evidence files, payout schedules, CSV
+  export, search, gateway test-connection, link analytics,
+  receipt PDFs, admin suspension, dashboard settings/search/
+  onboarding UI, checkout currency display.
+- **Plugin system** (Waves 116–121, user-adopted design):
+  psychoscript JS lane (pinned rev bf492e1) + HTTP lane,
+  confinement-tested, with manual-bank-transfer and BRAC Bank
+  SMS pilot plugins and `docs/plugins.md`.
+- **Quality + release prep** (Waves 122–149): E2E and load
+  smokes in CI, deployment docs, security review
+  (`docs/security-review-0.0.2.md`), release notes
+  (`docs/releases/0.0.2.md`), JS SDK parity, v0.0.1-data
+  hydration proof, version sweep.
+
+Final numbers at the v0.0.2 tag: 118 OpenAPI operations,
+714+ Rust tests + 8 JS SDK tests, six CI jobs green
+(Docker, Rust, Android, Frontend, RustSec, Security audit).
+Honest limits are listed in `docs/releases/0.0.2.md`.

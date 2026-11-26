@@ -87,6 +87,48 @@ import DashboardNav from '../../components/DashboardNav.astro';
       </form>
     </section>
 
+    <!-- ── Event catalogue (read-only reference) ──────────────── -->
+    <!-- The webhook endpoint API has no events/subscriptions field:
+         every event for the merchant is POSTed to the webhook URL
+         above. This list is the platform's event catalogue (Wave
+         104), mirroring EVENT_TYPES in the backend webhook module
+         and docs/webhooks.md. -->
+    <section class="card stack" aria-labelledby="event-types-heading">
+      <div>
+        <h2 id="event-types-heading">Events this platform sends</h2>
+        <p class="muted small" style="margin: 0;">
+          There is no per-endpoint subscription filter — MiraclePay
+          sends every event below for this merchant to the webhook URL
+          above. Filter on the event type in your own handler if you
+          only care about some of them.
+        </p>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th scope="col">Event type</th>
+              <th scope="col">When it fires</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="mono small">payment.created</td><td>A payment is initiated.</td></tr>
+            <tr><td class="mono small">payment.completed</td><td>A payment settles (e.g. its verification SMS matches).</td></tr>
+            <tr><td class="mono small">payment.refunded</td><td>A transaction&rsquo;s refund coverage changes its status.</td></tr>
+            <tr><td class="mono small">refund.succeeded</td><td>A refund is settled as succeeded.</td></tr>
+            <tr><td class="mono small">refund.failed</td><td>A refund is settled as failed.</td></tr>
+            <tr><td class="mono small">subscription.created</td><td>A subscription starts.</td></tr>
+            <tr><td class="mono small">subscription.cancelled</td><td>A subscription is cancelled.</td></tr>
+            <tr><td class="mono small">subscription.paused</td><td>A subscription is set to end at period end.</td></tr>
+            <tr><td class="mono small">subscription.resumed</td><td>A paused subscription resumes.</td></tr>
+            <tr><td class="mono small">settlement.paid</td><td>A settlement payout is recorded.</td></tr>
+            <tr><td class="mono small">dispute.opened</td><td>A dispute is opened against a payment.</td></tr>
+            <tr><td class="mono small">dispute.closed</td><td>A dispute is closed.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- ── Events ─────────────────────────────────────────────── -->
     <section class="card stack" aria-labelledby="events-heading">
       <div class="row" style="justify-content: space-between;">

@@ -44,6 +44,12 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
       <p id="pay-fixed-amount" class="pay-amount" hidden></p>
 
+      <div class="field" id="fx-field" hidden>
+        <label class="label" for="fx-currency">Display currency</label>
+        <select class="input" id="fx-currency"></select>
+        <p class="field-hint" id="fx-converted" hidden></p>
+      </div>
+
       <form id="pay-form" novalidate>
         <div class="field" id="amount-field" hidden>
           <label class="label" for="amount" data-i18n="pay_amount">Amount</label>
@@ -199,7 +205,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 </style>
 
 <script>
-  import { formatMoney, payLink, publicLink } from '../../lib/api';
+  import { apiFetch, formatMoney, payLink, publicLink } from '../../lib/api';
   import { applyI18n, getLang, otherLang, setLang, t, toggleLabel } from '../../lib/i18n';
 
   // Bangla/English toggle (Wave 22): static strings swap via
@@ -292,6 +298,83 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   let currency = 'BDT';
   let collectPhone = false;
   let collectEmail = false;
+
+  // ── Display-currency conversion (Wave 98) ──────────────────────
+  // Display only: the charged amount and currency never change.
+  // Rates come from GET /api/v1/fx/rates → { base, rates: [{currency,
+  // num, den}] } where num/den is units of the currency per 1 BDT, so
+  // converted = amount * rate(to) / rate(from). The endpoint requires
+  // auth, so for anonymous visitors the fetch fails and the selector
+  // simply stays hidden.
+  interface FxRateEntry {
+    num: number;
+    den: number;
+  }
+  const fxFieldEl = document.getElementById('fx-field');
+  const fxSelect = document.getElementById('fx-currency') as HTMLSelectElement | null;
+  const fxConvertedEl = document.getElementById('fx-converted');
+  let fxRates: Map<string, FxRateEntry> | null = null;
+
+  function payableMinor(): number | null {
+    if (fixedAmountMinor !== null) return fixedAmountMinor;
+    const major = Number(amountInput?.value ?? '');
+    return Number.isFinite(major) && major > 0 ? Math.round(major * 100) : null;
+  }
+
+  function updateFxDisplay(): void {
+    if (!fxRates || !fxSelect || !fxConvertedEl) return;
+    const target = fxSelect.value;
+    const amount = payableMinor();
+    const from = fxRates.get(currency);
+    const to = fxRates.get(target);
+    if (!target || target === currency || amount === null || !from || !to) {
+      fxConvertedEl.hidden = true;
+      return;
+    }
+    const converted = Math.round(
+      (amount * (to.num / to.den)) / (from.num / from.den),
+    );
+    fxConvertedEl.textContent = `≈ ${formatMoney(converted, target)} (display only — you will be charged ${formatMoney(amount, currency)})`;
+    fxConvertedEl.hidden = false;
+  }
+
+  async function loadFxRates(): Promise<void> {
+    try {
+      const res = await apiFetch<{
+        rates?: { currency?: unknown; num?: number; den?: number }[];
+      }>('/api/v1/fx/rates');
+      const rates = new Map<string, FxRateEntry>();
+      for (const entry of res?.rates ?? []) {
+        const code =
+          typeof entry.currency === 'string'
+            ? entry.currency
+            : entry.currency && typeof entry.currency === 'object'
+              ? String((entry.currency as { code?: unknown }).code ?? '')
+              : '';
+        if (code && typeof entry.num === 'number' && typeof entry.den === 'number' && entry.den !== 0) {
+          rates.set(code.toUpperCase(), { num: entry.num, den: entry.den });
+        }
+      }
+      if (rates.size < 2 || !fxSelect) return;
+      fxRates = rates;
+      fxSelect.replaceChildren();
+      for (const code of rates.keys()) {
+        const opt = document.createElement('option');
+        opt.value = code;
+        opt.textContent = code;
+        fxSelect.append(opt);
+      }
+      fxSelect.value = currency;
+      if (fxFieldEl) fxFieldEl.hidden = false;
+      updateFxDisplay();
+    } catch {
+      // No rates available (e.g. anonymous visitor): no selector.
+      if (fxFieldEl) fxFieldEl.hidden = true;
+    }
+  }
+
+  fxSelect?.addEventListener('change', updateFxDisplay);
+  amountInput?.addEventListener('input', updateFxDisplay);
 
   function showLoadError(message: string): void {
     if (loadingEl) loadingEl.hidden = true;
@@ -406,6 +489,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
       if (loadingEl) loadingEl.hidden = true;
       if (cardEl) cardEl.hidden = false;
+      void loadFxRates();
     } catch (error) {
       // Inactive, expired, exhausted or unknown links surface here as
       // the API's error message (e.g. "link not available").

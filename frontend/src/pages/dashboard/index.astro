@@ -92,6 +92,38 @@ import DashboardNav from '../../components/DashboardNav.astro';
         </div>
       </section>
 
+      <section id="onboarding-card" class="card" aria-labelledby="onboarding-heading" hidden>
+        <h2 id="onboarding-heading">Get started — <span id="onboarding-percent">0%</span> complete</h2>
+        <ul id="onboarding-steps" style="list-style: none; margin: 0; padding: 0;" class="stack"></ul>
+      </section>
+
+      <section class="card" aria-labelledby="search-heading">
+        <h2 id="search-heading">Search</h2>
+        <form id="search-form" class="row" novalidate>
+          <input id="search-q" class="input" type="search" placeholder="Search transactions, payment links, invoices…"
+            aria-label="Search" autocomplete="off" style="flex: 1 1 240px;" />
+          <button class="btn" type="submit">Search</button>
+        </form>
+        <p id="search-error" class="alert alert-error" role="alert" hidden></p>
+        <div id="search-results" class="stack" hidden>
+          <div>
+            <h3>Transactions</h3>
+            <ul id="search-transactions" style="list-style: none; margin: 0; padding: 0;"></ul>
+            <p id="search-transactions-empty" class="muted small" hidden>No matching transactions.</p>
+          </div>
+          <div>
+            <h3>Payment links</h3>
+            <ul id="search-links" style="list-style: none; margin: 0; padding: 0;"></ul>
+            <p id="search-links-empty" class="muted small" hidden>No matching payment links.</p>
+          </div>
+          <div>
+            <h3>Invoices</h3>
+            <ul id="search-invoices" style="list-style: none; margin: 0; padding: 0;"></ul>
+            <p id="search-invoices-empty" class="muted small" hidden>No matching invoices.</p>
+          </div>
+        </div>
+      </section>
+
       <section class="card" aria-labelledby="chart-heading">
         <h2 id="chart-heading">Sales — last 14 days</h2>
         <p class="muted small">
@@ -274,6 +306,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
 
   <script>
     import {
+      apiFetch,
       getToken,
       listMerchants,
       createMerchant,
@@ -445,7 +478,120 @@ import DashboardNav from '../../components/DashboardNav.astro';
         loadAnalytics(currentMerchantId),
       ]);
       void loadKyc();
+      void loadOnboarding(currentMerchantId);
     }
+
+    // -- Onboarding checklist (Wave 115) ----------------------------
+    // GET /api/v1/merchants/:id/onboarding → { steps: [{id, label,
+    // done}], completed, total, percent }. The card hides itself
+    // once every step is done (or when the fetch fails).
+    async function loadOnboarding(merchantId) {
+      const card = $('onboarding-card');
+      if (!card) return;
+      try {
+        const data = await apiFetch<any>(
+          `/api/v1/merchants/${encodeURIComponent(merchantId)}/onboarding`,
+        );
+        const steps = Array.isArray(data?.steps) ? data.steps : [];
+        const percent =
+          typeof data?.percent === 'number'
+            ? data.percent
+            : steps.length
+              ? Math.round((steps.filter((s) => s.done).length / steps.length) * 100)
+              : 100;
+        if (percent >= 100 || !steps.length) {
+          card.hidden = true;
+          return;
+        }
+        const pctEl = $('onboarding-percent');
+        if (pctEl) pctEl.textContent = `${percent}%`;
+        const list = $('onboarding-steps');
+        if (list) {
+          list.replaceChildren();
+          for (const step of steps) {
+            const li = document.createElement('li');
+            li.className = 'row';
+            const mark = document.createElement('span');
+            mark.className = step.done ? 'badge badge-success' : 'badge badge-pending';
+            mark.textContent = step.done ? 'Done' : 'To do';
+            const label = document.createElement('span');
+            label.textContent = step.label ?? step.id ?? '';
+            if (step.done) label.className = 'muted';
+            li.append(mark, label);
+            list.append(li);
+          }
+        }
+        card.hidden = false;
+      } catch {
+        card.hidden = true;
+      }
+    }
+
+    // -- Dashboard search (Wave 106 UI) ------------------------------
+    // GET /api/v1/search?q=<q>&merchant_id=<id> →
+    // { transactions: [{id, status, amount_minor}],
+    //   payment_links: [{slug, title}],
+    //   invoices: [{number, status}] }
+    const searchForm = $('search-form');
+    searchForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const errorEl = $('search-error');
+      const resultsEl = $('search-results');
+      if (errorEl) errorEl.hidden = true;
+      if (!currentMerchantId) return;
+      const q = (($('search-q') as HTMLInputElement | null)?.value ?? '').trim();
+      if (!q) {
+        if (resultsEl) resultsEl.hidden = true;
+        return;
+      }
+      try {
+        const data = await apiFetch<any>(
+          `/api/v1/search?q=${encodeURIComponent(q)}&merchant_id=${encodeURIComponent(currentMerchantId)}`,
+        );
+        const fill = (listId, emptyId, items, render) => {
+          const list = $(listId);
+          const empty = $(emptyId);
+          if (!list) return;
+          list.replaceChildren();
+          for (const item of items) {
+            const li = document.createElement('li');
+            render(li, item);
+            list.append(li);
+          }
+          if (empty) empty.hidden = items.length > 0;
+        };
+        fill('search-transactions', 'search-transactions-empty', data?.transactions ?? [], (li, tx) => {
+          const id = document.createElement('span');
+          id.className = 'mono';
+          id.textContent = tx.id ?? '—';
+          const rest = document.createElement('span');
+          rest.textContent = ` — ${tx.status ?? ''} · ${formatMoney(tx.amount_minor ?? 0, 'BDT')}`;
+          li.append(id, rest);
+        });
+        fill('search-links', 'search-links-empty', data?.payment_links ?? [], (li, link) => {
+          const slug = document.createElement('span');
+          slug.className = 'mono';
+          slug.textContent = link.slug ?? '—';
+          const rest = document.createElement('span');
+          rest.textContent = link.title ? ` — ${link.title}` : '';
+          li.append(slug, rest);
+        });
+        fill('search-invoices', 'search-invoices-empty', data?.invoices ?? [], (li, inv) => {
+          const num = document.createElement('span');
+          num.className = 'mono';
+          num.textContent = inv.number ?? inv.id ?? '—';
+          const rest = document.createElement('span');
+          rest.textContent = inv.status ? ` — ${inv.status}` : '';
+          li.append(num, rest);
+        });
+        if (resultsEl) resultsEl.hidden = false;
+      } catch (err) {
+        if (errorEl) {
+          errorEl.textContent = err instanceof Error ? err.message : 'Search failed.';
+          errorEl.hidden = false;
+        }
+      }
+    });
 
     // -- Volume chart + live polling (Wave 41) ---------------------
     // Dependency-free inline SVG bars from the merchant analytics

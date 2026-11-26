@@ -98,6 +98,27 @@ const STRINGS: Record<string, { en: string; bn: string }> = {
     bn: 'পেমেন্ট সম্পন্ন হয়েছে। ধন্যবাদ — বিক্রেতাকে জানানো হয়েছে।',
   },
   co_status: { en: 'Payment status', bn: 'পেমেন্টের অবস্থা' },
+
+  // Dashboard navigation (Wave 133).
+  nav_overview: { en: 'Overview', bn: 'ওভারভিউ' },
+  nav_transactions: { en: 'Transactions', bn: 'লেনদেন' },
+  nav_payment_links: { en: 'Payment Links', bn: 'পেমেন্ট লিংক' },
+  nav_invoices: { en: 'Invoices', bn: 'ইনভয়েস' },
+  nav_gateways: { en: 'Gateways', bn: 'গেটওয়ে' },
+  nav_webhooks: { en: 'Webhooks', bn: 'ওয়েবহুক' },
+  nav_api_keys: { en: 'API Keys', bn: 'API কী' },
+  nav_settings: { en: 'Settings', bn: 'সেটিংস' },
+  nav_admin: { en: 'Admin', bn: 'অ্যাডমিন' },
+
+  // Auth pages (Wave 133).
+  auth_login_heading: { en: 'Log in to MiraclePay', bn: 'MiraclePay-তে লগ ইন করুন' },
+  auth_register_heading: { en: 'Create your MiraclePay account', bn: 'আপনার MiraclePay অ্যাকাউন্ট তৈরি করুন' },
+  auth_name: { en: 'Name', bn: 'নাম' },
+  auth_email: { en: 'Email', bn: 'ইমেইল' },
+  auth_password: { en: 'Password', bn: 'পাসওয়ার্ড' },
+  auth_totp: { en: 'Two-factor code', bn: 'দ্বি-ধাপ কোড' },
+  auth_login: { en: 'Log in', bn: 'লগ ইন' },
+  auth_register: { en: 'Create account', bn: 'অ্যাকাউন্ট তৈরি করুন' },
 };
 
 const STORAGE_KEY = 'mp-lang';

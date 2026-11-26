@@ -1,0 +1,397 @@
+---
+// MiraclePay v0.0.1 — Merchant settings (Waves 97/101/107, clean-room).
+//
+// Branding, notification preferences and the payout schedule for the
+// selected merchant. The merchant is chosen with the same switcher
+// pattern as the dashboard home (`mp_merchant` in localStorage,
+// falling back to the account's first merchant).
+//
+// Settings are loaded with `GET /api/v1/merchants/:id/settings` and
+// saved with `PUT` to the same URL. The loaded object is kept whole
+// and round-tripped on save, so fields this form does not edit
+// (fee_bps, merchant_id, …) are preserved untouched.
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import DashboardNav from '../../components/DashboardNav.astro';
+---
+
+<BaseLayout title="Settings">
+  <DashboardNav active="settings" />
+
+  <main id="main" class="container stack">
+    <div class="row" style="justify-content: space-between;">
+      <div>
+        <h1>Settings</h1>
+        <p class="muted" style="margin: 0;">
+          Checkout branding, notifications and payouts for your merchant.
+        </p>
+      </div>
+      <div id="merchant-switcher" class="row" hidden>
+        <label class="label" for="merchant-select" style="margin: 0;">Merchant</label>
+        <select id="merchant-select" class="input" style="width: auto; min-width: 220px;"></select>
+      </div>
+    </div>
+
+    <p id="page-error" class="alert alert-error" role="alert" hidden></p>
+    <p id="page-loading" class="muted">Loading settings…</p>
+
+    <section id="no-merchant" class="card empty" hidden>
+      <p><strong>No merchant yet.</strong></p>
+      <p>
+        Settings live under a merchant, and this account does not have one
+        yet. <a href="/dashboard">Go to the dashboard</a> to create your first
+        merchant.
+      </p>
+    </section>
+
+    <form id="settings-form" class="stack" hidden novalidate>
+      <section class="card stack" aria-labelledby="branding-heading">
+        <h2 id="branding-heading" style="margin: 0;">Checkout branding</h2>
+
+        <div class="field">
+          <label class="label" for="brand-name">Brand name</label>
+          <input id="brand-name" class="input" type="text" maxlength="60"
+            placeholder="Shown on checkout instead of your legal business name" />
+        </div>
+
+        <div class="field">
+          <label class="label" for="brand-color-text">Brand colour</label>
+          <div class="row">
+            <input id="brand-color" type="color" value="#0b7a55"
+              aria-label="Pick brand colour" />
+            <input id="brand-color-text" class="input mono" type="text"
+              placeholder="#0b7a55" style="max-width: 12rem;" />
+          </div>
+          <p class="field-hint">Accent colour for your checkout and payment pages, as #rrggbb.</p>
+        </div>
+
+        <div class="field">
+          <label class="label" for="logo-url">Logo URL</label>
+          <input id="logo-url" class="input" type="url" inputmode="url"
+            placeholder="https://example.com/logo.png" />
+          <p class="field-hint">Must be an https URL.</p>
+        </div>
+
+        <div class="field">
+          <label class="label" for="checkout-message">Checkout message</label>
+          <textarea id="checkout-message" class="input" rows="3" maxlength="200"
+            placeholder="A short message shown to customers at checkout"></textarea>
+          <p class="field-hint">At most 200 characters.</p>
+        </div>
+      </section>
+
+      <section class="card stack" aria-labelledby="notifications-heading">
+        <h2 id="notifications-heading" style="margin: 0;">Notifications</h2>
+
+        <div class="field row">
+          <input id="notify-payment" type="checkbox" />
+          <label for="notify-payment">Notify me when a payment succeeds</label>
+        </div>
+
+        <div class="field row">
+          <input id="notify-refund" type="checkbox" />
+          <label for="notify-refund">Notify me when a payment is refunded</label>
+        </div>
+      </section>
+
+      <section class="card stack" aria-labelledby="payouts-heading">
+        <h2 id="payouts-heading" style="margin: 0;">Payouts</h2>
+
+        <div class="field">
+          <label class="label" for="payout-schedule">Payout schedule</label>
+          <select id="payout-schedule" class="input" style="max-width: 16rem;">
+            <option value="manual">Manual</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+
+        <div class="field" id="payout-day-field" hidden>
+          <label class="label" for="payout-day" id="payout-day-label">Payout day</label>
+          <input id="payout-day" class="input" type="number" step="1"
+            style="max-width: 10rem;" />
+          <p class="field-hint" id="payout-day-hint"></p>
+        </div>
+
+        <div class="field row">
+          <input id="auto-settle" type="checkbox" />
+          <label for="auto-settle">Auto-settle when the balance reaches the threshold</label>
+        </div>
+
+        <div class="field">
+          <label class="label" for="settle-threshold">Settle threshold (minor units)</label>
+          <input id="settle-threshold" class="input" type="number" min="0" step="1"
+            inputmode="numeric" style="max-width: 14rem;" />
+          <p class="field-hint">In the currency&rsquo;s minor unit (e.g. poisha) — 10000 = 100.00.</p>
+        </div>
+      </section>
+
+      <p id="form-error" class="alert alert-error" role="alert" hidden></p>
+      <p id="form-saved" class="alert alert-success" role="status" hidden>Settings saved.</p>
+
+      <div class="row">
+        <button id="settings-submit" class="btn" type="submit">Save settings</button>
+      </div>
+    </form>
+  </main>
+</BaseLayout>
+
+<script>
+  import {
+    apiFetch,
+    getToken,
+    listMerchants,
+    type MerchantSettings,
+  } from '../../lib/api';
+
+  // The settings object as loaded from the API. Saved back whole so
+  // fields this form does not edit (fee_bps, …) survive the round-trip.
+  type SettingsState = MerchantSettings & {
+    payout_schedule?: string | null;
+    payout_day?: number | null;
+  };
+
+  const MERCHANT_KEY = 'mp_merchant';
+  const $ = <T extends HTMLElement>(id: string) =>
+    document.getElementById(id) as T | null;
+
+  const loadingEl = $('page-loading');
+  const pageErrorEl = $('page-error');
+  const noMerchantEl = $('no-merchant');
+  const switcherEl = $('merchant-switcher');
+  const merchantSelect = $<HTMLSelectElement>('merchant-select');
+  const form = $<HTMLFormElement>('settings-form');
+  const formErrorEl = $('form-error');
+  const formSavedEl = $('form-saved');
+  const submitBtn = $<HTMLButtonElement>('settings-submit');
+
+  const brandNameInput = $<HTMLInputElement>('brand-name');
+  const brandColorInput = $<HTMLInputElement>('brand-color');
+  const brandColorText = $<HTMLInputElement>('brand-color-text');
+  const logoUrlInput = $<HTMLInputElement>('logo-url');
+  const checkoutMessageInput = $<HTMLTextAreaElement>('checkout-message');
+  const notifyPaymentInput = $<HTMLInputElement>('notify-payment');
+  const notifyRefundInput = $<HTMLInputElement>('notify-refund');
+  const payoutScheduleSelect = $<HTMLSelectElement>('payout-schedule');
+  const payoutDayField = $('payout-day-field');
+  const payoutDayInput = $<HTMLInputElement>('payout-day');
+  const payoutDayLabel = $('payout-day-label');
+  const payoutDayHint = $('payout-day-hint');
+  const autoSettleInput = $<HTMLInputElement>('auto-settle');
+  const settleThresholdInput = $<HTMLInputElement>('settle-threshold');
+
+  let merchants: { id: string; name?: string }[] = [];
+  let currentMerchantId: string | null = null;
+  let loaded: SettingsState | null = null;
+
+  function errMessage(error: unknown, fallback: string): string {
+    return error instanceof Error && error.message ? error.message : fallback;
+  }
+
+  function showPageError(message: string): void {
+    if (!pageErrorEl) return;
+    pageErrorEl.textContent = message;
+    pageErrorEl.hidden = false;
+  }
+
+  function showFormError(message: string): void {
+    if (!formErrorEl) return;
+    formErrorEl.textContent = message;
+    formErrorEl.hidden = false;
+  }
+
+  // ── Payout day visibility ──────────────────────────────────────
+
+  function syncPayoutDay(): void {
+    const schedule = payoutScheduleSelect?.value ?? 'manual';
+    const periodic = schedule === 'weekly' || schedule === 'monthly';
+    if (payoutDayField) payoutDayField.hidden = !periodic;
+    if (!periodic || !payoutDayInput) return;
+    if (schedule === 'weekly') {
+      payoutDayInput.min = '1';
+      payoutDayInput.max = '7';
+      if (payoutDayLabel) payoutDayLabel.textContent = 'Payout day of week';
+      if (payoutDayHint) payoutDayHint.textContent = '1 = Monday … 7 = Sunday.';
+    } else {
+      payoutDayInput.min = '1';
+      payoutDayInput.max = '28';
+      if (payoutDayLabel) payoutDayLabel.textContent = 'Payout day of month';
+      if (payoutDayHint) payoutDayHint.textContent = 'A day from 1 to 28.';
+    }
+  }
+
+  payoutScheduleSelect?.addEventListener('change', syncPayoutDay);
+
+  // ── Brand colour: colour picker ↔ hex text ─────────────────────
+
+  brandColorInput?.addEventListener('input', () => {
+    if (brandColorText) brandColorText.value = brandColorInput.value;
+  });
+  brandColorText?.addEventListener('input', () => {
+    const value = brandColorText.value.trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(value) && brandColorInput) {
+      brandColorInput.value = value;
+    }
+  });
+
+  // ── Load / save ────────────────────────────────────────────────
+
+  function fillForm(settings: SettingsState): void {
+    if (brandNameInput) brandNameInput.value = settings.brand_name ?? '';
+    const color = settings.brand_color ?? '';
+    if (brandColorText) brandColorText.value = color;
+    if (brandColorInput && /^#[0-9a-fA-F]{6}$/.test(color)) {
+      brandColorInput.value = color;
+    }
+    if (logoUrlInput) logoUrlInput.value = settings.logo_url ?? '';
+    if (checkoutMessageInput) checkoutMessageInput.value = settings.checkout_message ?? '';
+    if (notifyPaymentInput) notifyPaymentInput.checked = settings.notify_on_payment !== false;
+    if (notifyRefundInput) notifyRefundInput.checked = settings.notify_on_refund !== false;
+    if (payoutScheduleSelect) {
+      payoutScheduleSelect.value = settings.payout_schedule ?? 'manual';
+    }
+    if (payoutDayInput) {
+      payoutDayInput.value =
+        settings.payout_day !== null && settings.payout_day !== undefined
+          ? String(settings.payout_day)
+          : '';
+    }
+    if (autoSettleInput) autoSettleInput.checked = settings.auto_settle === true;
+    if (settleThresholdInput) {
+      settleThresholdInput.value = String(settings.settle_threshold_minor ?? 0);
+    }
+    syncPayoutDay();
+  }
+
+  async function loadSettings(): Promise<void> {
+    if (!currentMerchantId) return;
+    if (formErrorEl) formErrorEl.hidden = true;
+    if (formSavedEl) formSavedEl.hidden = true;
+    try {
+      loaded = await apiFetch<SettingsState>(
+        `/api/v1/merchants/${encodeURIComponent(currentMerchantId)}/settings`,
+      );
+      fillForm(loaded);
+      if (form) form.hidden = false;
+    } catch (error) {
+      showPageError(errMessage(error, 'Could not load settings.'));
+    }
+  }
+
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!currentMerchantId || !loaded) return;
+    if (formErrorEl) formErrorEl.hidden = true;
+    if (formSavedEl) formSavedEl.hidden = true;
+
+    // Start from the loaded object so unedited fields round-trip.
+    const next: SettingsState = { ...loaded, merchant_id: currentMerchantId };
+
+    const emptyToNull = (value: string): string | null => {
+      const trimmed = value.trim();
+      return trimmed ? trimmed : null;
+    };
+
+    next.brand_name = emptyToNull(brandNameInput?.value ?? '');
+    next.brand_color = emptyToNull(brandColorText?.value ?? '');
+    next.logo_url = emptyToNull(logoUrlInput?.value ?? '');
+    next.checkout_message = emptyToNull(checkoutMessageInput?.value ?? '');
+    next.notify_on_payment = notifyPaymentInput?.checked ?? true;
+    next.notify_on_refund = notifyRefundInput?.checked ?? true;
+
+    const schedule = payoutScheduleSelect?.value ?? 'manual';
+    next.payout_schedule = schedule;
+    if (schedule === 'weekly' || schedule === 'monthly') {
+      const day = Number(payoutDayInput?.value ?? '');
+      next.payout_day = Number.isFinite(day) && day > 0 ? Math.trunc(day) : null;
+    } else {
+      next.payout_day = null;
+    }
+
+    next.auto_settle = autoSettleInput?.checked ?? false;
+    const threshold = Number(settleThresholdInput?.value ?? '0');
+    next.settle_threshold_minor = Number.isFinite(threshold) ? Math.trunc(threshold) : 0;
+
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      loaded = await apiFetch<SettingsState>(
+        `/api/v1/merchants/${encodeURIComponent(currentMerchantId)}/settings`,
+        { method: 'PUT', body: JSON.stringify(next) },
+      );
+      fillForm(loaded);
+      if (formSavedEl) formSavedEl.hidden = false;
+    } catch (error) {
+      showFormError(errMessage(error, 'Could not save settings.'));
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  });
+
+  // ── Merchant switcher (mirrors dashboard/index.astro) ──────────
+
+  function populateMerchantSelect(): void {
+    if (!merchantSelect) return;
+    merchantSelect.replaceChildren();
+    for (const m of merchants) {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.name ?? m.id;
+      merchantSelect.append(opt);
+    }
+    if (currentMerchantId) merchantSelect.value = currentMerchantId;
+    if (switcherEl) switcherEl.hidden = merchants.length === 0;
+  }
+
+  merchantSelect?.addEventListener('change', () => {
+    currentMerchantId = merchantSelect.value;
+    try {
+      localStorage.setItem(MERCHANT_KEY, currentMerchantId);
+    } catch {
+      // Storage unavailable; the selection still applies to this page.
+    }
+    if (form) form.hidden = true;
+    void loadSettings();
+  });
+
+  async function init(): Promise<void> {
+    if (!getToken()) {
+      window.location.href = '/login';
+      return;
+    }
+    try {
+      const res: unknown = await listMerchants();
+      merchants = Array.isArray(res)
+        ? (res as { id: string; name?: string }[])
+        : ((res as { merchants?: { id: string; name?: string }[] })?.merchants ?? []);
+    } catch (error) {
+      if (loadingEl) loadingEl.hidden = true;
+      showPageError(errMessage(error, 'Your merchants could not be loaded.'));
+      return;
+    }
+    if (loadingEl) loadingEl.hidden = true;
+
+    if (!merchants.length) {
+      if (noMerchantEl) noMerchantEl.hidden = false;
+      return;
+    }
+
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(MERCHANT_KEY);
+    } catch {
+      saved = null;
+    }
+    currentMerchantId =
+      saved && merchants.some((m) => m.id === saved) ? saved : merchants[0].id;
+    try {
+      localStorage.setItem(MERCHANT_KEY, currentMerchantId);
+    } catch {
+      // Best-effort only.
+    }
+
+    populateMerchantSelect();
+    await loadSettings();
+  }
+
+  void init();
+</script>

@@ -115,11 +115,11 @@ import DashboardNav from '../../components/DashboardNav.astro';
 
 <script>
   import {
+    apiFetch,
     formatMoney,
     getToken,
     listMerchants,
     listTransactions,
-    refund,
   } from '../../lib/api';
 
   // Loose record shape: the API client types a transaction with flat
@@ -141,6 +141,9 @@ import DashboardNav from '../../components/DashboardNav.astro';
     provider_transaction_id?: string;
     trx_id?: string;
     created_at?: string;
+    /** Already-refunded total, when the API provides it (Wave 99). */
+    refunded_minor?: number;
+    refunded_amount_minor?: number;
     [key: string]: unknown;
   };
 
@@ -235,46 +238,142 @@ import DashboardNav from '../../components/DashboardNav.astro';
     return cell;
   }
 
-  async function handleRefund(
+  /** Remaining refundable amount in minor units (Wave 99). The
+   * transaction payload carries no refunded total today, so this is
+   * the full amount unless a refunded_minor field shows up. */
+  function remainingRefundableMinor(tx: TxRecord): number {
+    const total = amountMinor(tx);
+    const refunded = Number(tx.refunded_minor ?? tx.refunded_amount_minor);
+    if (Number.isFinite(refunded) && refunded > 0) {
+      return Math.max(0, total - refunded);
+    }
+    return total;
+  }
+
+  // Inline refund panel (Wave 99): clicking Refund expands a panel
+  // row under the transaction with an amount input (prefilled with
+  // the remaining refundable amount), a reason input, and
+  // confirm/cancel buttons. Submitting posts to the same refunds
+  // endpoint the prompt flow used — POST
+  // /api/v1/transactions/:id/refunds with { amount_minor, reason }
+  // (amount_minor omitted for a full refund, reason when given).
+  function toggleRefundPanel(
     tx: TxRecord,
+    row: HTMLTableRowElement,
     button: HTMLButtonElement,
-  ): Promise<void> {
+  ): void {
+    if (!bodyEl || !tx.id) return;
+
+    // Clicking Refund on the row whose panel is open closes it.
+    const next = row.nextElementSibling;
+    if (next?.classList.contains('refund-panel-row')) {
+      next.remove();
+      return;
+    }
+    // Only one panel open at a time.
+    bodyEl.querySelectorAll('.refund-panel-row').forEach((panel) => panel.remove());
+
     const code = currencyCode(tx);
-    const answer = window.prompt(
-      `Refund amount in ${code} (leave blank for a full refund):`,
-      '',
-    );
-    if (answer === null) return; // Cancelled.
+    const remaining = remainingRefundableMinor(tx);
 
-    const data: { amount_minor?: number } = {};
-    const trimmed = answer.trim();
-    if (trimmed) {
-      const major = Number(trimmed);
-      if (!Number.isFinite(major) || major <= 0) {
-        showMessage('Please enter a refund amount greater than zero.', 'error');
-        return;
+    const panelRow = document.createElement('tr');
+    panelRow.className = 'refund-panel-row';
+    const cell = document.createElement('td');
+    cell.colSpan = 8;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'row';
+    wrap.style.alignItems = 'flex-end';
+    wrap.style.flexWrap = 'wrap';
+    wrap.style.gap = '0.75rem';
+
+    const amountField = document.createElement('div');
+    const amountLabel = document.createElement('label');
+    amountLabel.className = 'label';
+    amountLabel.textContent = `Refund amount (${code})`;
+    const amountInput = document.createElement('input');
+    amountInput.className = 'input';
+    amountInput.type = 'number';
+    amountInput.min = '0.01';
+    amountInput.step = '0.01';
+    amountInput.inputMode = 'decimal';
+    amountInput.value = (remaining / 100).toFixed(2);
+    amountLabel.htmlFor = amountInput.id = `refund-amount-${tx.id}`;
+    amountField.append(amountLabel, amountInput);
+
+    const reasonField = document.createElement('div');
+    reasonField.style.flex = '1 1 200px';
+    const reasonLabel = document.createElement('label');
+    reasonLabel.className = 'label';
+    reasonLabel.textContent = 'Reason (optional)';
+    const reasonInput = document.createElement('input');
+    reasonInput.className = 'input';
+    reasonInput.type = 'text';
+    reasonInput.placeholder = 'e.g. Customer request';
+    reasonLabel.htmlFor = reasonInput.id = `refund-reason-${tx.id}`;
+    reasonField.append(reasonLabel, reasonInput);
+
+    const confirmButton = document.createElement('button');
+    confirmButton.type = 'button';
+    confirmButton.className = 'btn btn-sm';
+    confirmButton.textContent = 'Confirm refund';
+
+    const cancelButton = document.createElement('button');
+    cancelButton.type = 'button';
+    cancelButton.className = 'btn btn-ghost btn-sm';
+    cancelButton.textContent = 'Cancel';
+    cancelButton.addEventListener('click', () => panelRow.remove());
+
+    const errorEl = document.createElement('span');
+    errorEl.className = 'small';
+    errorEl.style.color = 'var(--danger, #b3261e)';
+    errorEl.hidden = true;
+
+    confirmButton.addEventListener('click', async () => {
+      errorEl.hidden = true;
+      const data: { amount_minor?: number; reason?: string } = {};
+      const trimmed = amountInput.value.trim();
+      if (trimmed) {
+        const major = Number(trimmed);
+        if (!Number.isFinite(major) || major <= 0) {
+          errorEl.textContent = 'Please enter a refund amount greater than zero.';
+          errorEl.hidden = false;
+          return;
+        }
+        data.amount_minor = Math.round(major * 100);
       }
-      data.amount_minor = Math.round(major * 100);
-    }
+      const reason = reasonInput.value.trim();
+      if (reason) data.reason = reason;
 
-    if (!tx.id) return;
-    button.disabled = true;
-    try {
-      await refund(tx.id, data);
-      showMessage(
-        trimmed
-          ? `Refund of ${formatMoney(data.amount_minor ?? 0, code)} requested for transaction ${shortId(tx.id)}.`
-          : `Full refund requested for transaction ${shortId(tx.id)}.`,
-        'success',
-      );
-      await loadTransactions();
-    } catch (error) {
-      showMessage(
-        error instanceof Error ? error.message : 'The refund request failed.',
-        'error',
-      );
-      button.disabled = false;
-    }
+      confirmButton.disabled = true;
+      button.disabled = true;
+      try {
+        await apiFetch(
+          `/api/v1/transactions/${encodeURIComponent(tx.id as string)}/refunds`,
+          { method: 'POST', body: JSON.stringify(data) },
+        );
+        showMessage(
+          data.amount_minor !== undefined
+            ? `Refund of ${formatMoney(data.amount_minor, code)} requested for transaction ${shortId(tx.id as string)}.`
+            : `Full refund requested for transaction ${shortId(tx.id as string)}.`,
+          'success',
+        );
+        await loadTransactions();
+      } catch (error) {
+        errorEl.textContent =
+          error instanceof Error ? error.message : 'The refund request failed.';
+        errorEl.hidden = false;
+        confirmButton.disabled = false;
+        button.disabled = false;
+      }
+    });
+
+    wrap.append(amountField, reasonField, confirmButton, cancelButton, errorEl);
+    cell.append(wrap);
+    panelRow.append(cell);
+    row.after(panelRow);
+    amountInput.focus();
+    amountInput.select();
   }
 
   function renderTransactions(transactions: TxRecord[]): void {
@@ -329,7 +428,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
         button.className = 'btn btn-ghost btn-sm';
         button.textContent = 'Refund';
         button.addEventListener('click', () => {
-          void handleRefund(tx, button);
+          toggleRefundPanel(tx, row, button);
         });
         actionsCell.append(button);
       } else {

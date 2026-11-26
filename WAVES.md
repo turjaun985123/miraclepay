@@ -641,3 +641,65 @@ v0.0.2 + GitHub Release.
 - Waves 122–130 CI: run 45781265176 — all six jobs success
   (the Rust job now also runs the restore drill, E2E smoke and
   load smoke steps), job/step level, verified twice.
+
+## Delivered (2026-11-26) — frontend product UI + release prep completion
+
+- Wave 97 — Dashboard settings page —
+  `frontend/src/pages/dashboard/settings.astro`: branding
+  (name, color, logo, checkout message), notification
+  preferences and payout schedule editing against the merchant
+  settings API; linked from the dashboard nav.
+- Wave 98 — Checkout theming + multi-currency display — pay and
+  checkout pages show an approximate converted amount from
+  `GET /fx/rates` in a visitor-chosen display currency,
+  labelled display-only; the charged amount never changes.
+- Wave 99 — Partial refunds UI — the prompt() is gone:
+  transactions now open an inline refund panel (amount +
+  reason + confirm/cancel) posting to the same refunds API.
+- Wave 104 — Webhook event subscriptions UI — create-endpoint
+  form gains checkboxes for the nine platform event types,
+  stored in the endpoint's `events` filter.
+- Wave 107 — Notification preferences UI — delivered as part
+  of the Wave 97 settings page.
+- Wave 115 — Dashboard onboarding + search UI — the dashboard
+  home renders the onboarding checklist (hidden at 100%) and a
+  search box over the Wave 106 API with grouped results.
+- Wave 121 (UI part) — `frontend/src/pages/admin/plugins.astro`:
+  plugin list with load errors, enable/disable, config form
+  generated from `config_schema`, operation invoke, log view;
+  linked from the admin dashboard.
+- Wave 132 — Accessibility round 2 — dashboard nav carries
+  `aria-label`/`aria-current`, the language toggle an
+  `aria-label`, forms keep explicit `label for=` bindings, and
+  the document language now follows the selected UI language.
+- Wave 133 — Bangla i18n completion — the dictionary gains the
+  dashboard navigation and auth strings; nav, login and
+  register pages are tagged `data-i18n` with a বাংলা toggle in
+  the dashboard nav (pay/checkout were covered in 0.0.1). All
+  15 frontend pages build.
+- Wave 135 — Quality sweep close — quality block 122–135 is
+  complete (122–131, 134 logged above; 132–133 here).
+- Wave 137 — Full regression — workspace tests (714+), PG
+  integration tests, SDK tests (8/8), frontend build (15
+  pages), E2E + load smokes: all green locally and in CI.
+- Wave 139 — Version sweep — frontend `package-lock.json`
+  synced to 0.0.2 (it still said 0.0.1); `docs/ARCHITECTURE.md`
+  header updated to v0.0.2 with a pointer banner; remaining
+  "0.0.1" strings in the tree are historical references that
+  describe v0.0.1 accurately.
+- Wave 142 — Android release path — CI builds debug + release
+  APKs every run; signing activates only when keystore secrets
+  exist (none configured: release stays unsigned, labelled).
+- Wave 143 — PDF version footer — invoice + receipt PDFs carry
+  the 0.0.2 footer (fixed with Wave 112, verified here).
+- Wave 145 — Backup/restore — drill runs in CI every run
+  (Wave 91); scripts verified present and executable.
+- Wave 146 — Bundle/config check — the frontend bundle takes
+  its API origin from `PUBLIC_API_URL` at build time (Wave
+  122); no secrets exist in the frontend tree (secret scan
+  clean on every push).
+- Wave 147 — REPORT.md — v0.0.2 addendum appended; the
+  v0.0.1 report stands as the historical record beneath it.
+- Wave 148 — Pre-release verification — full local pass:
+  fmt, clippy `-D warnings`, workspace tests, PG tests, SDK
+  tests, frontend build, E2E + load smokes.

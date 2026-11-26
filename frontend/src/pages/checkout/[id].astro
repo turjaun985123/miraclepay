@@ -69,6 +69,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       </header>
 
       <p id="checkout-description" class="muted" hidden></p>
+      <p id="checkout-brand-message" class="checkout-brand-message" hidden></p>
 
       <dl class="checkout-summary">
         <div class="checkout-row">
@@ -84,6 +85,12 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           <dd id="checkout-expires">—</dd>
         </div>
       </dl>
+
+      <div class="field" id="fx-field" hidden>
+        <label class="label" for="fx-currency">Display currency</label>
+        <select class="input" id="fx-currency"></select>
+        <p class="field-hint" id="fx-converted" hidden></p>
+      </div>
 
       <!-- Gateway redirect, when the gateway sent the customer elsewhere -->
       <p id="redirect-area" class="redirect-area" hidden>
@@ -270,6 +277,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     font-weight: 700;
   }
 
+  .checkout-brand-message {
+    border-left: 3px solid var(--brand, #0b7a55);
+    padding-left: 0.6rem;
+  }
+
   .redirect-area {
     display: grid;
     gap: 0.5rem;
@@ -338,6 +350,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
 <script>
   import {
+    apiFetch,
     checkoutDetails,
     formatMoney,
     submitCheckout,
@@ -367,6 +380,20 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     gateway?: string;
     instructions?: string;
     redirect_url?: string;
+    // Merchant branding (Wave 98), mirroring the pay page's shape:
+    // the checkout-details response may carry it nested under
+    // `branding` (same shape as the public payment-link view) or as
+    // flat fields. The current API returns only the merchant name,
+    // so every field here is applied defensively when present.
+    branding?: {
+      display_name?: string | null;
+      brand_name?: string | null;
+      brand_color?: string | null;
+      logo_url?: string | null;
+      checkout_message?: string | null;
+    } | null;
+    brand_color?: string | null;
+    checkout_message?: string | null;
     merchant?: {
       name?: string;
       business_name?: string;
@@ -473,6 +500,77 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   let currentId = '';
   let currentGateway = '';
 
+  // ── Display-currency conversion (Wave 98) ──────────────────────
+  // Display only: the charged amount and currency never change.
+  // Rates come from GET /api/v1/fx/rates → { base, rates: [{currency,
+  // num, den}] } where num/den is units of the currency per 1 BDT, so
+  // converted = amount * rate(to) / rate(from). The endpoint requires
+  // auth, so for anonymous visitors the fetch fails and the selector
+  // simply stays hidden.
+  interface FxRateEntry {
+    num: number;
+    den: number;
+  }
+  const fxFieldEl = document.getElementById('fx-field');
+  const fxSelect = document.getElementById('fx-currency') as HTMLSelectElement | null;
+  const fxConvertedEl = document.getElementById('fx-converted');
+  let fxRates: Map<string, FxRateEntry> | null = null;
+  let fxAmountMinor: number | null = null;
+  let fxCurrency = 'BDT';
+
+  function updateFxDisplay(): void {
+    if (!fxRates || !fxSelect || !fxConvertedEl) return;
+    const target = fxSelect.value;
+    const from = fxRates.get(fxCurrency);
+    const to = fxRates.get(target);
+    if (!target || target === fxCurrency || fxAmountMinor === null || !from || !to) {
+      fxConvertedEl.hidden = true;
+      return;
+    }
+    const converted = Math.round(
+      (fxAmountMinor * (to.num / to.den)) / (from.num / from.den),
+    );
+    fxConvertedEl.textContent = `≈ ${formatMoney(converted, target)} (display only — you will be charged ${formatMoney(fxAmountMinor, fxCurrency)})`;
+    fxConvertedEl.hidden = false;
+  }
+
+  async function loadFxRates(): Promise<void> {
+    try {
+      const res = await apiFetch<{
+        rates?: { currency?: unknown; num?: number; den?: number }[];
+      }>('/api/v1/fx/rates');
+      const rates = new Map<string, FxRateEntry>();
+      for (const entry of res?.rates ?? []) {
+        const code =
+          typeof entry.currency === 'string'
+            ? entry.currency
+            : entry.currency && typeof entry.currency === 'object'
+              ? String((entry.currency as { code?: unknown }).code ?? '')
+              : '';
+        if (code && typeof entry.num === 'number' && typeof entry.den === 'number' && entry.den !== 0) {
+          rates.set(code.toUpperCase(), { num: entry.num, den: entry.den });
+        }
+      }
+      if (rates.size < 2 || !fxSelect) return;
+      fxRates = rates;
+      fxSelect.replaceChildren();
+      for (const code of rates.keys()) {
+        const opt = document.createElement('option');
+        opt.value = code;
+        opt.textContent = code;
+        fxSelect.append(opt);
+      }
+      fxSelect.value = fxCurrency;
+      if (fxFieldEl) fxFieldEl.hidden = false;
+      updateFxDisplay();
+    } catch {
+      // No rates available (e.g. anonymous visitor): no selector.
+      if (fxFieldEl) fxFieldEl.hidden = true;
+    }
+  }
+
+  fxSelect?.addEventListener('change', updateFxDisplay);
+
   function render(details: CheckoutView): void {
     const status = String(details.status ?? 'pending').toLowerCase();
 
@@ -486,10 +584,34 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       merchantNameEl.textContent = businessName || 'Merchant';
     }
 
-    const logoUrl = details.merchant_logo_url ?? details.merchant?.logo_url;
+    const logoUrl =
+      details.merchant_logo_url ?? details.merchant?.logo_url ?? details.branding?.logo_url;
     if (merchantLogoEl && typeof logoUrl === 'string' && logoUrl) {
       merchantLogoEl.src = logoUrl;
       merchantLogoEl.hidden = false;
+    }
+
+    // Merchant branding (Wave 98), mirroring the pay page: a display
+    // name wins over the legal name, the checkout message renders
+    // as-is (textContent — never HTML), and the brand colour accents
+    // the submit button. Applied only when the response carries
+    // branding; the current checkout-details API returns just the
+    // merchant name, in which case nothing here changes.
+    const branding = details.branding ?? null;
+    const displayName = branding?.display_name ?? branding?.brand_name;
+    if (merchantNameEl && displayName) {
+      merchantNameEl.textContent = displayName;
+    }
+    const brandMessageEl = document.getElementById('checkout-brand-message');
+    const brandMessage = branding?.checkout_message ?? details.checkout_message;
+    if (brandMessageEl && brandMessage) {
+      brandMessageEl.textContent = brandMessage;
+      brandMessageEl.hidden = false;
+    }
+    const brandColor = branding?.brand_color ?? details.brand_color;
+    if (brandColor && /^#[0-9a-fA-F]{6}$/.test(brandColor)) {
+      document.documentElement.style.setProperty('--brand', brandColor);
+      if (submitButton) submitButton.style.background = brandColor;
     }
 
     if (statusEl) {
@@ -508,6 +630,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         details.currency,
       );
     }
+    fxAmountMinor = typeof details.amount_minor === 'number' ? details.amount_minor : null;
+    fxCurrency = String(details.currency ?? 'BDT').toUpperCase();
+    void loadFxRates();
 
     currentGateway =
       (typeof details.gateway === 'string' && details.gateway) ||

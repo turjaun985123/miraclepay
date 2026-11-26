@@ -1,6 +1,14 @@
 # MiraclePay — Architecture
 
-**Version:** v0.0.1
+> Updated for v0.0.2 (Wave 139): the platform now persists to
+> Postgres at runtime (§6 describes the v0.0.1 starting point;
+> see `docs/operations/persistence.md` for the shipped design),
+> gateways make live sandbox calls (`docs/gateways-live.md`),
+> and a plugin system exists (`docs/plugins.md`). Sections that
+> say "in v0.0.1" are historical and remain accurate for that
+> release.
+
+**Version:** v0.0.2
 **Status:** Original, clean-room implementation. This document describes
 the code as it exists in this repository — the Rust workspace, the
 Postgres migrations, the Astro frontend, and the Android app — and

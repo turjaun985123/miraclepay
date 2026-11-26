@@ -1,0 +1,518 @@
+---
+// MiraclePay v0.0.1 — Admin: Plugins (Wave 121, clean-room, original).
+//
+// Manage the plugins scanned at startup:
+//
+//   * List — `GET /api/v1/admin/plugins` → `{ plugins: [...] }`, each
+//     `{ id, name, version, kind, provides, enabled, load_error,
+//     config_schema }`. A plugin that failed to load shows its
+//     `load_error` prominently and cannot be enabled.
+//   * Enable / disable — `POST /api/v1/admin/plugins/:id/enable` and
+//     `.../disable`.
+//   * Config editor — a form generated from the plugin's
+//     `config_schema` (a JSON Schema object): one labelled input per
+//     property, prefilled from `GET /api/v1/admin/plugins/:id/config`
+//     (whose body is `{ plugin_id, config }`), saved with
+//     `PUT /api/v1/admin/plugins/:id/config`.
+//   * Invoke — `POST /api/v1/admin/plugins/:id/invoke` with
+//     `{ operation, args }`; the JSON result (or the error) is shown.
+//   * Logs — `GET /api/v1/admin/plugins/:id/logs` → `{ logs: [...] }`.
+//
+// Like the admin panel, the page guards on a stored auth token and a
+// 403 from the API swaps in an "Admin access required" card.
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import DashboardNav from '../../components/DashboardNav.astro';
+---
+
+<BaseLayout title="Admin — Plugins">
+  <DashboardNav active="admin" />
+
+  <main id="main" class="container stack">
+    <header>
+      <h1>Plugins</h1>
+      <p class="muted">
+        Plugins scanned at startup — gateways, SMS parsers and other
+        extensions. Enable or disable them, edit their configuration,
+        invoke an operation, or read their recent log lines.
+        <a href="/admin">Back to admin panel</a>
+      </p>
+    </header>
+
+    <p id="plugins-loading" class="muted">Loading plugins…</p>
+
+    <section
+      id="plugins-forbidden"
+      class="card empty"
+      aria-labelledby="plugins-forbidden-heading"
+      hidden
+    >
+      <h2 id="plugins-forbidden-heading">Admin access required</h2>
+      <p>
+        Your account does not have administrator access to MiraclePay. If you
+        believe this is a mistake, contact a platform administrator.
+      </p>
+      <p><a class="btn btn-ghost" href="/dashboard">Back to dashboard</a></p>
+    </section>
+
+    <p id="plugins-error" class="alert alert-error" role="alert" hidden></p>
+    <p id="plugins-success" class="alert alert-success" role="status" hidden></p>
+
+    <p id="plugins-empty" class="card empty" hidden>
+      No plugins were found. Plugins live in the server&rsquo;s
+      <code>plugins/</code> directory and are scanned at startup.
+    </p>
+
+    <div id="plugins-list" class="stack" hidden></div>
+  </main>
+</BaseLayout>
+
+<style>
+  .plugin-card h2 {
+    margin-bottom: 0.25rem;
+  }
+
+  .plugin-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem 1rem;
+    margin: 0 0 0.75rem;
+  }
+
+  .plugin-output {
+    margin: 0.75rem 0 0;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm, 6px);
+    background: var(--bg);
+    font-size: 0.8125rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 20rem;
+    overflow-y: auto;
+  }
+</style>
+
+<script>
+  import { apiFetch, getToken } from '../../lib/api';
+
+  interface PluginConfigProperty {
+    type?: string;
+    title?: string;
+    description?: string;
+    [key: string]: unknown;
+  }
+
+  interface PluginConfigSchema {
+    type?: string;
+    properties?: Record<string, PluginConfigProperty>;
+    [key: string]: unknown;
+  }
+
+  interface PluginInfo {
+    id: string;
+    name?: string | null;
+    version?: string | null;
+    kind?: string | null;
+    provides?: string[];
+    enabled?: boolean;
+    load_error?: string | null;
+    config_schema?: PluginConfigSchema | null;
+    [key: string]: unknown;
+  }
+
+  const loadingEl = document.getElementById('plugins-loading');
+  const forbiddenEl = document.getElementById('plugins-forbidden');
+  const errorEl = document.getElementById('plugins-error');
+  const successEl = document.getElementById('plugins-success');
+  const emptyEl = document.getElementById('plugins-empty');
+  const listEl = document.getElementById('plugins-list');
+
+  if (!getToken()) {
+    window.location.href = '/login';
+  }
+
+  function errMessage(error: unknown, fallback: string): string {
+    return error instanceof Error && error.message ? error.message : fallback;
+  }
+
+  /** `apiFetch` surfaces the HTTP status inside its error message. */
+  function isForbidden(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    return /\b403\b/.test(message) || /forbidden|admin/i.test(message);
+  }
+
+  function showError(message: string): void {
+    if (!errorEl) return;
+    errorEl.textContent = message;
+    errorEl.hidden = false;
+  }
+
+  function showSuccess(message: string): void {
+    if (!successEl) return;
+    successEl.textContent = message;
+    successEl.hidden = false;
+  }
+
+  function clearNotices(): void {
+    if (errorEl) errorEl.hidden = true;
+    if (successEl) successEl.hidden = true;
+  }
+
+  function el<K extends keyof HTMLElementTagNameMap>(
+    tag: K,
+    className?: string,
+    text?: string,
+  ): HTMLElementTagNameMap[K] {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  // ── Enable / disable ───────────────────────────────────────────
+
+  async function setEnabled(
+    plugin: PluginInfo,
+    enabled: boolean,
+    button: HTMLButtonElement,
+    badge: HTMLElement,
+  ): Promise<void> {
+    clearNotices();
+    button.disabled = true;
+    try {
+      await apiFetch(
+        `/api/v1/admin/plugins/${encodeURIComponent(plugin.id)}/${enabled ? 'enable' : 'disable'}`,
+        { method: 'POST', body: JSON.stringify({}) },
+      );
+      plugin.enabled = enabled;
+      badge.className = enabled ? 'badge badge-success' : 'badge';
+      badge.textContent = enabled ? 'Enabled' : 'Disabled';
+      button.textContent = enabled ? 'Disable' : 'Enable';
+      showSuccess(`Plugin “${plugin.name ?? plugin.id}” ${enabled ? 'enabled' : 'disabled'}.`);
+    } catch (error) {
+      showError(errMessage(error, `Could not ${enabled ? 'enable' : 'disable'} the plugin.`));
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  // ── Config editor ──────────────────────────────────────────────
+  // One labelled input per `config_schema.properties` entry,
+  // prefilled from the saved config. Values are collected back into
+  // a plain object on save: numbers for integer/number properties,
+  // booleans for boolean properties, strings otherwise.
+
+  function buildConfigForm(
+    plugin: PluginInfo,
+    config: Record<string, unknown>,
+  ): HTMLFormElement {
+    const form = el('form');
+    form.noValidate = true;
+
+    const properties = plugin.config_schema?.properties ?? {};
+    const entries = Object.entries(properties);
+    const inputs = new Map<string, HTMLInputElement>();
+
+    if (!entries.length) {
+      form.append(el('p', 'muted small', 'This plugin declares no configuration options.'));
+    }
+
+    for (const [key, property] of entries) {
+      const field = el('div', 'field');
+      const label = el('label', 'label', property.title ?? key);
+      label.htmlFor = `cfg-${plugin.id}-${key}`;
+      field.append(label);
+
+      const input = el('input', 'input');
+      input.id = `cfg-${plugin.id}-${key}`;
+      input.name = key;
+      const saved = config[key];
+      if (property.type === 'boolean') {
+        input.type = 'checkbox';
+        input.checked = saved === true;
+      } else if (property.type === 'integer' || property.type === 'number') {
+        input.type = 'number';
+        input.step = property.type === 'integer' ? '1' : 'any';
+        if (saved !== undefined && saved !== null) input.value = String(saved);
+      } else {
+        input.type = 'text';
+        if (saved !== undefined && saved !== null) input.value = String(saved);
+      }
+      field.append(input);
+
+      if (property.description) {
+        field.append(el('p', 'field-hint', property.description));
+      }
+      inputs.set(key, input);
+      form.append(field);
+    }
+
+    const status = el('span', 'muted small');
+    status.setAttribute('role', 'status');
+    const saveBtn = el('button', 'btn', 'Save configuration');
+    saveBtn.type = 'submit';
+    const row = el('div', 'row');
+    row.append(saveBtn, status);
+    form.append(row);
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clearNotices();
+      const collected: Record<string, unknown> = {};
+      for (const [key, property] of entries) {
+        const input = inputs.get(key);
+        if (!input) continue;
+        if (property.type === 'boolean') {
+          collected[key] = input.checked;
+        } else if (property.type === 'integer' || property.type === 'number') {
+          const raw = input.value.trim();
+          if (raw) {
+            const n = Number(raw);
+            collected[key] = Number.isFinite(n) ? n : raw;
+          }
+        } else {
+          collected[key] = input.value;
+        }
+      }
+      saveBtn.disabled = true;
+      status.textContent = 'Saving…';
+      try {
+        await apiFetch(
+          `/api/v1/admin/plugins/${encodeURIComponent(plugin.id)}/config`,
+          { method: 'PUT', body: JSON.stringify(collected) },
+        );
+        status.textContent = 'Saved.';
+        showSuccess(`Configuration saved for “${plugin.name ?? plugin.id}”.`);
+      } catch (error) {
+        status.textContent = '';
+        showError(errMessage(error, 'Could not save the plugin configuration.'));
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+
+    return form;
+  }
+
+  async function loadConfigForm(
+    plugin: PluginInfo,
+    host: HTMLElement,
+  ): Promise<void> {
+    let config: Record<string, unknown> = {};
+    try {
+      const res = await apiFetch<{ config?: Record<string, unknown> }>(
+        `/api/v1/admin/plugins/${encodeURIComponent(plugin.id)}/config`,
+      );
+      if (res?.config && typeof res.config === 'object') config = res.config;
+    } catch (error) {
+      host.append(
+        el('p', 'alert alert-error', errMessage(error, 'Could not load the plugin configuration.')),
+      );
+      return;
+    }
+    host.append(buildConfigForm(plugin, config));
+  }
+
+  // ── Invoke ─────────────────────────────────────────────────────
+
+  function buildInvokeForm(plugin: PluginInfo): HTMLFormElement {
+    const form = el('form');
+    form.noValidate = true;
+
+    const opField = el('div', 'field');
+    const opLabel = el('label', 'label', 'Operation');
+    opLabel.htmlFor = `invoke-op-${plugin.id}`;
+    const opInput = el('input', 'input mono');
+    opInput.id = `invoke-op-${plugin.id}`;
+    opInput.type = 'text';
+    opInput.placeholder = 'e.g. create_payment';
+    opInput.autocomplete = 'off';
+    opField.append(opLabel, opInput);
+    form.append(opField);
+
+    const argsField = el('div', 'field');
+    const argsLabel = el('label', 'label', 'Arguments (JSON)');
+    argsLabel.htmlFor = `invoke-args-${plugin.id}`;
+    const argsInput = el('textarea', 'input mono');
+    argsInput.id = `invoke-args-${plugin.id}`;
+    argsInput.rows = 4;
+    argsInput.value = '{}';
+    argsField.append(argsLabel, argsInput);
+    form.append(argsField);
+
+    const runBtn = el('button', 'btn btn-ghost', 'Invoke');
+    runBtn.type = 'submit';
+    form.append(runBtn);
+
+    const output = el('pre', 'plugin-output');
+    output.hidden = true;
+    form.append(output);
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const operation = opInput.value.trim();
+      if (!operation) {
+        output.hidden = false;
+        output.textContent = 'Enter an operation name to invoke.';
+        return;
+      }
+      let args: unknown = {};
+      const rawArgs = argsInput.value.trim();
+      if (rawArgs) {
+        try {
+          args = JSON.parse(rawArgs);
+        } catch {
+          output.hidden = false;
+          output.textContent = 'Arguments are not valid JSON.';
+          return;
+        }
+      }
+      runBtn.disabled = true;
+      output.hidden = false;
+      output.textContent = 'Invoking…';
+      try {
+        const res = await apiFetch<{ result?: unknown }>(
+          `/api/v1/admin/plugins/${encodeURIComponent(plugin.id)}/invoke`,
+          { method: 'POST', body: JSON.stringify({ operation, args }) },
+        );
+        output.textContent = JSON.stringify(res?.result ?? res, null, 2);
+      } catch (error) {
+        output.textContent = `Error: ${errMessage(error, 'The invocation failed.')}`;
+      } finally {
+        runBtn.disabled = false;
+      }
+    });
+
+    return form;
+  }
+
+  // ── Logs ───────────────────────────────────────────────────────
+
+  function buildLogsBlock(plugin: PluginInfo): HTMLElement {
+    const wrap = el('div');
+    const btn = el('button', 'btn btn-ghost', 'View logs');
+    btn.type = 'button';
+    const output = el('pre', 'plugin-output');
+    output.hidden = true;
+    wrap.append(btn, output);
+
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      output.hidden = false;
+      output.textContent = 'Loading logs…';
+      try {
+        const res = await apiFetch<{ logs?: unknown[] }>(
+          `/api/v1/admin/plugins/${encodeURIComponent(plugin.id)}/logs`,
+        );
+        const lines = Array.isArray(res?.logs) ? res.logs : [];
+        output.textContent = lines.length
+          ? lines
+              .map((line) => (typeof line === 'string' ? line : JSON.stringify(line)))
+              .join('\n')
+          : 'No log lines.';
+      } catch (error) {
+        output.textContent = `Error: ${errMessage(error, 'Could not load logs.')}`;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    return wrap;
+  }
+
+  // ── Plugin cards ───────────────────────────────────────────────
+
+  function renderPlugin(plugin: PluginInfo): HTMLElement {
+    const card = el('section', 'card stack plugin-card');
+
+    const head = el('div', 'row');
+    head.style.justifyContent = 'space-between';
+    const title = el('h2', undefined, plugin.name ?? plugin.id);
+    const badge = el(
+      'span',
+      plugin.enabled ? 'badge badge-success' : 'badge',
+      plugin.enabled ? 'Enabled' : 'Disabled',
+    );
+    head.append(title, badge);
+    card.append(head);
+
+    const meta = el('p', 'plugin-meta muted small');
+    const bits: string[] = [
+      `ID: ${plugin.id}`,
+      ...(plugin.version ? [`Version: ${plugin.version}`] : []),
+      ...(plugin.kind ? [`Kind: ${plugin.kind}`] : []),
+      ...(plugin.provides?.length ? [`Provides: ${plugin.provides.join(', ')}`] : []),
+    ];
+    meta.textContent = bits.join(' · ');
+    card.append(meta);
+
+    if (plugin.load_error) {
+      const alert = el('p', 'alert alert-error');
+      alert.setAttribute('role', 'alert');
+      const strong = el('strong', undefined, 'Failed to load: ');
+      alert.append(strong, document.createTextNode(plugin.load_error));
+      card.append(alert);
+    }
+
+    const toggleBtn = el(
+      'button',
+      'btn',
+      plugin.enabled ? 'Disable' : 'Enable',
+    );
+    toggleBtn.type = 'button';
+    toggleBtn.addEventListener('click', () => {
+      void setEnabled(plugin, !plugin.enabled, toggleBtn, badge);
+    });
+    const actions = el('div', 'row');
+    actions.append(toggleBtn);
+    card.append(actions);
+
+    const configHeading = el('h3', undefined, 'Configuration');
+    card.append(configHeading);
+    const configHost = el('div');
+    card.append(configHost);
+    void loadConfigForm(plugin, configHost);
+
+    const invokeHeading = el('h3', undefined, 'Invoke operation');
+    card.append(invokeHeading);
+    card.append(buildInvokeForm(plugin));
+
+    const logsHeading = el('h3', undefined, 'Logs');
+    card.append(logsHeading);
+    card.append(buildLogsBlock(plugin));
+
+    return card;
+  }
+
+  // ── Page load ──────────────────────────────────────────────────
+
+  async function init(): Promise<void> {
+    if (!getToken()) return; // Already on the way to /login.
+    try {
+      const res = await apiFetch<{ plugins?: PluginInfo[] } | PluginInfo[]>(
+        '/api/v1/admin/plugins',
+      );
+      const plugins: PluginInfo[] = Array.isArray(res)
+        ? res
+        : (res?.plugins ?? []);
+      if (loadingEl) loadingEl.hidden = true;
+      if (!plugins.length) {
+        if (emptyEl) emptyEl.hidden = false;
+        return;
+      }
+      if (listEl) {
+        listEl.replaceChildren(...plugins.map(renderPlugin));
+        listEl.hidden = false;
+      }
+    } catch (error) {
+      if (loadingEl) loadingEl.hidden = true;
+      if (isForbidden(error)) {
+        if (forbiddenEl) forbiddenEl.hidden = false;
+      } else {
+        showError(errMessage(error, 'Could not load plugins. Please try again.'));
+      }
+    }
+  }
+
+  void init();
+</script>
