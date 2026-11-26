@@ -323,3 +323,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - New `domain::dispute`: record + reason/status enums + `validate_open` (completed tx only, amount > 0 and ≤ tx amount, currency must match; all errors collected). Money-honesty note in-module: a dispute record moves no money; clawback on a Lost decision runs through the settlement flow, this is the audit trail.
 - Endpoints: `POST/GET /disputes`, `GET /disputes/:id`, `POST /disputes/:id/evidence` (merchant evidence, Opened → UnderReview), `POST /admin/disputes/:id/decide` (won/lost). One open dispute per transaction (409), terminal disputes reject evidence/decisions (409), owner-scoped reads with admin override.
 - `dispute.opened` / `dispute.closed` join the canonical webhook catalogue (now 12 types) and docs/webhooks.md; audit entries on open/decide. OpenAPI now 85 operations. Workspace: 669 tests pass.
+
+### Wave 38 — CI verdict ✅
+- Commit `cb4b055`, CI run **45762111216**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 39 — Fraud signals: explainable risk scoring (this commit)
+- New `domain::fraud`: pure rule engine over precomputed aggregates — `high_value` (≥ ৳50,000, 20 pts), `velocity` (≥10 payments/merchant/10 min, 30), `sender_reuse` (sender completed at ≥3 other merchants in 24 h, 40), `amount_outlier` (>5× merchant median, needs ≥5 history, 25). Scores bucket low/medium/high; every signal carries a human-readable detail.
+- `AppState::assess_risk` computes the aggregates from the transaction store and runs on both creation paths (API payments + payment-link pays); assessments stored per transaction.
+- New admin endpoint `GET /api/v1/admin/fraud/flagged` (score ≥ 30, highest first, paginated). Deliberately advisory — signals never auto-block a payment in v0.0.1, so a false positive cannot strand a customer's money. OpenAPI now 86 operations. Workspace: 673 tests pass.

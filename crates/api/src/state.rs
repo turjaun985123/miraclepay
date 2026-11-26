@@ -97,6 +97,9 @@ pub struct AppState {
         Arc<RwLock<HashMap<String, miraclepay_domain::settings::MerchantSettings>>>,
     /// Disputes / chargebacks by id (Wave 38).
     pub disputes: Arc<RwLock<HashMap<String, miraclepay_domain::dispute::Dispute>>>,
+    /// Fraud risk assessments by transaction id (Wave 39).
+    pub risk_assessments:
+        Arc<RwLock<HashMap<String, miraclepay_domain::fraud::RiskAssessment>>>,
     /// Provider transaction references already consumed by the SMS
     /// verification flow.
     ///
@@ -144,6 +147,7 @@ impl AppState {
             kyc_profiles: Arc::new(RwLock::new(HashMap::new())),
             merchant_settings: Arc::new(RwLock::new(HashMap::new())),
             disputes: Arc::new(RwLock::new(HashMap::new())),
+            risk_assessments: Arc::new(RwLock::new(HashMap::new())),
             used_trx: Arc::new(RwLock::new(HashSet::new())),
             settings: Arc::new(RwLock::new(settings::PlatformSettings::default())),
             jwt_secret,
@@ -228,6 +232,62 @@ impl AppState {
     }
 
     /// Record a webhook event for later delivery (Wave 32 helper —
+    /// Assess a freshly created transaction's fraud risk
+    /// (Wave 39) and store the assessment for the admin flagged
+    /// list. Aggregates are computed from the current transaction
+    /// store; the pure rule engine lives in `domain::fraud`.
+    pub async fn assess_risk(&self, tx: &miraclepay_domain::transaction::Transaction) {
+        use miraclepay_domain::transaction::TxStatus;
+        let now = chrono::Utc::now();
+        let (velocity, cross_merchant, median) = {
+            let transactions = self.transactions.read().await;
+            let velocity = transactions
+                .values()
+                .filter(|other| {
+                    other.merchant_id == tx.merchant_id
+                        && other.id != tx.id
+                        && (now - other.created_at).num_minutes() < 10
+                })
+                .count() as u32;
+            let cross_merchant = match &tx.sender_number {
+                Some(sender) => transactions
+                    .values()
+                    .filter(|other| {
+                        other.merchant_id != tx.merchant_id
+                            && other.sender_number.as_deref() == Some(sender.as_str())
+                            && other.status == TxStatus::Completed
+                            && (now - other.created_at).num_hours() < 24
+                    })
+                    .count() as u32,
+                None => 0,
+            };
+            let mut amounts: Vec<i64> = transactions
+                .values()
+                .filter(|other| {
+                    other.merchant_id == tx.merchant_id && other.status == TxStatus::Completed
+                })
+                .map(|other| other.amount.amount_minor)
+                .collect();
+            amounts.sort_unstable();
+            let median = if amounts.len() >= 5 {
+                Some(amounts[amounts.len() / 2])
+            } else {
+                None
+            };
+            (velocity, cross_merchant, median)
+        };
+        let assessment = miraclepay_domain::fraud::assess(&miraclepay_domain::fraud::RiskInput {
+            amount_minor: tx.amount.amount_minor,
+            merchant_payments_last_10m: velocity,
+            sender_cross_merchant_24h: cross_merchant,
+            merchant_median_minor: median,
+        });
+        self.risk_assessments
+            .write()
+            .await
+            .insert(tx.id.clone(), assessment);
+    }
+
     /// one call per emission site, mirroring [`AppState::audit`]).
     /// Synchronous and non-blocking like `audit`: on a contended
     /// lock the event is skipped rather than stalling the action

@@ -499,8 +499,9 @@ pub async fn pay_link(
     {
         let mut transactions =
             state.transactions.write().await;
-        transactions.insert(id.clone(), transaction);
+        transactions.insert(id.clone(), transaction.clone());
     }
+    state.assess_risk(&transaction).await;
 
     Ok((
         StatusCode::CREATED,

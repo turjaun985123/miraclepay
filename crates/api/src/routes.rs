@@ -270,6 +270,7 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/admin/notifications/dispatch",
             post(admin::dispatch_notifications),
         )
+        .route("/api/v1/admin/fraud/flagged", get(admin::fraud_flagged))
         .route("/api/v1/admin/users", get(admin::list_users))
         .route("/api/v1/admin/merchants", get(admin::list_all_merchants))
         .route(

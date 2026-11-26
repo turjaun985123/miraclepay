@@ -130,6 +130,42 @@ pub async fn dispatch_notifications(
     })))
 }
 
+/// `GET /admin/fraud/flagged` (Wave 39) — transactions whose risk
+/// assessment is medium or high (score ≥ 30), highest first,
+/// paginated. Assessments are advisory: nothing is auto-blocked.
+pub async fn fraud_flagged(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Query(page): Query<crate::pagination::PageQuery>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_admin(&auth)?;
+    let assessments = state.risk_assessments.read().await;
+    let transactions = state.transactions.read().await;
+    let mut flagged: Vec<serde_json::Value> = assessments
+        .iter()
+        .filter(|(_, assessment)| assessment.score >= 30)
+        .map(|(tx_id, assessment)| {
+            let tx = transactions.get(tx_id);
+            serde_json::json!({
+                "transaction_id": tx_id,
+                "merchant_id": tx.map(|t| t.merchant_id.clone()),
+                "amount_minor": tx.map(|t| t.amount.amount_minor),
+                "currency": tx.map(|t| t.amount.currency.code()),
+                "status": tx.map(|t| format!("{:?}", t.status)),
+                "score": assessment.score,
+                "level": assessment.level,
+                "signals": assessment.signals,
+            })
+        })
+        .collect();
+    flagged.sort_by_key(|entry| {
+        std::cmp::Reverse(entry["score"].as_u64().unwrap_or(0))
+    });
+    let total = flagged.len();
+    let items = crate::pagination::apply_page(flagged, page.page, page.per_page);
+    Ok(Json(serde_json::json!({ "items": items, "total": total })))
+}
+
 /// Query for [`platform_analytics`].
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct AnalyticsQuery {

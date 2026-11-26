@@ -228,6 +228,7 @@ pub async fn create_payment(
         .write()
         .await
         .insert(transaction.id.clone(), transaction.clone());
+    state.assess_risk(&transaction).await;
 
     state.webhook_events.write().await.push(WebhookEvent {
         id: ids::webhook_event_id(),

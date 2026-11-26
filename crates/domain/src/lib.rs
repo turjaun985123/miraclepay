@@ -3,6 +3,7 @@ pub mod audit;
 pub mod dispute;
 pub mod errors;
 pub mod ids;
+pub mod fraud;
 pub mod fx;
 pub mod invoice;
 pub mod kyc;
