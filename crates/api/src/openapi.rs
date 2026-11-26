@@ -58,6 +58,10 @@ const ROUTES: &[(&str, &[&str], &str, &str, bool)] = &[
     ("/api/v1/webhooks/events/{id}/redeliver", &["post"], "Redeliver a webhook event", "Webhooks", true),
     ("/api/v1/webhooks/test-signature", &["post"], "Verify a webhook signature", "Webhooks", true),
     ("/api/v1/gateways", &["get"], "List supported gateways", "Gateways", false),
+    ("/api/v1/disputes", &["post", "get"], "Open or list disputes", "Disputes", true),
+    ("/api/v1/disputes/{id}", &["get"], "Get one dispute", "Disputes", true),
+    ("/api/v1/disputes/{id}/evidence", &["post"], "Add merchant evidence to a dispute", "Disputes", true),
+    ("/api/v1/admin/disputes/{id}/decide", &["post"], "Decide a dispute won/lost (admin)", "Admin", true),
     ("/api/v1/fx/rates", &["get"], "FX rate table (BDT-based, indicative)", "FX", true),
     ("/api/v1/fx/convert", &["get"], "Convert an amount between currencies", "FX", true),
     ("/api/v1/api-keys", &["post", "get"], "Create / list API keys", "API Keys", true),
@@ -190,11 +194,11 @@ mod tests {
 
     #[test]
     fn operation_count_matches_the_router_surface() {
-        // routes::build_router registers 81 method handlers as of
-        // Wave 37 — 80 in this table plus GET /openapi.json itself.
+        // routes::build_router registers 86 method handlers as of
+        // Wave 38 — 85 in this table plus GET /openapi.json itself.
         // If you add a route, add it to ROUTES above and update
         // this number.
-        assert_eq!(operation_count(), 80);
+        assert_eq!(operation_count(), 85);
     }
 
     #[test]

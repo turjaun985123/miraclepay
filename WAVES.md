@@ -315,3 +315,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - `MerchantSettings` existed in the domain with validation but was never wired into the API. Now: state storage, `GET/PUT /merchants/:id/settings` (owner write, owner/admin read, defaults when unsaved), audit entry on update. OpenAPI now 80 operations.
 - Branding fields: `brand_name` (≤60 chars), `brand_color` (`#rrggbb`, validated), `logo_url` (https only), `checkout_message` (≤200 chars) — all validated in the domain with every error collected.
 - The public pay-link payload gains a `branding` object; the pay page applies it (display name wins, logo, message via textContent only, brand colour on the pay button after a client-side hex re-check). Typed settings client added to the dashboard API library. Workspace: 666 tests pass, Astro build passes.
+
+### Wave 37 — CI verdict ✅
+- Commit `8b3fb19`, CI run **45761603905**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 38 — Disputes / chargebacks (this commit)
+- New `domain::dispute`: record + reason/status enums + `validate_open` (completed tx only, amount > 0 and ≤ tx amount, currency must match; all errors collected). Money-honesty note in-module: a dispute record moves no money; clawback on a Lost decision runs through the settlement flow, this is the audit trail.
+- Endpoints: `POST/GET /disputes`, `GET /disputes/:id`, `POST /disputes/:id/evidence` (merchant evidence, Opened → UnderReview), `POST /admin/disputes/:id/decide` (won/lost). One open dispute per transaction (409), terminal disputes reject evidence/decisions (409), owner-scoped reads with admin override.
+- `dispute.opened` / `dispute.closed` join the canonical webhook catalogue (now 12 types) and docs/webhooks.md; audit entries on open/decide. OpenAPI now 85 operations. Workspace: 669 tests pass.

@@ -153,6 +153,8 @@ pub fn verify_signature(secret: &str, payload: &[u8], signature_hex: &str) -> bo
 /// A test in this module pins the list so the docs and the code
 /// cannot silently drift apart from the emission sites' types.
 pub const EVENT_TYPES: &[&str] = &[
+    "dispute.closed",
+    "dispute.opened",
     "payment.completed",
     "payment.created",
     "payment.refunded",

@@ -1,5 +1,6 @@
 //! MiraclePay domain types — framework-free, reusable single-responsibility modules.
 pub mod audit;
+pub mod dispute;
 pub mod errors;
 pub mod ids;
 pub mod fx;

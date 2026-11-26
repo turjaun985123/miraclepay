@@ -26,8 +26,8 @@ use axum::{
 };
 
 use crate::handlers::{
-    admin, api_keys, auth, fx, gateways, invoices, kyc, merchants, payment_links, payments,
-    settlements, sms, subscriptions, transactions, webhooks,
+    admin, api_keys, auth, disputes, fx, gateways, invoices, kyc, merchants, payment_links,
+    payments, settlements, sms, subscriptions, transactions, webhooks,
 };
 use crate::state::AppState;
 
@@ -198,6 +198,11 @@ pub fn build_router(state: AppState) -> Router {
         // Gateways
         // ---------------------------------------------------------
         .route("/api/v1/gateways", get(gateways::list_gateways))
+        // Disputes / chargebacks (Wave 38)
+        .route("/api/v1/disputes", post(disputes::open_dispute).get(disputes::list_disputes))
+        .route("/api/v1/disputes/:id", get(disputes::get_dispute))
+        .route("/api/v1/disputes/:id/evidence", post(disputes::add_evidence))
+        .route("/api/v1/admin/disputes/:id/decide", post(disputes::decide_dispute))
         // FX conversion (Wave 34)
         .route("/api/v1/fx/rates", get(fx::list_rates))
         .route("/api/v1/fx/convert", get(fx::convert))

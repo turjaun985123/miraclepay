@@ -95,6 +95,8 @@ pub struct AppState {
     /// Per-merchant settings incl. checkout branding (Wave 37).
     pub merchant_settings:
         Arc<RwLock<HashMap<String, miraclepay_domain::settings::MerchantSettings>>>,
+    /// Disputes / chargebacks by id (Wave 38).
+    pub disputes: Arc<RwLock<HashMap<String, miraclepay_domain::dispute::Dispute>>>,
     /// Provider transaction references already consumed by the SMS
     /// verification flow.
     ///
@@ -141,6 +143,7 @@ impl AppState {
             refresh_tokens: Arc::new(RwLock::new(HashMap::new())),
             kyc_profiles: Arc::new(RwLock::new(HashMap::new())),
             merchant_settings: Arc::new(RwLock::new(HashMap::new())),
+            disputes: Arc::new(RwLock::new(HashMap::new())),
             used_trx: Arc::new(RwLock::new(HashSet::new())),
             settings: Arc::new(RwLock::new(settings::PlatformSettings::default())),
             jwt_secret,
