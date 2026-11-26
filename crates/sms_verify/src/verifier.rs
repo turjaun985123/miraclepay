@@ -28,7 +28,7 @@ use miraclepay_gateways::types::GatewayId;
 
 use crate::matcher::{match_transaction, MatchOutcome};
 use crate::parser::{
-    extract_amount_minor, extract_balance_minor, extract_phone, extract_trx_id,
+    extract_amount_minor, extract_balance_minor, extract_phone, extract_trx_id, is_failure_notice,
 };
 use crate::patterns_bd::detect_bd_gateway;
 use crate::patterns_in_pk::detect_in_pk_gateway;
@@ -69,6 +69,14 @@ use crate::types::{IncomingSms, ParsedSms, SmsParseError};
 pub fn parse_incoming(sms: &IncomingSms) -> Result<ParsedSms, SmsParseError> {
     if sms.body.trim().is_empty() {
         return Err(SmsParseError::EmptyBody);
+    }
+
+    // Wave 31: a failed-payment notice is not a payment, even when
+    // it carries an amount and a transaction id (see
+    // `parser::is_failure_notice`). Reject before extraction so it
+    // can never settle a transaction.
+    if is_failure_notice(&sms.body) {
+        return Err(SmsParseError::NotAPaymentSms);
     }
 
     let gateway = detect_bd_gateway(&sms.sender, &sms.body)

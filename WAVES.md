@@ -258,3 +258,12 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - New shared `gateways::in_manual` (mirrors Wave 29's `pk_manual`): strict Indian mobile (6–9 start, optional +91) and **strict VPA** validation (UPI previously accepted anything containing '@'), INR-only initiate for UPI/Paytm/PhonePe; fixtures corrected from BD/BDT to IN/INR with negative tests.
 - **Honesty fix:** Razorpay and Stripe adapters returned fabricated checkout URLs (`checkout.js?order_ref=…`, `checkout.stripe.com/c/pay/<ref>`) that could never take a payment. Both now fail with a `Provider` error pointing at the real request-spec modules; new `gateways::razorpay_orders` adds the Razorpay Orders API spec (Basic auth, paise, receipt = reference, `rzp_test_/rzp_live_` key validation, response parser) in the Wave 7/9/10 style.
 - Workspace: 645 tests pass; gateways crate 142.
+
+### Wave 30 — CI verdict ✅
+- Commit `d7f1093`, CI run **45759130499**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 31 — SMS corpus + failed-payment guard (this commit)
+- New corpus regression suite (`sms_verify/tests/corpus.rs`): 13 realistic messages across BD/IN/PK + negatives, expectations = each message's plain meaning.
+- **Critical find:** a *failed-payment notice* ("payment of Tk 1,250.00 … has FAILED. TrxID: …") parsed as a payment and would have **settled a pending transaction for money that never arrived**. New `parser::is_failure_notice` guard (failed/unsuccessful/insufficient/declined/reversed/…) rejects such messages in `parse_incoming` before extraction; regression tests prove they now verify as `NotPayment`.
+- Corpus also caught: generic UPI bank alerts weren't detected (sender not in the known-bank list) and `UPI Ref`/`TID` labels weren't extracted as TrxIDs. Both fixed; one over-conservative unit test updated to the new documented contract (a UPI-Ref label is self-identifying; attribution alone settles nothing — the matcher still requires full matches from a registered device).
+- Workspace: 648 tests pass.

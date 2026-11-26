@@ -233,6 +233,16 @@ pub fn detect_in_pk_gateway(sender_id: &str, body: &str) -> Option<GatewayId> {
         return Some(GatewayId::Upi);
     }
 
+    // Wave 31 (corpus find): bank alerts whose sender id is not in
+    // the known-bank list still self-identify with a UPI reference
+    // label ("UPI Ref 123456789012") — that label is UPI-specific,
+    // so it identifies the gateway without the sender list.
+    if (contains(&text, "upi ref") || contains(&text, "upi reference"))
+        && mentions_payment(&text)
+    {
+        return Some(GatewayId::Upi);
+    }
+
     None
 }
 
@@ -355,13 +365,24 @@ mod tests {
     }
 
     #[test]
-    fn upi_requires_an_indian_bank_sender() {
-        // Same payment body, unknown sender: not enough for UPI.
+    fn upi_via_upi_ref_label_without_known_bank_sender() {
+        // Wave 31 contract change: a "UPI Ref" label is
+        // UPI-specific and self-identifying — the known-bank sender
+        // list can never cover every Indian bank, and gateway
+        // attribution alone settles nothing (the matcher still
+        // requires amount + trx + sender to match a pending
+        // transaction from a registered device).
         assert_eq!(
             detect_in_pk_gateway(
                 "UNKNOWN",
                 "Rs.1,000 credited via UPI. UPI Ref 123456789012."
             ),
+            Some(GatewayId::Upi)
+        );
+        // But "via UPI" alone, unknown sender, no ref label: still
+        // not enough.
+        assert_eq!(
+            detect_in_pk_gateway("UNKNOWN", "Rs.1,000 credited via UPI."),
             None
         );
     }

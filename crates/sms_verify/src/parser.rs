@@ -78,7 +78,7 @@ fn trx_id_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(
-            r"(?i)(?:trx\s*id|transaction\s*id|trans\s*id|txn\s*id|ref(?:erence)?\s*id|utr)(?:\s*(?:no|number)\.?)?\s*[:#\-.]?\s*([A-Za-z0-9]{6,24})",
+            r"(?i)(?:trx\s*id|transaction\s*id|trans\s*id|txn\s*id|upi\s*ref(?:erence)?|tid|ref(?:erence)?\s*id|utr)(?:\s*(?:no|number)\.?)?\s*[:#\-.]?\s*([A-Za-z0-9]{6,24})",
         )
         .expect("trx id pattern is a valid regex")
     })
@@ -174,6 +174,29 @@ fn preceded_by_balance(body: &str, start: usize) -> bool {
 
 /// Extract the transacted amount, in minor units, from an SMS body.
 ///
+/// Failure language that marks a message as a *failed-payment
+/// notice* rather than a payment confirmation (Wave 31). Such
+/// messages often carry both an amount and a transaction id, so
+/// without this check they would parse as payments and could
+/// settle a pending transaction for money that never arrived.
+const FAILURE_PHRASES: &[&str] = &[
+    "failed",
+    "unsuccessful",
+    "could not be processed",
+    "insufficient balance",
+    "insufficient funds",
+    "declined",
+    "reversed",
+    "transaction cancelled",
+    "transaction canceled",
+];
+
+/// Whether the body reads as a failed-payment notice.
+pub fn is_failure_notice(body: &str) -> bool {
+    let lower = body.to_lowercase();
+    FAILURE_PHRASES.iter().any(|phrase| lower.contains(phrase))
+}
+
 /// Finds the first amount written next to a currency marker (`Tk`, `BDT`,
 /// `৳`, `Rs`, `INR`, `PKR`) or after an `Amount` label. Amounts that are
 /// clearly labelled as a *balance* are skipped, so in
