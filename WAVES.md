@@ -703,3 +703,20 @@ v0.0.2 + GitHub Release.
 - Wave 148 — Pre-release verification — full local pass:
   fmt, clippy `-D warnings`, workspace tests, PG tests, SDK
   tests, frontend build, E2E + load smokes.
+
+## Wave 149–150 — release (2026-11-26)
+
+- Wave 149 — Release candidate — commit `2a895a5`, CI run
+  45782252742: all six jobs success (Docker, Rust incl. PG
+  tests + restore drill + E2E/load smokes, Android, Frontend,
+  RustSec, Security audit), job/step level, verified twice.
+  The preceding docs/SDK commit `996eaa8` was likewise green
+  (run 45781960117, all jobs success).
+- Wave 150 — v0.0.2 RELEASED — tag `v0.0.2` at `2a895a5`;
+  GitHub Release https://github.com/turjaun985123/miraclepay/releases/tag/v0.0.2
+  with the CI-built APKs from run 45782252742 attached and
+  verified by read-back: `miraclepay-v0.0.2-debug.apk`
+  (6,109,979 B) and `miraclepay-v0.0.2-release-unsigned.apk`
+  (4,905,889 B; unsigned — no keystore secrets configured,
+  labelled as such). GitHub license API returns AGPL-3.0.
+  Waves 51–150 complete.
