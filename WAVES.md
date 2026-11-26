@@ -126,3 +126,12 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 
 ### Wave 12 — Rate limiting (this commit)
 - New `api::rate_limit`: fixed-window limiter (pure clock-injected core, 3 unit tests) + Axum middleware on the whole router. Budgets per client (first X-Forwarded-For hop) per minute: auth 10, SMS ingest 120, general API 600; non-API paths unlimited. Over-budget → 429 JSON `{error:"rate_limited", class}`. Local: api tests 80 pass, HTTP integration tests unaffected.
+
+### Wave 12 — CI verdict ✅
+- Commit `d85605c`, CI run **45754172001**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 13 — Audit-log UI, done properly (this commit)
+- Found while wiring: the admin page's audit table guessed field names (`actor`, `actor_id`, …) that the API never sends — the Actor column always rendered "—". The real field is `actor_user_id`.
+- Backend: `GET /admin/audit` gains `action` (prefix), `entity_type`, `actor_user_id` filters + Wave 11 paging (legacy `limit` behaviour preserved).
+- Frontend: typed `AuditEntry` + `listAudit()` in `api.ts` matching the domain shape; admin page uses it, renders `actor_user_id` (null → "system"), and gains action/entity filter controls.
+- Local: api tests pass; Astro build passes (13 pages).

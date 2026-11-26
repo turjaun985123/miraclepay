@@ -213,25 +213,64 @@ pub async fn set_merchant_status(
     Ok(Json(updated))
 }
 
+/// Query parameters for [`list_audit`] (Wave 13): the legacy
+/// `limit` cap plus exact-match filters and Wave 11 paging.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct AuditQuery {
+    /// Maximum number of records to return (legacy behaviour, used
+    /// when no paging parameters are supplied).
+    pub limit: Option<usize>,
+    /// Only entries whose action starts with this prefix
+    /// (e.g. `merchant.` matches `merchant.created`).
+    pub action: Option<String>,
+    /// Only entries for this entity type (e.g. `merchant`).
+    pub entity_type: Option<String>,
+    /// Only entries attributed to this actor (user id).
+    pub actor_user_id: Option<String>,
+    /// Wave 11 paging: 1-based page number.
+    pub page: Option<u32>,
+    /// Wave 11 paging: page size (clamped to 1..=100).
+    pub per_page: Option<u32>,
+}
+
 /// `GET /admin/audit` — read the platform audit log, newest first.
 ///
 /// Entries are stored oldest first, so this returns them in reverse
-/// (most recent action first), capped at `limit`.
+/// (most recent action first). Wave 13 adds `action` (prefix),
+/// `entity_type` and `actor_user_id` filters plus `page`/`per_page`
+/// paging; without paging parameters the result is capped at
+/// `limit` as before.
 pub async fn list_audit(
     State(state): State<AppState>,
     auth: AuthUser,
-    Query(query): Query<LimitQuery>,
+    Query(query): Query<AuditQuery>,
 ) -> Result<Json<Vec<AuditEntry>>, ApiError> {
     require_admin(&auth)?;
 
     let audit = state.audit_log.read().await;
-    let page: Vec<AuditEntry> = audit
+    let mut entries: Vec<AuditEntry> = audit
         .iter()
         .rev()
-        .take(query.effective_limit())
+        .filter(|e| match query.action.as_deref() {
+            Some(prefix) => e.action.starts_with(prefix),
+            None => true,
+        })
+        .filter(|e| match query.entity_type.as_deref() {
+            Some(t) => e.entity_type == t,
+            None => true,
+        })
+        .filter(|e| match query.actor_user_id.as_deref() {
+            Some(actor) => e.actor_user_id.as_deref() == Some(actor),
+            None => true,
+        })
         .cloned()
         .collect();
-    Ok(Json(page))
+    if query.page.is_some() || query.per_page.is_some() {
+        entries = crate::pagination::apply_page(entries, query.page, query.per_page);
+    } else {
+        entries.truncate(query.limit.unwrap_or(DEFAULT_LIMIT));
+    }
+    Ok(Json(entries))
 }
 
 /// `GET /admin/settings` — read the current platform settings.

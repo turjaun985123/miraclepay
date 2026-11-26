@@ -661,6 +661,35 @@ export function adminStats(): Promise<DashboardStats> {
   return apiFetch<DashboardStats>('/api/v1/admin/stats');
 }
 
+/** One audit-log entry, mirroring the domain `AuditEntry` shape. */
+export interface AuditEntry {
+  id: string;
+  actor_user_id: string | null;
+  merchant_id: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  details: unknown;
+  created_at: string;
+}
+
+export interface ListAuditParams {
+  limit?: number;
+  action?: string;
+  entity_type?: string;
+  actor_user_id?: string;
+  page?: number;
+  per_page?: number;
+}
+
+/** Admin audit log (Wave 13): newest first, filterable + pageable. */
+export function listAudit(params: ListAuditParams = {}): Promise<AuditEntry[]> {
+  const qs = queryString(params);
+  return apiFetch<AuditEntry[]>(`/api/v1/admin/audit${qs}`);
+}
+
 // ---------------------------------------------------------------------------
 // Formatting helpers
 // ---------------------------------------------------------------------------

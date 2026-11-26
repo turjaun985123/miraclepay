@@ -199,7 +199,15 @@ import DashboardNav from '../../components/DashboardNav.astro';
 
       <section class="card" aria-labelledby="admin-audit-heading">
         <h2 id="admin-audit-heading">Audit log</h2>
-        <p class="muted small">The 50 most recent recorded actions.</p>
+        <p class="muted small">
+          The 50 most recent recorded actions. Filter by action prefix
+          (e.g. <code>merchant.</code>) or entity type.
+        </p>
+        <form id="audit-filter-form" class="row" style="gap:0.5rem;flex-wrap:wrap;margin-bottom:0.75rem">
+          <input class="input" id="audit-filter-action" type="text" placeholder="Action prefix" aria-label="Filter by action prefix" autocomplete="off" />
+          <input class="input" id="audit-filter-entity" type="text" placeholder="Entity type" aria-label="Filter by entity type" autocomplete="off" />
+          <button class="btn btn-ghost" type="submit">Filter</button>
+        </form>
         <p id="audit-error" class="alert alert-error" role="alert" hidden></p>
         <div class="table-wrap">
           <table class="table">
@@ -238,28 +246,12 @@ import DashboardNav from '../../components/DashboardNav.astro';
     apiFetch,
     formatMoney,
     getToken,
+    listAudit,
+    type AuditEntry,
     type DashboardStats,
     type Merchant,
     type User,
   } from '../../lib/api';
-
-  interface AuditEntry {
-    id?: string;
-    actor?: string;
-    actor_id?: string;
-    actor_name?: string;
-    actor_email?: string;
-    user_id?: string;
-    user_email?: string;
-    action?: string;
-    entity?: string;
-    entity_type?: string;
-    entity_id?: string;
-    target?: string;
-    created_at?: string;
-    timestamp?: string;
-    [key: string]: unknown;
-  }
 
   interface AdminSettings {
     platform_name?: string;
@@ -485,18 +477,12 @@ import DashboardNav from '../../components/DashboardNav.astro';
     if (empty) empty.hidden = entries.length > 0;
     body.innerHTML = entries
       .map((entry) => {
-        const actor =
-          entry.actor_name ??
-          entry.actor_email ??
-          entry.actor ??
-          entry.user_email ??
-          entry.actor_id ??
-          entry.user_id ??
-          '—';
-        const entityParts = [entry.entity_type ?? entry.entity, entry.entity_id ?? entry.target]
+        // The API's field is `actor_user_id` (null = system action).
+        const actor = entry.actor_user_id ?? 'system';
+        const entityParts = [entry.entity_type, entry.entity_id]
           .filter((part) => typeof part === 'string' && part.length > 0);
         return `<tr>
-          <td>${esc(formatDate(entry.created_at ?? entry.timestamp))}</td>
+          <td>${esc(formatDate(entry.created_at))}</td>
           <td>${esc(actor)}</td>
           <td>${esc(entry.action ?? '—')}</td>
           <td>${esc(entityParts.length > 0 ? entityParts.join(' · ') : '—')}</td>
@@ -565,10 +551,14 @@ import DashboardNav from '../../components/DashboardNav.astro';
 
   async function loadAudit(): Promise<void> {
     try {
-      const payload = await apiFetch<unknown>('/api/v1/admin/audit?limit=50');
-      renderAudit(
-        unwrapList<AuditEntry>(payload, ['audit', 'entries', 'items', 'data', 'results']),
-      );
+      const action = (document.getElementById('audit-filter-action') as HTMLInputElement | null)?.value.trim();
+      const entity = (document.getElementById('audit-filter-entity') as HTMLInputElement | null)?.value.trim();
+      const entries = await listAudit({
+        limit: 50,
+        action: action || undefined,
+        entity_type: entity || undefined,
+      });
+      renderAudit(entries);
     } catch (error) {
       showError(
         document.getElementById('audit-error'),
@@ -576,6 +566,11 @@ import DashboardNav from '../../components/DashboardNav.astro';
       );
     }
   }
+
+  document.getElementById('audit-filter-form')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    void loadAudit();
+  });
 
   async function loadSettings(): Promise<void> {
     try {
