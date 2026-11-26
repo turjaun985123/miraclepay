@@ -5,10 +5,9 @@
 //! ever stored: the raw key is shown to the merchant exactly once, at
 //! creation time, and cannot be recovered afterwards.
 
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use chrono::{DateTime, Utc};
+use rand::rngs::OsRng;
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -125,19 +124,13 @@ pub fn prefix_of(raw: &str) -> String {
     raw.chars().take(DISPLAY_PREFIX_LEN).collect()
 }
 
-/// Monotonic per-process counter mixed into [`generate_key`] so two
-/// keys generated within the same clock tick still differ.
-static GENERATE_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-/// One step of the SplitMix64 mixing function: cheap, deterministic,
-/// and good enough to spread correlated seed inputs (timestamps,
-/// counters) across the full `u64` range.
-fn splitmix64(state: &mut u64) -> u64 {
-    *state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
-    let mut z = *state;
-    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    z ^ (z >> 31)
+/// Lowercase-hex encode raw bytes (two chars per byte).
+fn hex_encode(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push_str(&format!("{b:02x}"));
+    }
+    out
 }
 
 /// Generates a new raw API key.
@@ -150,35 +143,16 @@ fn splitmix64(state: &mut u64) -> u64 {
 /// The raw key has the format `"mp_live_"` followed by 32 lowercase
 /// hex characters.
 ///
-/// # Entropy — not a CSPRNG
+/// # Entropy — CSPRNG (Wave 3)
 ///
-/// The hex material is derived using only the standard library, from
-/// the current [`SystemTime`] in nanoseconds, an atomic per-process
-/// counter, and the process id, mixed with SplitMix64. That makes keys
-/// unpredictable to a casual observer and unique in practice, but it
-/// is **not** a cryptographically secure random source: the seed space
-/// is guessable by a determined attacker who knows roughly when a key
-/// was created. Production deployments should swap this entropy
-/// source for a real CSPRNG (e.g. the `rand` crate backed by the OS
-/// RNG) while keeping the key format unchanged.
+/// The 16 bytes of key material come from the operating system's
+/// CSPRNG via [`OsRng`] (getrandom), replacing the pre-Wave-3
+/// time/counter/PID SplitMix64 derivation whose seed space was
+/// guessable. The key format is unchanged.
 pub fn generate_key() -> (String, String, String) {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(0);
-    let counter = GENERATE_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let pid = u64::from(std::process::id());
-
-    // Seed the mixer from all three entropy inputs, decorrelated.
-    let mut state = nanos
-        ^ counter.wrapping_mul(0xD6E8_FEB8_6659_FD93)
-        ^ pid.wrapping_mul(0xA076_1D64_78BD_642F);
-
-    // 32 hex characters = 16 bytes = two u64 outputs.
-    let hi = splitmix64(&mut state);
-    let lo = splitmix64(&mut state);
-
-    let raw = format!("{KEY_PREFIX}{hi:016x}{lo:016x}");
+    let mut bytes = [0u8; 16];
+    OsRng.fill_bytes(&mut bytes);
+    let raw = format!("{KEY_PREFIX}{}", hex_encode(&bytes));
     debug_assert_eq!(raw.len(), KEY_PREFIX.len() + KEY_HEX_LEN);
 
     let prefix = prefix_of(&raw);

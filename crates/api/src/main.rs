@@ -11,7 +11,7 @@ async fn main() {
         std::env::var("ADMIN_EMAIL"),
         std::env::var("ADMIN_PASSWORD"),
     ) {
-        let hash = miraclepay_domain::api_key::hash_key(&format!("{}::{}", email.to_lowercase(), password));
+        let hash = miraclepay_domain::password::hash_password(&password);
         state.seed_admin(&email.to_lowercase(), hash).await;
     }
     let port: u16 = std::env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8080);

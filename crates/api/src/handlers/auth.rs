@@ -85,9 +85,8 @@ pub async fn register(
         return Err(ApiError::BadRequest(errors.join("; ")));
     }
 
-    // placeholder — production must use argon2/bcrypt
-    let password_hash =
-        miraclepay_domain::api_key::hash_key(&format!("{}::{}", email, req.password));
+    // Wave 3: Argon2id with a per-password CSPRNG salt.
+    let password_hash = miraclepay_domain::password::hash_password(&req.password);
 
     let user = User {
         id: ids::user_id(),
@@ -159,12 +158,11 @@ pub async fn login(
         None => return Err(ApiError::Unauthorized),
     };
 
-    // placeholder — production must use argon2/bcrypt
-    // Hash with the stored (normalised) email so the comparison
-    // matches the hash computed at registration time.
-    let candidate_hash =
-        miraclepay_domain::api_key::hash_key(&format!("{}::{}", user.email, req.password));
-    if candidate_hash != user.password_hash {
+    // Wave 3: verify against the stored Argon2id PHC hash (the
+    // candidate computation above); no email is mixed into the hash.
+    let candidate_ok =
+        miraclepay_domain::password::verify_password(&req.password, &user.password_hash);
+    if !candidate_ok {
         return Err(ApiError::Unauthorized);
     }
 
@@ -224,24 +222,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn different_passwords_produce_different_hashes() {
-        let email = "merchant@example.com";
-        // Same placeholder helper expression used by the handlers.
-        let first =
-            miraclepay_domain::api_key::hash_key(&format!("{}::{}", email, "password1"));
-        let second =
-            miraclepay_domain::api_key::hash_key(&format!("{}::{}", email, "password2"));
-        assert_ne!(first, second);
+    fn different_passwords_do_not_cross_verify() {
+        // Wave 3 semantics: Argon2id verification, not hash equality.
+        let hash = miraclepay_domain::password::hash_password("password1");
+        assert!(miraclepay_domain::password::verify_password("password1", &hash));
+        assert!(!miraclepay_domain::password::verify_password("password2", &hash));
     }
 
     #[test]
-    fn same_email_and_password_produce_same_hash() {
-        let email = "merchant@example.com";
-        let first =
-            miraclepay_domain::api_key::hash_key(&format!("{}::{}", email, "password1"));
-        let second =
-            miraclepay_domain::api_key::hash_key(&format!("{}::{}", email, "password1"));
-        assert_eq!(first, second);
+    fn same_password_verifies_across_distinct_salted_hashes() {
+        let first = miraclepay_domain::password::hash_password("password1");
+        let second = miraclepay_domain::password::hash_password("password1");
+        assert_ne!(first, second); // random salt per hash
+        assert!(miraclepay_domain::password::verify_password("password1", &first));
+        assert!(miraclepay_domain::password::verify_password("password1", &second));
     }
 
     #[test]
