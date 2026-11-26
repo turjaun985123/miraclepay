@@ -150,3 +150,9 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 ### Wave 15 — Payment-link expiry + one-time links (this commit)
 - Gap found: the domain and the pay flow already enforced `expires_at`/`max_uses`, but `create_link` hardcoded `expires_at: None` — merchants could never set an expiry.
 - `POST /payment-links` now accepts `expires_at` (future, RFC 3339) or `expires_in_hours` (> 0; explicit wins), validated by a tested `resolve_expiry` helper (4 tests); `max_uses: 0` is rejected and `max_uses: 1` gives a true one-time link. Frontend `CreateLinkData` typed for all three fields.
+
+### Wave 15 — CI verdict ✅
+- Commit `2219464`, CI run **45754954128**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 16 — Subscription billing cycles (this commit)
+- New `worker::subscription_job::run_billing_cycle`: walks due subscriptions once per cycle with an injected `Charger` — success renews (trial → active, period advances by plan interval), failure marks PastDue, PastDue still failing after the 7-day grace expires the subscription, scheduled cancellations expire uncharged at period end. 6 policy tests.

@@ -3,4 +3,5 @@
 pub mod delivery_store;
 pub mod notification_job;
 pub mod settlement_job;
+pub mod subscription_job;
 pub mod webhook_delivery;
