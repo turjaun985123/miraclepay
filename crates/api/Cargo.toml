@@ -8,6 +8,7 @@ license = "AGPL-3.0"
 miraclepay-domain = { path = "../domain" }
 miraclepay-gateways = { path = "../gateways" }
 miraclepay-sms-verify = { path = "../sms_verify" }
+miraclepay-worker = { path = "../worker" }
 axum = "0.7"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }

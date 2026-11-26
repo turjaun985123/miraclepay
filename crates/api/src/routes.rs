@@ -26,8 +26,8 @@ use axum::{
 };
 
 use crate::handlers::{
-    admin, api_keys, auth, gateways, invoices, merchants, payment_links, payments, sms, subscriptions,
-    transactions, webhooks,
+    admin, api_keys, auth, gateways, invoices, merchants, payment_links, payments, settlements, sms,
+    subscriptions, transactions, webhooks,
 };
 use crate::state::AppState;
 
@@ -136,6 +136,22 @@ pub fn build_router(state: AppState) -> Router {
             post(transactions::create_refund),
         )
         .route("/api/v1/refunds", get(transactions::list_refunds))
+        .route(
+            "/api/v1/refunds/:id/settle",
+            post(transactions::settle_refund),
+        )
+        // ---------------------------------------------------------
+        // Settlements (Wave 18)
+        // ---------------------------------------------------------
+        .route("/api/v1/settlements", get(settlements::list_settlements))
+        .route(
+            "/api/v1/settlements/run",
+            post(settlements::run_settlements),
+        )
+        .route(
+            "/api/v1/settlements/:id/pay",
+            post(settlements::pay_settlement),
+        )
         // ---------------------------------------------------------
         // Webhooks
         // ---------------------------------------------------------

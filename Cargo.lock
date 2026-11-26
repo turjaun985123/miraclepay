@@ -895,6 +895,7 @@ dependencies = [
  "miraclepay-domain",
  "miraclepay-gateways",
  "miraclepay-sms-verify",
+ "miraclepay-worker",
  "serde",
  "serde_json",
  "sha2",

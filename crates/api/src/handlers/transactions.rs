@@ -337,21 +337,12 @@ pub async fn create_refund(
         }
     }
 
-    // Advance the transaction's status according to how much of it
-    // is now refunded (counting this refund).
-    let refunded_after = already_refunded + amount_minor;
-    let fully_refunded = refunded_after >= total_minor;
-    {
-        let mut transactions = state.transactions.write().await;
-        if let Some(stored) = transactions.get_mut(&tx_id) {
-            stored.status = if fully_refunded {
-                TxStatus::Refunded
-            } else {
-                TxStatus::PartiallyRefunded
-            };
-            stored.updated_at = Utc::now();
-        }
-    }
+    // Wave 17: the transaction's status reflects *settled* refunds
+    // only. This new refund is Pending/Processing, so recomputing
+    // leaves the status unchanged until the refund actually settles
+    // (see `settle_refund`) — previously a merely-created refund
+    // flipped the transaction straight to Refunded.
+    recompute_tx_refund_status(&state, &tx_id).await;
 
     // Persist the refund itself.
     {
@@ -373,7 +364,9 @@ pub async fn create_refund(
                 "amount_minor": refund.amount.amount_minor,
                 "currency": refund.amount.currency.code(),
                 "status": refund.status,
-                "fully_refunded": fully_refunded,
+                // Whether issued refunds (incl. this one) cover the
+                // full amount; settlement state is separate (Wave 17).
+                "refunds_cover_full_amount": already_refunded + amount_minor >= total_minor,
             }),
             created_at: Utc::now(),
         };
@@ -398,6 +391,129 @@ pub async fn create_refund(
 /// (and so this module needs no logging dependency of its own).
 fn tracing_note(error: &GatewayError) {
     eprintln!("miraclepay: gateway refund failed, falling back to manual processing: {error}");
+}
+
+/// Recompute a transaction's refund status from its *settled*
+/// (Succeeded) refunds (Wave 17): none settled → `Completed`, some
+/// but not all → `PartiallyRefunded`, fully covered → `Refunded`.
+/// Transactions outside the refundable family are left untouched.
+pub async fn recompute_tx_refund_status(state: &AppState, tx_id: &str) {
+    let settled: i64 = {
+        let refunds = state.refunds.read().await;
+        refunds
+            .values()
+            .filter(|r| r.transaction_id == tx_id && r.status == RefundStatus::Succeeded)
+            .map(|r| r.amount.amount_minor)
+            .sum()
+    };
+    let mut transactions = state.transactions.write().await;
+    if let Some(stored) = transactions.get_mut(tx_id) {
+        if matches!(
+            stored.status,
+            TxStatus::Completed | TxStatus::PartiallyRefunded | TxStatus::Refunded
+        ) {
+            stored.status = if settled <= 0 {
+                TxStatus::Completed
+            } else if settled >= stored.amount.amount_minor {
+                TxStatus::Refunded
+            } else {
+                TxStatus::PartiallyRefunded
+            };
+            stored.updated_at = Utc::now();
+        }
+    }
+}
+
+/// Body of `POST /refunds/{id}/settle`.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct SettleRefundReq {
+    /// `"succeeded"` or `"failed"`.
+    pub outcome: String,
+}
+
+/// `POST /refunds/{id}/settle` — settle an in-flight refund
+/// (Wave 17): the step that makes the refund flow end-to-end.
+///
+/// Manual gateways leave refunds Pending; gateway refunds sit in
+/// Processing until the provider's final verdict is known. This
+/// endpoint records that verdict (merchant-owner or admin only),
+/// moves the refund to its terminal state, recomputes the parent
+/// transaction's status from settled refunds, audits the action,
+/// and emits a `refund.succeeded` / `refund.failed` webhook event.
+pub async fn settle_refund(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<SettleRefundReq>,
+) -> Result<Json<Value>, ApiError> {
+    let outcome = match body.outcome.trim().to_ascii_lowercase().as_str() {
+        "succeeded" => RefundStatus::Succeeded,
+        "failed" => RefundStatus::Failed,
+        other => {
+            return Err(ApiError::BadRequest(format!(
+                "outcome must be \"succeeded\" or \"failed\", got \"{other}\""
+            )))
+        }
+    };
+
+    let refund = {
+        let mut refunds = state.refunds.write().await;
+        let refund = refunds
+            .get_mut(&id)
+            .ok_or_else(|| ApiError::NotFound(format!("refund {id} not found")))?;
+        if !may_access(&auth, &refund.merchant_id) {
+            return Err(ApiError::Forbidden("forbidden".to_string()));
+        }
+        if !refund.status.is_in_flight() {
+            return Err(ApiError::Conflict(format!(
+                "refund {id} is already {}",
+                refund.status
+            )));
+        }
+        refund.status = outcome;
+        refund.clone()
+    };
+
+    recompute_tx_refund_status(&state, &refund.transaction_id).await;
+
+    state.audit(
+        Some(auth.user_id.clone()),
+        Some(refund.merchant_id.clone()),
+        if outcome == RefundStatus::Succeeded {
+            "refund.succeeded"
+        } else {
+            "refund.failed"
+        },
+        "refund",
+        Some(refund.id.clone()),
+    );
+
+    {
+        let event = WebhookEvent {
+            id: webhook_event_id(),
+            merchant_id: refund.merchant_id.clone(),
+            event_type: if outcome == RefundStatus::Succeeded {
+                "refund.succeeded".to_string()
+            } else {
+                "refund.failed".to_string()
+            },
+            payload: json!({
+                "refund_id": refund.id,
+                "transaction_id": refund.transaction_id,
+                "merchant_id": refund.merchant_id,
+                "amount_minor": refund.amount.amount_minor,
+                "currency": refund.amount.currency.code(),
+            }),
+            created_at: Utc::now(),
+        };
+        state.webhook_events.write().await.push(event);
+    }
+
+    Ok(Json(json!({
+        "id": refund.id,
+        "status": refund.status,
+        "transaction_id": refund.transaction_id,
+    })))
 }
 
 /// List refunds, newest first.

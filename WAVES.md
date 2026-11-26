@@ -156,3 +156,10 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 
 ### Wave 16 — Subscription billing cycles (this commit)
 - New `worker::subscription_job::run_billing_cycle`: walks due subscriptions once per cycle with an injected `Charger` — success renews (trial → active, period advances by plan interval), failure marks PastDue, PastDue still failing after the 7-day grace expires the subscription, scheduled cancellations expire uncharged at period end. 6 policy tests.
+
+### Wave 16 — CI verdict ✅
+- Commit `43d0b3c`, CI run **45755270123**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Waves 17+18 — Refunds end-to-end + Settlements API (this commit, one CI run)
+- **W17 Refunds:** refunds could be created but never settled, and creation alone flipped the transaction to Refunded. Now: `POST /refunds/:id/settle {outcome}` records the terminal verdict, transaction status is recomputed from *settled* refunds only (`recompute_tx_refund_status`), creation no longer flips status, webhook `refund.succeeded`/`refund.failed` + audit emitted.
+- **W18 Settlements:** settlements existed only as a worker job. New API: `GET /settlements` (owner-scoped, paging), `POST /settlements/run` (worker `collect_candidates`+`build_settlements` over a period; earlier settlement periods excluded so a period never pays twice; fee defaults to platform setting), `POST /settlements/:id/pay` (worker `mark_paid` with payout reference). API crate now depends on the worker crate for the job engines.

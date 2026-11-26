@@ -6,6 +6,7 @@ pub mod invoices;
 pub mod merchants;
 pub mod payment_links;
 pub mod payments;
+pub mod settlements;
 pub mod sms;
 pub mod subscriptions;
 pub mod transactions;
