@@ -437,6 +437,19 @@ pub async fn create_subscription(
         Some(subscription.id.clone()),
     );
 
+    // Wave 32: webhook event alongside the audit entry.
+    state.emit_webhook(
+        &subscription.merchant_id,
+        "subscription.created",
+        serde_json::json!({
+            "subscription_id": subscription.id,
+            "merchant_id": subscription.merchant_id,
+            "plan_id": subscription.plan_id,
+            "status": subscription.status,
+            "customer_email": subscription.customer_email,
+        }),
+    );
+
     Ok((StatusCode::CREATED, Json(subscription)))
 }
 
@@ -472,6 +485,19 @@ pub async fn cancel_subscription(
         "subscription.cancelled",
         "subscription",
         Some(subscription.id.clone()),
+    );
+
+    // Wave 32: webhook event alongside the audit entry.
+    state.emit_webhook(
+        &subscription.merchant_id,
+        "subscription.cancelled",
+        serde_json::json!({
+            "subscription_id": subscription.id,
+            "merchant_id": subscription.merchant_id,
+            "plan_id": subscription.plan_id,
+            "status": subscription.status,
+            "customer_email": subscription.customer_email,
+        }),
     );
 
     Ok(Json(subscription))
@@ -513,6 +539,19 @@ pub async fn pause_subscription(
         Some(subscription.id.clone()),
     );
 
+    // Wave 32: webhook event alongside the audit entry.
+    state.emit_webhook(
+        &subscription.merchant_id,
+        "subscription.paused",
+        serde_json::json!({
+            "subscription_id": subscription.id,
+            "merchant_id": subscription.merchant_id,
+            "plan_id": subscription.plan_id,
+            "status": subscription.status,
+            "customer_email": subscription.customer_email,
+        }),
+    );
+
     Ok(Json(subscription))
 }
 
@@ -550,6 +589,19 @@ pub async fn resume_subscription(
         "subscription.resumed",
         "subscription",
         Some(subscription.id.clone()),
+    );
+
+    // Wave 32: webhook event alongside the audit entry.
+    state.emit_webhook(
+        &subscription.merchant_id,
+        "subscription.resumed",
+        serde_json::json!({
+            "subscription_id": subscription.id,
+            "merchant_id": subscription.merchant_id,
+            "plan_id": subscription.plan_id,
+            "status": subscription.status,
+            "customer_email": subscription.customer_email,
+        }),
     );
 
     Ok(Json(subscription))

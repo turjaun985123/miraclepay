@@ -135,10 +135,15 @@ pub async fn attempt_delivery(
     // documents that invariant rather than handling a reachable error.
     let body = serde_json::to_string(&job.event).expect("WebhookEvent serialises to JSON");
     let signature = webhook::sign_payload(&job.secret, body.as_bytes());
+    // Wave 32: v2 timestamped signature alongside v1 during the
+    // transition (receivers verify whichever they support; v2 adds
+    // replay protection via the timestamp window).
+    let signature_v2 = webhook::sign_payload_v2(&job.secret, now.timestamp(), body.as_bytes());
 
     let headers: Vec<(String, String)> = vec![
         ("content-type".to_string(), "application/json".to_string()),
         ("x-miraclepay-signature".to_string(), signature),
+        ("x-miraclepay-signature-v2".to_string(), signature_v2),
         ("x-miraclepay-event".to_string(), job.event.event_type.clone()),
         ("x-miraclepay-delivery".to_string(), delivery.id.clone()),
     ];

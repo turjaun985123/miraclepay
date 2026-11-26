@@ -267,3 +267,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - **Critical find:** a *failed-payment notice* ("payment of Tk 1,250.00 … has FAILED. TrxID: …") parsed as a payment and would have **settled a pending transaction for money that never arrived**. New `parser::is_failure_notice` guard (failed/unsuccessful/insufficient/declined/reversed/…) rejects such messages in `parse_incoming` before extraction; regression tests prove they now verify as `NotPayment`.
 - Corpus also caught: generic UPI bank alerts weren't detected (sender not in the known-bank list) and `UPI Ref`/`TID` labels weren't extracted as TrxIDs. Both fixed; one over-conservative unit test updated to the new documented contract (a UPI-Ref label is self-identifying; attribution alone settles nothing — the matcher still requires full matches from a registered device).
 - Workspace: 648 tests pass.
+
+### Wave 31 — CI verdict ✅
+- Commit `bed0591`, CI run **45759517043**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 32 — Webhook signing v2 + full event catalogue (this commit)
+- **Signing v2** (domain `webhook`): timestamped signatures `t=<unix>,v2=<HMAC(secret, "{t}.{body}")>` with a 300 s verification window — v1 signed only the body, so a captured delivery could be replayed forever. Worker deliveries now send both `x-miraclepay-signature` (v1) and `x-miraclepay-signature-v2`; v2 verify is constant-time and panic-free on malformed headers (roundtrip + replay-window tests).
+- **Catalogue gap closed:** subscription and settlement actions were audit-logged but never emitted webhooks. New `AppState::emit_webhook` helper; subscription created/cancelled/paused/resumed and settlement.paid now emit. Canonical list pinned in `webhook::EVENT_TYPES` (sorted/unique test).
+- `docs/webhooks.md`: delivery/retry behaviour, both verification schemes with steps, and the full 10-event catalogue with payload highlights. Workspace: 650 tests pass.

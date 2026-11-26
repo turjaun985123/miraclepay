@@ -217,6 +217,29 @@ impl AppState {
         // audit write must never fail or stall the audited action.
     }
 
+    /// Record a webhook event for later delivery (Wave 32 helper —
+    /// one call per emission site, mirroring [`AppState::audit`]).
+    /// Synchronous and non-blocking like `audit`: on a contended
+    /// lock the event is skipped rather than stalling the action
+    /// that produced it.
+    pub fn emit_webhook(
+        &self,
+        merchant_id: &str,
+        event_type: &str,
+        payload: serde_json::Value,
+    ) {
+        let event = miraclepay_domain::webhook::WebhookEvent {
+            id: miraclepay_domain::ids::webhook_event_id(),
+            merchant_id: merchant_id.to_string(),
+            event_type: event_type.to_string(),
+            payload,
+            created_at: Utc::now(),
+        };
+        if let Ok(mut events) = self.webhook_events.try_write() {
+            events.push(event);
+        }
+    }
+
     /// Build the gateway registry for one merchant.
     ///
     /// When the merchant has stored gateway configurations, the

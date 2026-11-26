@@ -221,5 +221,19 @@ pub async fn pay_settlement(
         "settlement",
         Some(saved.id.clone()),
     );
+    // Wave 32: webhook event alongside the audit entry.
+    state.emit_webhook(
+        &saved.merchant_id,
+        "settlement.paid",
+        json!({
+            "settlement_id": saved.id,
+            "merchant_id": saved.merchant_id,
+            "gross_minor": saved.gross.amount_minor,
+            "fee_minor": saved.fee.amount_minor,
+            "net_minor": saved.net().map(|net| net.amount_minor).unwrap_or(0),
+            "currency": saved.gross.currency.code(),
+            "payout_reference": saved.payout_reference,
+        }),
+    );
     Ok(Json(saved))
 }

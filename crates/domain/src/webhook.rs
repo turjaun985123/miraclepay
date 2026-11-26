@@ -148,6 +148,85 @@ pub fn verify_signature(secret: &str, payload: &[u8], signature_hex: &str) -> bo
     mac_for(secret, payload).verify_slice(&signature).is_ok()
 }
 
+/// The full webhook event catalogue (Wave 32). Every event type
+/// the API can emit; `docs/webhooks.md` documents each payload.
+/// A test in this module pins the list so the docs and the code
+/// cannot silently drift apart from the emission sites' types.
+pub const EVENT_TYPES: &[&str] = &[
+    "payment.completed",
+    "payment.created",
+    "payment.refunded",
+    "refund.failed",
+    "refund.succeeded",
+    "settlement.paid",
+    "subscription.cancelled",
+    "subscription.created",
+    "subscription.paused",
+    "subscription.resumed",
+];
+
+// ---------------------------------------------------------------------------
+// Signing v2 (Wave 32): timestamped, replay-resistant
+// ---------------------------------------------------------------------------
+//
+// v1 signs only the body, so a captured delivery can be replayed
+// forever. v2 signs `"{timestamp}.{body}"` and ships as a header
+// value of the form `t=<unix_seconds>,v2=<hex hmac-sha256>`;
+// verifiers reject timestamps outside a tolerance window
+// (default 300 s, the industry-standard five minutes). v1 remains
+// available for receivers that have not upgraded.
+
+/// Default v2 timestamp tolerance in seconds.
+pub const V2_TOLERANCE_SECS: i64 = 300;
+
+/// Build the v2 signature header value for `payload` at
+/// `timestamp` (Unix seconds).
+pub fn sign_payload_v2(secret: &str, timestamp: i64, payload: &[u8]) -> String {
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+        .expect("HMAC accepts keys of any length");
+    mac.update(timestamp.to_string().as_bytes());
+    mac.update(b".");
+    mac.update(payload);
+    format!("t={timestamp},v2={}", hex_encode(&mac.finalize().into_bytes()))
+}
+
+/// Verify a v2 signature header value against `payload`, rejecting
+/// timestamps more than `tolerance_secs` from `now` (either
+/// direction). Malformed headers verify as `false`, never panic.
+pub fn verify_signature_v2(
+    secret: &str,
+    header_value: &str,
+    payload: &[u8],
+    now: i64,
+    tolerance_secs: i64,
+) -> bool {
+    let mut timestamp: Option<i64> = None;
+    let mut signature_hex: Option<&str> = None;
+    for part in header_value.split(',') {
+        let part = part.trim();
+        if let Some(value) = part.strip_prefix("t=") {
+            timestamp = value.parse::<i64>().ok();
+        } else if let Some(value) = part.strip_prefix("v2=") {
+            signature_hex = Some(value);
+        }
+    }
+    let (Some(timestamp), Some(signature_hex)) = (timestamp, signature_hex) else {
+        return false;
+    };
+    if (now - timestamp).abs() > tolerance_secs {
+        return false;
+    }
+    let Some(signature) = hex_decode(signature_hex) else {
+        return false;
+    };
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+        .expect("HMAC accepts keys of any length");
+    mac.update(timestamp.to_string().as_bytes());
+    mac.update(b".");
+    mac.update(payload);
+    mac.verify_slice(&signature).is_ok()
+}
+
 /// Builds an HMAC-SHA256 instance keyed by `secret` and fed `payload`.
 ///
 /// HMAC accepts keys of any length, so constructing the MAC from a
@@ -252,6 +331,32 @@ mod tests {
     const PAYLOAD: &[u8] = br#"{"id":"evt_1","type":"payment.completed","amount":5000}"#;
 
     // -- Signing -----------------------------------------------------------
+
+    #[test]
+    fn v2_sign_verify_roundtrip_and_replay_window() {
+        let header = sign_payload_v2(SECRET, 1_700_000_000, PAYLOAD);
+        assert!(header.starts_with("t=1700000000,v2="));
+        // In-window: verifies.
+        assert!(verify_signature_v2(SECRET, &header, PAYLOAD, 1_700_000_000, V2_TOLERANCE_SECS));
+        assert!(verify_signature_v2(SECRET, &header, PAYLOAD, 1_700_000_299, V2_TOLERANCE_SECS));
+        // Replayed after the window: rejected.
+        assert!(!verify_signature_v2(SECRET, &header, PAYLOAD, 1_700_000_301, V2_TOLERANCE_SECS));
+        // Tampered body or wrong secret: rejected.
+        assert!(!verify_signature_v2(SECRET, &header, b"{}", 1_700_000_000, V2_TOLERANCE_SECS));
+        assert!(!verify_signature_v2("whsec_other", &header, PAYLOAD, 1_700_000_000, V2_TOLERANCE_SECS));
+        // Malformed headers: rejected, never panic.
+        assert!(!verify_signature_v2(SECRET, "garbage", PAYLOAD, 1_700_000_000, V2_TOLERANCE_SECS));
+        assert!(!verify_signature_v2(SECRET, "t=abc,v2=zz", PAYLOAD, 1_700_000_000, V2_TOLERANCE_SECS));
+    }
+
+    #[test]
+    fn event_catalogue_is_sorted_and_unique() {
+        let mut sorted = EVENT_TYPES.to_vec();
+        sorted.sort_unstable();
+        assert_eq!(sorted, EVENT_TYPES, "catalogue must stay sorted");
+        sorted.dedup();
+        assert_eq!(sorted.len(), EVENT_TYPES.len(), "catalogue must not repeat types");
+    }
 
     #[test]
     fn sign_verify_roundtrip() {
