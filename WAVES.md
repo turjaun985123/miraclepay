@@ -109,3 +109,7 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 
 ### Wave 8 — CI verdict ✅
 - Commit `e0876b0`, CI run **45753217844**: verified twice at job+step level — all 4 jobs success (0 failed steps). The matcher amount-contradiction fix is green in CI.
+
+### Wave 9 — Stripe Checkout Session shaping ✅
+- Commit `f64ee91`, CI run **45753443736**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+- `gateways::stripe_checkout`: create-session request spec (form-encoded, Bearer, metadata/client_reference_id = payment reference) + response parser; `STRIPE_SECRET_KEY` env-gated, non-`sk_` keys rejected as InvalidConfig, no fabricated checkout URLs. 5 new tests.

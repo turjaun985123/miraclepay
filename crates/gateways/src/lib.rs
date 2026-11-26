@@ -7,6 +7,7 @@ pub mod jazzcash;
 pub mod manual;
 pub mod nagad;
 pub mod paypal;
+pub mod paypal_checkout;
 pub mod paytm;
 pub mod phonepe;
 pub mod razorpay;
