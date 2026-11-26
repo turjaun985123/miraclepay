@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark M3 roles from the same green seed (Waves 189-194). -->
+<resources>
+    <color name="md_primary">#7ED7AE</color>
+    <color name="md_on_primary">#003824</color>
+    <color name="md_primary_container">#005236</color>
+    <color name="md_on_primary_container">#A6F2D0</color>
+    <color name="md_secondary">#B3CCBE</color>
+    <color name="md_on_secondary">#1E352A</color>
+    <color name="md_secondary_container">#334B3E</color>
+    <color name="md_on_secondary_container">#CFE9DA</color>
+    <color name="md_tertiary">#A5CBE2</color>
+    <color name="md_tertiary_container">#214B5E</color>
+    <color name="md_error">#FFB4AB</color>
+    <color name="md_on_error">#690005</color>
+    <color name="md_error_container">#93000A</color>
+    <color name="md_on_error_container">#FFDAD6</color>
+    <color name="md_surface">#101413</color>
+    <color name="md_on_surface">#E0E3E1</color>
+    <color name="md_surface_variant">#404943</color>
+    <color name="md_on_surface_variant">#C0C9C2</color>
+    <color name="md_surface_container_low">#1D211F</color>
+    <color name="md_surface_container">#232826</color>
+    <color name="md_surface_container_high">#282D2A</color>
+    <color name="md_outline">#8A938C</color>
+    <color name="md_outline_variant">#404943</color>
+    <color name="md_inverse_surface">#EFF1EF</color>
+    <color name="md_inverse_on_surface">#2D3130</color>
+</resources>

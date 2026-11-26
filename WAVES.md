@@ -871,3 +871,31 @@ accessibility final pass (WCAG 2.2 AA) · 199 consistency sweep
   field can only render when a future API change exposes it —
   flagged for a backend decision, out of design-program scope.
 - CI verdict logged below.
+
+### Waves 189–194 — Android Material 3 redesign
+- Theme: M2 → `Theme.Material3.DayNight.NoActionBar`; colour
+  roles in new colors.xml + values-night/colors.xml from the
+  brand seed — **primary #0E9F6E (3.39:1) → #0B7A55**; secondary
+  is no longer a copy of primary; surface-coloured status bar;
+  shape scale 8/12/16dp; dimens.xml spacing tokens (4dp grid).
+- Main: MaterialToolbar; status hero card (dot + one-line
+  headline from the state matrix: Needs setup / Blocked /
+  Forwarding on / Paused; config rows; 3 activity tiles replacing
+  the prose stats line; MaterialSwitch inside the card);
+  permission + battery **banners** explaining consequences
+  (buttons keep their IDs inside); queue = RecyclerView over the
+  existing OutboxStore.list() (new OutboxAdapter + item layout,
+  Waiting/Failed status, relative times) with empty state;
+  test connection gets a progress indicator + durable inline
+  result + Snackbar-with-Retry; Toasts retired for Snackbar;
+  plurals for retry counts; relative times via DateUtils.
+- Settings: MaterialToolbar with working Up (theme was
+  NoActionBar — Up silently never showed); fields become
+  outlined TextInputLayout (IDs preserved on inner edits),
+  device key gets a password toggle, URL validation is a
+  field error that clears on edit, Device ID gets a Copy
+  button, sticky bottom bar (Test outlined + Save filled) with
+  the "tests the last saved settings" note.
+- Strings: 7 → 52 entries; all layout literals extracted.
+- Verification: CI Android job (assembleDebug + release) — no
+  Android SDK on this VM; verdict logged below.

@@ -28,19 +28,28 @@ package com.miraclepay.app;
 //   Button    @id/saveButton         — validate + persist the fields
 //   Button    @id/testButton         — probe the saved server URL
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
-import android.widget.Toast;
+
+import com.google.android.material.snackbar.Snackbar;
+import com.google.android.material.textfield.TextInputLayout;
 
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
 
 public class SettingsActivity extends AppCompatActivity {
 
     private ConfigStore configStore;
 
+    private TextInputLayout serverUrlLayout;
     private EditText serverUrlEdit;
     private EditText deviceKeyEdit;
     private EditText merchantLabelEdit;
@@ -48,14 +57,18 @@ public class SettingsActivity extends AppCompatActivity {
     private TextView deviceIdText;
     private Button saveButton;
     private Button testButton;
+    private Button copyDeviceIdButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_settings);
 
-        // This screen is reached from MainActivity, so offer Up navigation
-        // back to it.
+        // MaterialToolbar (Waves 189-194) replaces the old reliance on
+        // the app theme's ActionBar (the theme is NoActionBar, so Up
+        // navigation silently never appeared before).
+        Toolbar toolbar = findViewById(R.id.settingsToolbar);
+        setSupportActionBar(toolbar);
         ActionBar actionBar = getSupportActionBar();
         if (actionBar != null) {
             actionBar.setDisplayHomeAsUpEnabled(true);
@@ -63,6 +76,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         configStore = new ConfigStore(this);
 
+        serverUrlLayout = findViewById(R.id.serverUrlLayout);
         serverUrlEdit = findViewById(R.id.serverUrlEdit);
         deviceKeyEdit = findViewById(R.id.deviceKeyEdit);
         merchantLabelEdit = findViewById(R.id.merchantLabelEdit);
@@ -70,6 +84,7 @@ public class SettingsActivity extends AppCompatActivity {
         deviceIdText = findViewById(R.id.deviceIdText);
         saveButton = findViewById(R.id.saveButton);
         testButton = findViewById(R.id.testButton);
+        copyDeviceIdButton = findViewById(R.id.copyDeviceIdButton);
 
         // Prefill every editable field from the stored configuration so the
         // user edits what is actually in effect, not a blank form.
@@ -93,6 +108,33 @@ public class SettingsActivity extends AppCompatActivity {
 
         saveButton.setOnClickListener(v -> saveSettings());
         testButton.setOnClickListener(v -> testConnection());
+
+        // Copy device ID (Waves 189-194): its whole purpose is
+        // registration in the dashboard, so make it one tap.
+        copyDeviceIdButton.setOnClickListener(v -> {
+            ClipboardManager clipboard =
+                    (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard != null) {
+                clipboard.setPrimaryClip(ClipData.newPlainText(
+                        getString(R.string.device_id_label), configStore.getDeviceId()));
+                showSnackbar(getString(R.string.copied));
+            }
+        });
+
+        // Clear the URL error as soon as the user edits the field.
+        serverUrlEdit.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence t, int a, int b, int c) { }
+            @Override public void onTextChanged(CharSequence t, int a, int b, int c) {
+                serverUrlLayout.setError(null);
+            }
+            @Override public void afterTextChanged(Editable e) { }
+        });
+    }
+
+    /** Transient feedback (Waves 189-194): Snackbar replaces Toast. */
+    private void showSnackbar(String message) {
+        Snackbar.make(findViewById(android.R.id.content), message,
+                Snackbar.LENGTH_LONG).show();
     }
 
     @Override
@@ -116,18 +158,19 @@ public class SettingsActivity extends AppCompatActivity {
         String merchantLabel = textOf(merchantLabelEdit);
 
         if (!serverUrl.startsWith("http://") && !serverUrl.startsWith("https://")) {
-            Toast.makeText(this,
-                    "Server URL must start with http:// or https://",
-                    Toast.LENGTH_LONG).show();
+            // Field-level error (Waves 189-194), not a toast: the
+            // problem is in this field, so the field says so.
+            serverUrlLayout.setError(getString(R.string.server_url_error));
             serverUrlEdit.requestFocus();
             return;
         }
+        serverUrlLayout.setError(null);
 
         configStore.save(serverUrl, deviceKey, merchantLabel);
         // Wave 109: the allowed-senders field is saved separately —
         // ConfigStore.save(...) does not cover it. Empty = allow all.
         configStore.setAllowedSenders(textOf(allowedSendersEdit));
-        Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show();
+        showSnackbar(getString(R.string.saved));
     }
 
     /**
@@ -141,27 +184,27 @@ public class SettingsActivity extends AppCompatActivity {
      */
     private void testConnection() {
         testButton.setEnabled(false);
-        Toast.makeText(this, "Testing connection…", Toast.LENGTH_SHORT).show();
+        showSnackbar(getString(R.string.testing));
 
         new Thread(() -> {
             // testConnection performs network I/O and never throws; its
             // Result is turned into a short, human-readable toast here.
             ApiClient.Result result = ApiClient.testConnection(configStore);
-            final String toastText;
+            final String resultText;
             if (result.isSuccess()) {
-                toastText = result.getStatusCode() > 0
-                        ? "Connection OK (HTTP " + result.getStatusCode() + ")."
-                        : "Connection OK.";
+                resultText = result.getStatusCode() > 0
+                        ? getString(R.string.connection_ok) + " (HTTP " + result.getStatusCode() + ")."
+                        : getString(R.string.connection_ok) + ".";
             } else if (!isEmpty(result.getErrorMessage())) {
-                toastText = "Connection failed: " + result.getErrorMessage();
+                resultText = getString(R.string.connection_failed) + ": " + result.getErrorMessage();
             } else if (result.getStatusCode() > 0) {
-                toastText = "Connection failed (HTTP " + result.getStatusCode() + ").";
+                resultText = getString(R.string.connection_failed) + " (HTTP " + result.getStatusCode() + ").";
             } else {
-                toastText = "Connection failed.";
+                resultText = getString(R.string.connection_failed) + ".";
             }
             runOnUiThread(() -> {
                 testButton.setEnabled(true);
-                Toast.makeText(this, toastText, Toast.LENGTH_LONG).show();
+                showSnackbar(resultText);
             });
         }, "miraclepay-test-connection").start();
     }

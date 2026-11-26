@@ -1,124 +1,182 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    MiraclePay v0.0.1
-    Settings screen layout (clean-room original).
+  MiraclePay — Settings screen (Waves 189-194 Material 3 redesign).
+  MaterialToolbar with Up, outlined TextInputLayout fields (view IDs
+  preserved on the inner edit texts), a copyable Device ID row, and a
+  sticky bottom action bar: Save (filled) + Test connection
+  (outlined), with a note that Test uses the last saved settings.
 -->
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
+    android:orientation="vertical"
     tools:context=".SettingsActivity">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/settingsToolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        app:title="@string/settings_title" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="@dimen/screen_margin">
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/serverUrlLayout"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/server_url_label"
+                app:helperText="@string/server_url_helper">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/serverUrlEdit"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:autofillHints="url"
+                    android:hint="https://pay.example.com"
+                    android:importantForAutofill="yes"
+                    android:inputType="textUri"
+                    android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/deviceKeyLayout"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_16"
+                android:hint="@string/device_key_label"
+                app:endIconMode="password_toggle">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/deviceKeyEdit"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:autofillHints="password"
+                    android:hint="mp_live_..."
+                    android:importantForAutofill="yes"
+                    android:inputType="textPassword"
+                    android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_16"
+                android:hint="@string/merchant_label_label">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/merchantLabelEdit"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="@string/merchant_label_hint"
+                    android:inputType="text"
+                    android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_16"
+                android:hint="@string/allowed_senders_label"
+                app:helperText="@string/allowed_senders_helper">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/allowedSendersEdit"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="top"
+                    android:hint="@string/allowed_senders_hint"
+                    android:inputType="textMultiLine"
+                    android:minLines="3" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/section_gap"
+                android:text="@string/device_id_label"
+                android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/deviceIdText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    android:textIsSelectable="true"
+                    tools:text="00000000-0000-0000-0000-000000000000" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/copyDeviceIdButton"
+                    style="@style/Widget.Material3.Button.IconButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/copy_device_id"
+                    app:icon="@drawable/ic_copy" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="?attr/colorOutlineVariant" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:padding="@dimen/screen_margin">
 
         <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:labelFor="@id/serverUrlEdit"
-            android:text="Server URL"
-            android:textAppearance="?attr/textAppearanceSubtitle2" />
-
-        <EditText
-            android:id="@+id/serverUrlEdit"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:layout_marginBottom="16dp"
-            android:autofillHints="url"
-            android:hint="https://pay.example.com"
-            android:importantForAutofill="yes"
-            android:inputType="textUri"
-            android:singleLine="true" />
+            android:layout_marginBottom="@dimen/space_8"
+            android:text="@string/test_uses_saved"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="?attr/colorOnSurfaceVariant" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:labelFor="@id/deviceKeyEdit"
-            android:text="Device key"
-            android:textAppearance="?attr/textAppearanceSubtitle2" />
-
-        <EditText
-            android:id="@+id/deviceKeyEdit"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:layout_marginBottom="16dp"
-            android:autofillHints="password"
-            android:hint="mp_live_..."
-            android:importantForAutofill="yes"
-            android:inputType="textPassword"
-            android:singleLine="true" />
+            android:orientation="horizontal">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:labelFor="@id/merchantLabelEdit"
-            android:text="Merchant label"
-            android:textAppearance="?attr/textAppearanceSubtitle2" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/testButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="@dimen/space_8"
+                android:layout_weight="1"
+                android:text="@string/test_connection" />
 
-        <EditText
-            android:id="@+id/merchantLabelEdit"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:layout_marginBottom="16dp"
-            android:hint="Main shop phone"
-            android:inputType="text"
-            android:singleLine="true" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:labelFor="@id/allowedSendersEdit"
-            android:text="Allowed senders (one per line, empty = all)"
-            android:textAppearance="?attr/textAppearanceSubtitle2" />
-
-        <EditText
-            android:id="@+id/allowedSendersEdit"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:layout_marginBottom="16dp"
-            android:gravity="top"
-            android:hint="bKash"
-            android:inputType="textMultiLine"
-            android:minLines="3" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Device ID"
-            android:textAppearance="?attr/textAppearanceSubtitle2" />
-
-        <TextView
-            android:id="@+id/deviceIdText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:layout_marginBottom="24dp"
-            android:textAppearance="?attr/textAppearanceBody1"
-            android:textIsSelectable="true"
-            tools:text="00000000-0000-0000-0000-000000000000" />
-
-        <Button
-            android:id="@+id/saveButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Save" />
-
-        <Button
-            android:id="@+id/testButton"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="Test connection" />
-
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/saveButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/save" />
+        </LinearLayout>
     </LinearLayout>
-
-</ScrollView>
+</LinearLayout>

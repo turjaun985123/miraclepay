@@ -8,4 +8,58 @@
     <string name="device_key_label">Device Key</string>
     <string name="save">Save</string>
     <string name="test_connection">Test Connection</string>
+
+    <!-- Main screen (Waves 189-194) -->
+    <string name="main_subtitle">SMS payment forwarder</string>
+    <string name="status_needs_setup">Needs setup</string>
+    <string name="status_blocked_permission">Blocked — permission needed</string>
+    <string name="status_forwarding_on">Forwarding on</string>
+    <string name="status_paused">Paused</string>
+    <string name="server_label">Server</string>
+    <string name="device_id_label">Device ID</string>
+    <string name="not_set">(not set)</string>
+    <string name="forward_switch_label">Forward payment SMS</string>
+    <string name="forward_switch_support">Payment SMS are forwarded to your server as they arrive.</string>
+    <string name="banner_permission_title">SMS permission needed</string>
+    <string name="banner_permission_body">MiraclePay can't see payment messages without it.</string>
+    <string name="banner_permission_denied">Denied — you can also enable it in Settings \u2192 Apps \u2192 MiraclePay \u2192 Permissions.</string>
+    <string name="grant_sms_permission">Grant SMS permission</string>
+    <string name="banner_battery_title">Background running restricted</string>
+    <string name="banner_battery_body">Android may delay forwards for hours on this phone.</string>
+    <string name="allow_background">Allow background running</string>
+    <string name="queue_heading">Queue</string>
+    <string name="queue_clear_title">Queue is clear</string>
+    <string name="queue_clear_body">Messages that can't be sent yet will appear here.</string>
+    <string name="retry_all">Retry all</string>
+    <string name="activity_heading">Activity</string>
+    <string name="stat_forwarded">Forwarded</string>
+    <string name="stat_failed">Failed</string>
+    <string name="stat_filtered">Filtered</string>
+    <string name="last_success">Last success</string>
+    <string name="last_failure">Last failure</string>
+    <string name="no_forwards_yet">No messages forwarded yet.</string>
+    <string name="settings">Settings</string>
+    <string name="status_waiting">Waiting</string>
+    <string name="status_failed">Failed</string>
+    <string name="copy_device_id">Copy device ID</string>
+    <string name="copied">Copied</string>
+    <string name="queue_empty_toast">Queue is empty.</string>
+    <plurals name="retrying_messages">
+        <item quantity="one">Retrying %d message\u2026</item>
+        <item quantity="other">Retrying %d messages\u2026</item>
+    </plurals>
+
+    <!-- Settings screen (Waves 189-194) -->
+    <string name="merchant_label_label">Merchant label (optional)</string>
+    <string name="merchant_label_hint">Main shop phone</string>
+    <string name="server_url_helper">Starts with https://</string>
+    <string name="server_url_error">Enter a URL starting with http:// or https://</string>
+    <string name="allowed_senders_label">Allowed senders</string>
+    <string name="allowed_senders_helper">One per line. Leave empty to forward from all senders.</string>
+    <string name="allowed_senders_hint">bKash</string>
+    <string name="saved">Saved</string>
+    <string name="test_uses_saved">Test connection uses the last saved settings.</string>
+    <string name="testing">Testing connection\u2026</string>
+    <string name="connection_ok">Connection OK</string>
+    <string name="connection_failed">Connection failed</string>
 </resources>

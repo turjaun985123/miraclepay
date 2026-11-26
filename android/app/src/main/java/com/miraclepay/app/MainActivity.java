@@ -22,19 +22,19 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.view.View;
+import android.text.format.DateUtils;
 import android.widget.Button;
 import android.widget.TextView;
-import android.widget.Toast;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
+import com.google.android.material.snackbar.Snackbar;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -49,8 +49,19 @@ public class MainActivity extends AppCompatActivity {
     private ConfigStore configStore;
 
     private TextView statusText;
+    private View statusDot;
     private TextView configSummaryText;
-    private TextView statsText;
+    private TextView statsForwardedText;
+    private TextView statsFailedText;
+    private TextView statsFilteredText;
+    private TextView statsLastText;
+    private View permissionBanner;
+    private View batteryBanner;
+    private TextView queueEmptyText;
+    private RecyclerView outboxList;
+    private OutboxAdapter outboxAdapter;
+    private View testProgress;
+    private TextView testResultText;
     private SwitchCompat enableSwitch;
     private Button settingsButton;
     private Button testButton;
@@ -66,8 +77,21 @@ public class MainActivity extends AppCompatActivity {
         configStore = new ConfigStore(this);
 
         statusText = findViewById(R.id.statusText);
+        statusDot = findViewById(R.id.statusDot);
         configSummaryText = findViewById(R.id.configSummaryText);
-        statsText = findViewById(R.id.statsText);
+        statsForwardedText = findViewById(R.id.statsForwardedText);
+        statsFailedText = findViewById(R.id.statsFailedText);
+        statsFilteredText = findViewById(R.id.statsFilteredText);
+        statsLastText = findViewById(R.id.statsLastText);
+        permissionBanner = findViewById(R.id.permissionBanner);
+        batteryBanner = findViewById(R.id.batteryBanner);
+        queueEmptyText = findViewById(R.id.queueEmptyText);
+        outboxList = findViewById(R.id.outboxList);
+        outboxAdapter = new OutboxAdapter();
+        outboxList.setLayoutManager(new LinearLayoutManager(this));
+        outboxList.setAdapter(outboxAdapter);
+        testProgress = findViewById(R.id.testProgress);
+        testResultText = findViewById(R.id.testResultText);
         enableSwitch = findViewById(R.id.enableSwitch);
         settingsButton = findViewById(R.id.settingsButton);
         testButton = findViewById(R.id.testButton);
@@ -124,14 +148,32 @@ public class MainActivity extends AppCompatActivity {
         String serverUrl = configStore.getServerUrl();
         String deviceId = configStore.getDeviceId();
 
-        statusText.setText(
-                "Forwarding: " + (enabled ? "On" : "Off") + "\n"
-                        + "SMS permission: " + (smsGranted ? "Granted" : "Not granted") + "\n"
-                        + "Status: " + (configured ? "Configured" : "Not configured"));
+        // Hero headline + status dot (design state matrix, Waves
+        // 189-194): the headline answers "is forwarding working?",
+        // the banners below answer "what must I do?".
+        int headline;
+        int dot;
+        if (!configured) {
+            headline = R.string.status_needs_setup;
+            dot = R.drawable.dot_grey;
+        } else if (!smsGranted) {
+            headline = R.string.status_blocked_permission;
+            dot = R.drawable.dot_red;
+        } else if (enabled) {
+            headline = R.string.status_forwarding_on;
+            dot = R.drawable.dot_green;
+        } else {
+            headline = R.string.status_paused;
+            dot = R.drawable.dot_grey;
+        }
+        statusText.setText(headline);
+        statusDot.setBackgroundResource(dot);
 
         configSummaryText.setText(
-                "Server: " + (isEmpty(serverUrl) ? "(not set)" : serverUrl) + "\n"
-                        + "Device ID: " + (isEmpty(deviceId) ? "(not set)" : deviceId));
+                getString(R.string.server_label) + ": "
+                        + (isEmpty(serverUrl) ? getString(R.string.not_set) : serverUrl) + "\n"
+                        + getString(R.string.device_id_label) + ": "
+                        + (isEmpty(deviceId) ? getString(R.string.not_set) : deviceId));
 
         if (enableSwitch.isChecked() != enabled) {
             // The listener re-saves the same value it was loaded from,
@@ -139,53 +181,69 @@ public class MainActivity extends AppCompatActivity {
             enableSwitch.setChecked(enabled);
         }
 
-        // Show the permission button prominently only while a permission
-        // is missing; once granted it has nothing left to do.
-        permissionButton.setVisibility(smsGranted ? View.GONE : View.VISIBLE);
-        if (!smsGranted) {
-            permissionButton.bringToFront();
-        }
+        // Banners explain the consequence, not just the action; the
+        // buttons inside them keep the original IDs and listeners.
+        permissionBanner.setVisibility(smsGranted ? View.GONE : View.VISIBLE);
 
         // Battery exemption (Wave 42): without it, aggressive OEM
-        // battery savers can defer forwards for hours. Show the
-        // button only while not exempt.
-        boolean batteryExempt = isBatteryExempt();
-        batteryButton.setVisibility(batteryExempt ? View.GONE : View.VISIBLE);
-        statusText.append("\nBattery: " + (batteryExempt ? "Unrestricted" : "Restricted"));
+        // battery savers can defer forwards for hours.
+        batteryBanner.setVisibility(isBatteryExempt() ? View.GONE : View.VISIBLE);
 
-        // Outbox (Wave 43): how many messages are waiting or
-        // failed, with a manual retry while any exist.
+        // Outbox (Wave 43 + 189-194): the queue is a list of real
+        // messages now, fed by the existing OutboxStore.list().
         OutboxStore outbox = new OutboxStore(this);
+        java.util.List<OutboxStore.Entry> entries = outbox.list();
         int pending = outbox.countByStatus(OutboxStore.STATUS_PENDING);
         int failed = outbox.countByStatus(OutboxStore.STATUS_FAILED);
-        statusText.append("\nQueue: " + pending + " waiting · " + failed + " failed");
         retryButton.setVisibility(pending + failed > 0 ? View.VISIBLE : View.GONE);
+        boolean queueEmpty = entries.isEmpty();
+        queueEmptyText.setVisibility(queueEmpty ? View.VISIBLE : View.GONE);
+        outboxList.setVisibility(queueEmpty ? View.GONE : View.VISIBLE);
+        if (!queueEmpty) {
+            outboxAdapter.submitList(entries);
+        }
 
-        // Forwarding history (Wave 110): cumulative counters from
-        // StatsStore. refreshStatus() runs from onResume(), so this
-        // block is refreshed whenever the activity comes back.
+        // Activity tiles (Wave 110 counters, redesigned 189-194):
+        // each value is set individually — no string concatenation.
         StatsStore stats = new StatsStore(this);
-        String statsLine =
-                "Forwarded: " + stats.getTotalForwarded()
-                        + " · Failed: " + stats.getTotalFailed()
-                        + " · Filtered: " + stats.getTotalFiltered()
-                        + " · Last success: " + formatStatsTime(stats.getLastSuccessAtMillis());
+        statsForwardedText.setText(String.valueOf(stats.getTotalForwarded()));
+        statsFailedText.setText(String.valueOf(stats.getTotalFailed()));
+        statsFilteredText.setText(String.valueOf(stats.getTotalFiltered()));
+        StringBuilder last = new StringBuilder();
+        long lastSuccess = stats.getLastSuccessAtMillis();
+        if (lastSuccess > 0L) {
+            last.append(getString(R.string.last_success)).append(" · ")
+                    .append(formatStatsTime(lastSuccess));
+        }
         long lastFailureAt = stats.getLastFailureAtMillis();
         if (lastFailureAt > 0L) {
+            if (last.length() > 0) {
+                last.append("\n");
+            }
             String reason = stats.getLastFailureReason();
-            statsLine += "\nLast failure: " + formatStatsTime(lastFailureAt)
-                    + (isEmpty(reason) ? "" : " (" + reason + ")");
+            last.append(getString(R.string.last_failure)).append(" · ")
+                    .append(formatStatsTime(lastFailureAt))
+                    .append(isEmpty(reason) ? "" : " — " + reason);
         }
-        statsText.setText(statsLine);
+        if (last.length() == 0) {
+            last.append(getString(R.string.no_forwards_yet));
+        }
+        statsLastText.setText(last.toString());
     }
 
-    /** Format an epoch-millis stats timestamp, or "—" when unset (0). */
+    /** Relative time for a stats timestamp ("2h ago"), or "—" when unset. */
     private static String formatStatsTime(long millis) {
         if (millis <= 0L) {
             return "—";
         }
-        return new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
-                .format(new Date(millis));
+        return DateUtils.getRelativeTimeSpanString(millis,
+                System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString();
+    }
+
+    /** Transient feedback (Waves 189-194): Snackbar replaces Toast. */
+    private void showSnackbar(String message) {
+        Snackbar.make(findViewById(android.R.id.content), message,
+                Snackbar.LENGTH_LONG).show();
     }
 
     /** Re-enqueue every waiting/failed outbox entry (Wave 43). */
@@ -200,39 +258,62 @@ public class MainActivity extends AppCompatActivity {
                     entry.receivedAtMillis, entry.simSlot);
             requeued++;
         }
-        Toast.makeText(this,
-                requeued == 0 ? "Queue is empty." : "Retrying " + requeued + " message(s)…",
-                Toast.LENGTH_SHORT).show();
+        showSnackbar(requeued == 0
+                ? getString(R.string.queue_empty_toast)
+                : getResources().getQuantityString(
+                        R.plurals.retrying_messages, requeued, requeued));
         refreshStatus();
     }
 
-    /** Runs ApiClient.testConnection off the UI thread and toasts the result. */
+    /**
+     * Runs ApiClient.testConnection off the UI thread. Feedback is a
+     * progress indicator while it runs, then a durable inline result
+     * line (plus a Snackbar with Retry on failure) — Waves 189-194
+     * retired the Toast-only feedback.
+     */
     private void testConnection() {
         testButton.setEnabled(false);
-        Toast.makeText(this, "Testing connection…", Toast.LENGTH_SHORT).show();
+        testProgress.setVisibility(View.VISIBLE);
+        testResultText.setVisibility(View.GONE);
 
         new Thread(() -> {
-            // testConnection performs network I/O and never throws; its
-            // Result is turned into a short, human-readable toast here.
             ApiClient.Result result = ApiClient.testConnection(configStore);
-            final String toastText;
+            final String resultText;
             if (result.isSuccess()) {
-                toastText = result.getStatusCode() > 0
-                        ? "Connection OK (HTTP " + result.getStatusCode() + ")."
-                        : "Connection OK.";
+                resultText = result.getStatusCode() > 0
+                        ? getString(R.string.connection_ok) + " (HTTP " + result.getStatusCode() + ")."
+                        : getString(R.string.connection_ok) + ".";
             } else if (!isEmpty(result.getErrorMessage())) {
-                toastText = "Connection failed: " + result.getErrorMessage();
+                resultText = getString(R.string.connection_failed) + ": " + result.getErrorMessage();
             } else if (result.getStatusCode() > 0) {
-                toastText = "Connection failed (HTTP " + result.getStatusCode() + ").";
+                resultText = getString(R.string.connection_failed) + " (HTTP " + result.getStatusCode() + ").";
             } else {
-                toastText = "Connection failed.";
+                resultText = getString(R.string.connection_failed) + ".";
             }
             runOnUiThread(() -> {
                 testButton.setEnabled(true);
-                Toast.makeText(this, toastText, Toast.LENGTH_LONG).show();
+                testProgress.setVisibility(View.GONE);
+                testResultText.setText(resultText);
+                testResultText.setTextColor(resolveThemeColor(
+                        result.isSuccess()
+                                ? com.google.android.material.R.attr.colorPrimary
+                                : com.google.android.material.R.attr.colorError));
+                testResultText.setVisibility(View.VISIBLE);
+                if (!result.isSuccess()) {
+                    Snackbar.make(findViewById(android.R.id.content), resultText,
+                                    Snackbar.LENGTH_LONG)
+                            .setAction("Retry", v -> testConnection())
+                            .show();
+                }
                 refreshStatus();
             });
         }, "miraclepay-test-connection").start();
+    }
+
+    private int resolveThemeColor(int attr) {
+        android.util.TypedValue value = new android.util.TypedValue();
+        getTheme().resolveAttribute(attr, value, true);
+        return value.data;
     }
 
     private boolean hasSmsPermissions() {
@@ -285,9 +366,7 @@ public class MainActivity extends AppCompatActivity {
             intent.setData(android.net.Uri.parse("package:" + getPackageName()));
             startActivity(intent);
         } catch (Exception e) {
-            Toast.makeText(this,
-                    "Open Settings → Battery and set MiraclePay to Unrestricted.",
-                    Toast.LENGTH_LONG).show();
+            showSnackbar("Open Settings → Battery and set MiraclePay to Unrestricted.");
         }
     }
 
@@ -308,11 +387,9 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        Toast.makeText(this,
-                allGranted
-                        ? "SMS permission granted."
-                        : "SMS permission denied — MiraclePay cannot forward payment SMS.",
-                Toast.LENGTH_LONG).show();
+        showSnackbar(allGranted
+                ? "SMS permission granted."
+                : getString(R.string.banner_permission_denied));
         refreshStatus();
     }
 
