@@ -21,7 +21,7 @@
 use axum::{
     extract::State,
     response::IntoResponse,
-    routing::{delete, get, patch, post, put},
+    routing::{delete, get, post},
     Json, Router,
 };
 
@@ -156,10 +156,7 @@ pub fn build_router(state: AppState) -> Router {
         // ---------------------------------------------------------
         // Transactions & refunds
         // ---------------------------------------------------------
-        .route(
-            "/api/v1/transactions",
-            get(transactions::list_transactions),
-        )
+        .route("/api/v1/transactions", get(transactions::list_transactions))
         .route(
             "/api/v1/transactions/:id",
             get(transactions::get_transaction),
@@ -206,10 +203,19 @@ pub fn build_router(state: AppState) -> Router {
         // ---------------------------------------------------------
         .route("/api/v1/gateways", get(gateways::list_gateways))
         // Disputes / chargebacks (Wave 38)
-        .route("/api/v1/disputes", post(disputes::open_dispute).get(disputes::list_disputes))
+        .route(
+            "/api/v1/disputes",
+            post(disputes::open_dispute).get(disputes::list_disputes),
+        )
         .route("/api/v1/disputes/:id", get(disputes::get_dispute))
-        .route("/api/v1/disputes/:id/evidence", post(disputes::add_evidence))
-        .route("/api/v1/admin/disputes/:id/decide", post(disputes::decide_dispute))
+        .route(
+            "/api/v1/disputes/:id/evidence",
+            post(disputes::add_evidence),
+        )
+        .route(
+            "/api/v1/admin/disputes/:id/decide",
+            post(disputes::decide_dispute),
+        )
         // FX conversion (Wave 34)
         .route("/api/v1/fx/rates", get(fx::list_rates))
         .route("/api/v1/fx/convert", get(fx::convert))
@@ -295,9 +301,13 @@ pub fn build_router(state: AppState) -> Router {
         // (unsupported API versions get a named error).
         .fallback(crate::versioning::api_fallback)
         // Wave 40: API-Version response header on /api/v1 calls.
-        .layer(axum::middleware::from_fn(crate::versioning::version_middleware))
+        .layer(axum::middleware::from_fn(
+            crate::versioning::version_middleware,
+        ))
         // Wave 44: structured JSON request log + x-request-id.
-        .layer(axum::middleware::from_fn(crate::metrics::request_log_middleware))
+        .layer(axum::middleware::from_fn(
+            crate::metrics::request_log_middleware,
+        ))
         // Wave 12: rate-limit middleware (auth 10/min, SMS ingest
         // 120/min, general API 600/min per client; see `rate_limit`).
         .layer(axum::middleware::from_fn_with_state(
@@ -306,7 +316,9 @@ pub fn build_router(state: AppState) -> Router {
         ))
         // Wave 24: security headers + CORS — outermost layer, so
         // headers are present even on rate-limit and error responses.
-        .layer(axum::middleware::from_fn(crate::security::security_middleware))
+        .layer(axum::middleware::from_fn(
+            crate::security::security_middleware,
+        ))
         // Shared state for every handler above.
         .with_state(state)
 }

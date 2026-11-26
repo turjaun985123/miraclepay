@@ -57,7 +57,8 @@ pub fn daily_series(transactions: &[Transaction], days: u32, now: DateTime<Utc>)
             if tx.status == TxStatus::Completed {
                 bucket.completed += 1;
                 if tx.amount.currency == Currency::BDT {
-                    bucket.volume_minor = bucket.volume_minor.saturating_add(tx.amount.amount_minor);
+                    bucket.volume_minor =
+                        bucket.volume_minor.saturating_add(tx.amount.amount_minor);
                 }
             }
         }
@@ -97,7 +98,11 @@ pub fn gateway_breakdown(transactions: &[Transaction]) -> Vec<GatewayBreakdown> 
         }
     }
     let mut out: Vec<GatewayBreakdown> = by_gateway.into_values().collect();
-    out.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.gateway.cmp(&b.gateway)));
+    out.sort_by(|a, b| {
+        b.count
+            .cmp(&a.count)
+            .then_with(|| a.gateway.cmp(&b.gateway))
+    });
     out
 }
 
@@ -111,7 +116,13 @@ mod tests {
         Utc.with_ymd_and_hms(2026, 11, day, hour, 0, 0).unwrap()
     }
 
-    fn tx(id: &str, gateway: &str, status: TxStatus, minor: i64, when: DateTime<Utc>) -> Transaction {
+    fn tx(
+        id: &str,
+        gateway: &str,
+        status: TxStatus,
+        minor: i64,
+        when: DateTime<Utc>,
+    ) -> Transaction {
         Transaction {
             id: id.to_string(),
             merchant_id: "m-1".to_string(),

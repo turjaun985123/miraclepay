@@ -110,7 +110,10 @@ fn may_access(auth: &AuthUser, merchant_id: &str) -> bool {
 /// * Non-admin: always their own merchant, whatever was requested —
 ///   a request naming another merchant simply matches nothing,
 ///   because the two filters are combined by the caller.
-fn effective_merchant_filter<'a>(auth: &'a AuthUser, requested: Option<&'a str>) -> Option<&'a str> {
+fn effective_merchant_filter<'a>(
+    auth: &'a AuthUser,
+    requested: Option<&'a str>,
+) -> Option<&'a str> {
     if is_admin(auth) {
         requested
     } else {
@@ -183,7 +186,7 @@ pub async fn list_transactions(
         .cloned()
         .collect();
     // Newest first.
-    items.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    items.sort_by_key(|a| std::cmp::Reverse(a.created_at));
     if query.page.is_some() || query.per_page.is_some() {
         items = crate::pagination::apply_page(items, query.page, query.per_page);
     } else {
@@ -284,9 +287,7 @@ pub async fn create_refund(
     };
 
     let total_minor = tx.amount.amount_minor;
-    let amount_minor = body
-        .amount_minor
-        .unwrap_or(total_minor - already_refunded);
+    let amount_minor = body.amount_minor.unwrap_or(total_minor - already_refunded);
     validate_refund(total_minor, already_refunded, amount_minor)
         .map_err(|error: DomainError| ApiError::BadRequest(error.to_string()))?;
 
@@ -303,10 +304,7 @@ pub async fn create_refund(
     // provider's own transaction reference when we have it, falling
     // back to our transaction id.
     let gateway_request = RefundRequest {
-        provider_ref: tx
-            .provider_trx_id
-            .clone()
-            .unwrap_or_else(|| tx.id.clone()),
+        provider_ref: tx.provider_trx_id.clone().unwrap_or_else(|| tx.id.clone()),
         amount_minor,
         reason: body.reason.clone(),
     };
@@ -544,6 +542,6 @@ pub async fn list_refunds(
         .cloned()
         .collect();
     // Newest first.
-    items.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    items.sort_by_key(|a| std::cmp::Reverse(a.created_at));
     Ok(Json(items))
 }

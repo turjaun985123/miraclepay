@@ -195,7 +195,11 @@ fn corpus_parses_as_expected() {
             continue;
         }
         let parsed = parsed.unwrap_or_else(|e| panic!("case '{}': parse error {e:?}", case.name));
-        assert_eq!(parsed.gateway, case.gateway, "case '{}': gateway", case.name);
+        assert_eq!(
+            parsed.gateway, case.gateway,
+            "case '{}': gateway",
+            case.name
+        );
         assert_eq!(
             parsed.amount_minor, case.amount_minor,
             "case '{}': amount",
@@ -212,7 +216,11 @@ fn corpus_parses_as_expected() {
             "case '{}': trx id",
             case.name
         );
-        assert!(parsed.is_payment(), "case '{}': must be a payment", case.name);
+        assert!(
+            parsed.is_payment(),
+            "case '{}': must be a payment",
+            case.name
+        );
     }
 }
 
@@ -246,7 +254,8 @@ fn failed_payment_notice_never_verifies() {
 
 #[test]
 fn insufficient_balance_notice_never_verifies() {
-    let body = "bKash: Payment of Tk 250.00 unsuccessful due to insufficient balance. TrxID: INS1234567.";
+    let body =
+        "bKash: Payment of Tk 250.00 unsuccessful due to insufficient balance. TrxID: INS1234567.";
     let outcome = verify_sms(&sms("bKash", body), &[], &HashSet::new());
     assert_eq!(outcome, VerificationOutcome::NotPayment);
 }

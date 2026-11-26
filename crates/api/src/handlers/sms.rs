@@ -274,10 +274,9 @@ pub async fn receive_sms(
             ))
         }
 
-        VerificationOutcome::Duplicate => Ok((
-            StatusCode::OK,
-            Json(json!({ "outcome": "duplicate" })),
-        )),
+        VerificationOutcome::Duplicate => {
+            Ok((StatusCode::OK, Json(json!({ "outcome": "duplicate" }))))
+        }
 
         VerificationOutcome::Unmatched => Ok((
             StatusCode::ACCEPTED,
@@ -314,9 +313,7 @@ pub async fn parse_preview(
     authenticate_device(&state, &headers).await?;
 
     match parse_incoming(&sms) {
-        Ok(parsed) => Ok(Json(
-            serde_json::to_value(&parsed).unwrap_or(Value::Null),
-        )),
+        Ok(parsed) => Ok(Json(serde_json::to_value(&parsed).unwrap_or(Value::Null))),
         Err(error) => Ok(Json(json!({ "error": error.to_string() }))),
     }
 }

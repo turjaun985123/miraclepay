@@ -98,22 +98,18 @@ pub async fn register(
         password_hash,
         role: UserRole::Merchant,
         email_verified: false,
-            totp_secret: None,
-            totp_enabled: false,
+        totp_secret: None,
+        totp_enabled: false,
         created_at: chrono::Utc::now(),
     };
 
     {
-        let mut users = state
-            .users
-            .write().await;
+        let mut users = state.users.write().await;
         if users
             .values()
             .any(|existing| existing.email.eq_ignore_ascii_case(&email))
         {
-            return Err(ApiError::Conflict(
-                "email already registered".to_string(),
-            ));
+            return Err(ApiError::Conflict("email already registered".to_string()));
         }
         users.insert(user.id.clone(), user.clone());
     }
@@ -149,9 +145,7 @@ pub async fn login(
     let email = req.email.trim().to_lowercase();
 
     let user = {
-        let users = state
-            .users
-            .read().await;
+        let users = state.users.read().await;
         users
             .values()
             .find(|existing| existing.email.eq_ignore_ascii_case(&email))
@@ -279,9 +273,7 @@ pub async fn totp_setup(
 ) -> Result<Json<Value>, ApiError> {
     let secret = miraclepay_domain::totp::generate_secret();
     let mut users = state.users.write().await;
-    let user = users
-        .get_mut(&auth.user_id)
-        .ok_or(ApiError::Unauthorized)?;
+    let user = users.get_mut(&auth.user_id).ok_or(ApiError::Unauthorized)?;
     user.totp_secret = Some(secret.clone());
     let email = user.email.clone();
     drop(users);
@@ -314,9 +306,7 @@ pub async fn totp_enable(
     Json(req): Json<TotpCodeReq>,
 ) -> Result<Json<Value>, ApiError> {
     let mut users = state.users.write().await;
-    let user = users
-        .get_mut(&auth.user_id)
-        .ok_or(ApiError::Unauthorized)?;
+    let user = users.get_mut(&auth.user_id).ok_or(ApiError::Unauthorized)?;
     let secret = user
         .totp_secret
         .clone()
@@ -345,9 +335,7 @@ pub async fn totp_disable(
     Json(req): Json<TotpCodeReq>,
 ) -> Result<Json<Value>, ApiError> {
     let mut users = state.users.write().await;
-    let user = users
-        .get_mut(&auth.user_id)
-        .ok_or(ApiError::Unauthorized)?;
+    let user = users.get_mut(&auth.user_id).ok_or(ApiError::Unauthorized)?;
     if !user.totp_enabled {
         return Err(ApiError::BadRequest("2fa is not enabled".to_string()));
     }
@@ -373,14 +361,9 @@ pub async fn totp_disable(
 ///
 /// Returns the currently authenticated user as JSON. The response
 /// is built via [`user_json`], so `password_hash` is never exposed.
-pub async fn me(
-    auth: AuthUser,
-    State(state): State<AppState>,
-) -> Result<Json<Value>, ApiError> {
+pub async fn me(auth: AuthUser, State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
     let user = {
-        let users = state
-            .users
-            .read().await;
+        let users = state.users.read().await;
         users
             .get(&auth.user_id)
             .cloned()
@@ -408,8 +391,14 @@ mod tests {
     fn different_passwords_do_not_cross_verify() {
         // Wave 3 semantics: Argon2id verification, not hash equality.
         let hash = miraclepay_domain::password::hash_password("password1");
-        assert!(miraclepay_domain::password::verify_password("password1", &hash));
-        assert!(!miraclepay_domain::password::verify_password("password2", &hash));
+        assert!(miraclepay_domain::password::verify_password(
+            "password1",
+            &hash
+        ));
+        assert!(!miraclepay_domain::password::verify_password(
+            "password2",
+            &hash
+        ));
     }
 
     #[test]
@@ -417,8 +406,14 @@ mod tests {
         let first = miraclepay_domain::password::hash_password("password1");
         let second = miraclepay_domain::password::hash_password("password1");
         assert_ne!(first, second); // random salt per hash
-        assert!(miraclepay_domain::password::verify_password("password1", &first));
-        assert!(miraclepay_domain::password::verify_password("password1", &second));
+        assert!(miraclepay_domain::password::verify_password(
+            "password1",
+            &first
+        ));
+        assert!(miraclepay_domain::password::verify_password(
+            "password1",
+            &second
+        ));
     }
 
     #[test]

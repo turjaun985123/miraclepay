@@ -118,8 +118,8 @@ pub async fn dispatch_notifications(
     auth: AuthUser,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_admin(&auth)?;
-    let config = miraclepay_worker::smtp_transport::SmtpConfig::from_env()
-        .map_err(ApiError::Conflict)?;
+    let config =
+        miraclepay_worker::smtp_transport::SmtpConfig::from_env().map_err(ApiError::Conflict)?;
     let transport = miraclepay_worker::smtp_transport::SmtpTransport { config };
     let mut notifications = state.notifications.write().await;
     let summary =
@@ -158,9 +158,7 @@ pub async fn fraud_flagged(
             })
         })
         .collect();
-    flagged.sort_by_key(|entry| {
-        std::cmp::Reverse(entry["score"].as_u64().unwrap_or(0))
-    });
+    flagged.sort_by_key(|entry| std::cmp::Reverse(entry["score"].as_u64().unwrap_or(0)));
     let total = flagged.len();
     let items = crate::pagination::apply_page(flagged, page.page, page.per_page);
     Ok(Json(serde_json::json!({ "items": items, "total": total })))
@@ -210,7 +208,11 @@ pub async fn list_users(
     require_admin(&auth)?;
 
     let users = state.users.read().await;
-    let page: Vec<User> = users.values().take(query.effective_limit()).cloned().collect();
+    let page: Vec<User> = users
+        .values()
+        .take(query.effective_limit())
+        .cloned()
+        .collect();
     Ok(Json(page))
 }
 
@@ -290,25 +292,21 @@ pub async fn set_merchant_status(
         (previous_status, merchant.clone())
     };
 
-    state
-        .audit_log
-        .write()
-        .await
-        .push(AuditEntry {
-            id: miraclepay_domain::ids::audit_id(),
-            actor_user_id: Some(auth.user_id.clone()),
-            merchant_id: Some(id.clone()),
-            action: "merchant.status_changed".to_string(),
-            entity_type: "merchant".to_string(),
-            entity_id: Some(id),
-            ip_address: None,
-            user_agent: None,
-            details: serde_json::json!({
-                "from": serde_json::to_value(previous_status).unwrap_or(serde_json::Value::Null),
-                "to": serde_json::to_value(new_status).unwrap_or(serde_json::Value::Null),
-            }),
-            created_at: Utc::now(),
-        });
+    state.audit_log.write().await.push(AuditEntry {
+        id: miraclepay_domain::ids::audit_id(),
+        actor_user_id: Some(auth.user_id.clone()),
+        merchant_id: Some(id.clone()),
+        action: "merchant.status_changed".to_string(),
+        entity_type: "merchant".to_string(),
+        entity_id: Some(id),
+        ip_address: None,
+        user_agent: None,
+        details: serde_json::json!({
+            "from": serde_json::to_value(previous_status).unwrap_or(serde_json::Value::Null),
+            "to": serde_json::to_value(new_status).unwrap_or(serde_json::Value::Null),
+        }),
+        created_at: Utc::now(),
+    });
 
     Ok(Json(updated))
 }
@@ -409,27 +407,23 @@ pub async fn update_settings(
         *settings = new_settings.clone();
     }
 
-    state
-        .audit_log
-        .write()
-        .await
-        .push(AuditEntry {
-            id: miraclepay_domain::ids::audit_id(),
-            actor_user_id: Some(auth.user_id.clone()),
-            merchant_id: None,
-            action: miraclepay_domain::audit::AuditAction::SettingsUpdated
-                .as_str()
-                .to_string(),
-            entity_type: "settings".to_string(),
-            entity_id: None,
-            ip_address: None,
-            user_agent: None,
-            details: serde_json::json!({
-                "default_fee_bps": new_settings.default_fee_bps,
-                "maintenance_mode": new_settings.maintenance_mode,
-            }),
-            created_at: Utc::now(),
-        });
+    state.audit_log.write().await.push(AuditEntry {
+        id: miraclepay_domain::ids::audit_id(),
+        actor_user_id: Some(auth.user_id.clone()),
+        merchant_id: None,
+        action: miraclepay_domain::audit::AuditAction::SettingsUpdated
+            .as_str()
+            .to_string(),
+        entity_type: "settings".to_string(),
+        entity_id: None,
+        ip_address: None,
+        user_agent: None,
+        details: serde_json::json!({
+            "default_fee_bps": new_settings.default_fee_bps,
+            "maintenance_mode": new_settings.maintenance_mode,
+        }),
+        created_at: Utc::now(),
+    });
 
     Ok(Json(new_settings))
 }

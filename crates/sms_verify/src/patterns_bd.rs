@@ -57,13 +57,7 @@ const BD_PAYMENT_KEYWORDS: &[&str] = &["received", "payment", "cash in", "credit
 /// recognised by [`detect_bd_gateway`] even though they are not
 /// listed here verbatim.
 const BD_SENDER_IDS: &[&str] = &[
-    "bKash",
-    "Nagad",
-    "Rocket",
-    "DBBL",
-    "Upay",
-    "SureCash",
-    "MyCash",
+    "bKash", "Nagad", "Rocket", "DBBL", "Upay", "SureCash", "MyCash",
 ];
 
 /// The known sender IDs of Bangladesh gateways.
@@ -205,10 +199,7 @@ mod tests {
         assert_eq!(detect_bd_gateway("nagad", ""), Some(GatewayId::Nagad));
         assert_eq!(detect_bd_gateway("ROCKET", ""), Some(GatewayId::Rocket));
         assert_eq!(detect_bd_gateway("uPaY", ""), Some(GatewayId::Upay));
-        assert_eq!(
-            detect_bd_gateway("SURECASH", ""),
-            Some(GatewayId::Surecash)
-        );
+        assert_eq!(detect_bd_gateway("SURECASH", ""), Some(GatewayId::Surecash));
     }
 
     // --- detect_bd_gateway: body fallback --------------------------
@@ -264,7 +255,9 @@ mod tests {
     #[test]
     fn bd_sender_ids_lists_every_gateway_brand() {
         let ids = bd_sender_ids();
-        for expected in ["bKash", "Nagad", "Rocket", "DBBL", "Upay", "SureCash", "MyCash"] {
+        for expected in [
+            "bKash", "Nagad", "Rocket", "DBBL", "Upay", "SureCash", "MyCash",
+        ] {
             assert!(ids.contains(&expected), "missing sender id {expected}");
         }
     }

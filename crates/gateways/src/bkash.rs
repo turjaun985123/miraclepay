@@ -114,9 +114,7 @@ impl PaymentGateway for BkashGateway {
     }
 
     async fn refund(&self, _req: &RefundRequest) -> Result<RefundResult, GatewayError> {
-        Err(GatewayError::Unsupported(
-            "bkash refunds are manual".into(),
-        ))
+        Err(GatewayError::Unsupported("bkash refunds are manual".into()))
     }
 }
 

@@ -14,10 +14,10 @@
 use std::time::Instant;
 
 use axum::extract::Request;
+use axum::extract::State;
 use axum::http::{HeaderValue, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use axum::extract::State;
 
 use miraclepay_domain::transaction::TxStatus;
 

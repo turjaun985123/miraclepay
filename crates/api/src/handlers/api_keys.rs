@@ -361,9 +361,18 @@ mod tests {
     fn device_status_covers_the_presence_ladder() {
         let now = Utc::now();
         assert_eq!(device_status(&key(None, false), now), "never_connected");
-        assert_eq!(device_status(&key(Some(now - Duration::minutes(2)), false), now), "online");
-        assert_eq!(device_status(&key(Some(now - Duration::hours(3)), false), now), "idle");
-        assert_eq!(device_status(&key(Some(now - Duration::days(2)), false), now), "offline");
+        assert_eq!(
+            device_status(&key(Some(now - Duration::minutes(2)), false), now),
+            "online"
+        );
+        assert_eq!(
+            device_status(&key(Some(now - Duration::hours(3)), false), now),
+            "idle"
+        );
+        assert_eq!(
+            device_status(&key(Some(now - Duration::days(2)), false), now),
+            "offline"
+        );
         assert_eq!(device_status(&key(Some(now), true), now), "revoked");
     }
 }

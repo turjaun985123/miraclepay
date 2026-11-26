@@ -86,15 +86,9 @@ impl IntoResponse for ApiError {
         let code = self.code();
         let (status, message) = match self {
             ApiError::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
-            ApiError::Unauthorized => {
-                (StatusCode::UNAUTHORIZED, "unauthorized".to_string())
-            }
-            ApiError::TotpRequired => {
-                (StatusCode::UNAUTHORIZED, "totp_required".to_string())
-            }
-            ApiError::TotpInvalid => {
-                (StatusCode::UNAUTHORIZED, "totp_invalid".to_string())
-            }
+            ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized".to_string()),
+            ApiError::TotpRequired => (StatusCode::UNAUTHORIZED, "totp_required".to_string()),
+            ApiError::TotpInvalid => (StatusCode::UNAUTHORIZED, "totp_invalid".to_string()),
             ApiError::Forbidden(message) => (StatusCode::FORBIDDEN, message),
             ApiError::NotFound(message) => (StatusCode::NOT_FOUND, message),
             ApiError::Conflict(message) => (StatusCode::CONFLICT, message),

@@ -136,9 +136,11 @@ mod tests {
         assert!(DomainError::Conflict("duplicate reference".to_string())
             .to_string()
             .contains("duplicate reference"));
-        assert!(DomainError::InvalidStateTransition("refunded -> paid".to_string())
-            .to_string()
-            .contains("refunded -> paid"));
+        assert!(
+            DomainError::InvalidStateTransition("refunded -> paid".to_string())
+                .to_string()
+                .contains("refunded -> paid")
+        );
         assert!(DomainError::Internal("boom".to_string())
             .to_string()
             .contains("boom"));

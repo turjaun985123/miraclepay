@@ -12,7 +12,9 @@
 //! stored production hashes exist yet; on the Postgres path a
 //! password reset would be required for any pre-Wave-3 account.
 
-use argon2::password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use argon2::password_hash::{
+    rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
+};
 use argon2::Argon2;
 
 /// Hash a plaintext password with Argon2id and a fresh random salt.

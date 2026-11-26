@@ -115,9 +115,7 @@ impl PaymentGateway for UpiGateway {
     }
 
     async fn refund(&self, _req: &RefundRequest) -> Result<RefundResult, GatewayError> {
-        Err(GatewayError::Unsupported(
-            "upi refunds are manual".into(),
-        ))
+        Err(GatewayError::Unsupported("upi refunds are manual".into()))
     }
 }
 

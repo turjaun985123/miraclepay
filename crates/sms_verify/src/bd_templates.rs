@@ -30,7 +30,13 @@ mod tests {
         }
     }
 
-    fn pending(id: &str, gateway: &str, amount_minor: i64, sender: &str, trx: Option<&str>) -> Transaction {
+    fn pending(
+        id: &str,
+        gateway: &str,
+        amount_minor: i64,
+        sender: &str,
+        trx: Option<&str>,
+    ) -> Transaction {
         let now = Utc.with_ymd_and_hms(2026, 11, 26, 3, 55, 0).unwrap();
         Transaction {
             id: id.to_string(),
@@ -135,7 +141,13 @@ mod tests {
         let outcome = verify_sms(&promo, &[], &HashSet::new());
         assert_eq!(outcome, VerificationOutcome::Unmatched);
         // A message with neither amount nor TrxID is not a payment at all.
-        let plain = sms("Nagad", "Nagad: winter offer is live. Dial *167# to know more.");
-        assert_eq!(verify_sms(&plain, &[], &HashSet::new()), VerificationOutcome::NotPayment);
+        let plain = sms(
+            "Nagad",
+            "Nagad: winter offer is live. Dial *167# to know more.",
+        );
+        assert_eq!(
+            verify_sms(&plain, &[], &HashSet::new()),
+            VerificationOutcome::NotPayment
+        );
     }
 }

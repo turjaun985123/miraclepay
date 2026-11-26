@@ -47,12 +47,18 @@ impl StripeCheckoutConfig {
             if live.is_empty() {
                 return Err(GatewayError::InvalidConfig("stripe: empty live key".into()));
             }
-            Ok(Self { secret_key: key, live: true })
+            Ok(Self {
+                secret_key: key,
+                live: true,
+            })
         } else if let Some(test) = key.strip_prefix("sk_test_") {
             if test.is_empty() {
                 return Err(GatewayError::InvalidConfig("stripe: empty test key".into()));
             }
-            Ok(Self { secret_key: key, live: false })
+            Ok(Self {
+                secret_key: key,
+                live: false,
+            })
         } else {
             Err(GatewayError::InvalidConfig(
                 "stripe: STRIPE_SECRET_KEY must start with sk_test_ or sk_live_".into(),
@@ -81,11 +87,23 @@ impl StripeCheckoutConfig {
             ("success_url", success_url.to_string()),
             ("cancel_url", cancel_url.to_string()),
             ("line_items[0][quantity]", "1".to_string()),
-            ("line_items[0][price_data][currency]", currency.to_lowercase()),
-            ("line_items[0][price_data][unit_amount]", amount_minor.to_string()),
-            ("line_items[0][price_data][product_data][name]", product_name.to_string()),
+            (
+                "line_items[0][price_data][currency]",
+                currency.to_lowercase(),
+            ),
+            (
+                "line_items[0][price_data][unit_amount]",
+                amount_minor.to_string(),
+            ),
+            (
+                "line_items[0][price_data][product_data][name]",
+                product_name.to_string(),
+            ),
             ("metadata[reference]", reference.to_string()),
-            ("payment_intent_data[metadata][reference]", reference.to_string()),
+            (
+                "payment_intent_data[metadata][reference]",
+                reference.to_string(),
+            ),
             ("client_reference_id", reference.to_string()),
             ("ui_mode", "hosted".to_string()),
         ];
@@ -98,8 +116,14 @@ impl StripeCheckoutConfig {
             method: "POST",
             url: SESSIONS_URL.to_string(),
             headers: vec![
-                ("Authorization".to_string(), format!("Bearer {}", self.secret_key)),
-                ("Content-Type".to_string(), "application/x-www-form-urlencoded".to_string()),
+                (
+                    "Authorization".to_string(),
+                    format!("Bearer {}", self.secret_key),
+                ),
+                (
+                    "Content-Type".to_string(),
+                    "application/x-www-form-urlencoded".to_string(),
+                ),
             ],
             body,
         }
@@ -190,13 +214,22 @@ mod tests {
         );
         assert_eq!(spec.method, "POST");
         assert_eq!(spec.url, SESSIONS_URL);
-        assert!(spec.headers.iter().any(|(k, v)| k == "Authorization" && v == "Bearer sk_test_abc123"));
+        assert!(spec
+            .headers
+            .iter()
+            .any(|(k, v)| k == "Authorization" && v == "Bearer sk_test_abc123"));
         assert!(spec.body.contains("mode=payment"));
-        assert!(spec.body.contains("line_items[0][price_data][unit_amount]=125000"));
-        assert!(spec.body.contains("line_items[0][price_data][currency]=bdt"));
+        assert!(spec
+            .body
+            .contains("line_items[0][price_data][unit_amount]=125000"));
+        assert!(spec
+            .body
+            .contains("line_items[0][price_data][currency]=bdt"));
         assert!(spec.body.contains("client_reference_id=MP-REF-1"));
         // URLs must be form-encoded inside the body.
-        assert!(spec.body.contains("success_url=https%3A%2F%2Fshop.example.com%2Fok%3Fx%3D1"));
+        assert!(spec
+            .body
+            .contains("success_url=https%3A%2F%2Fshop.example.com%2Fok%3Fx%3D1"));
     }
 
     #[test]

@@ -46,8 +46,7 @@ impl FileDeliveryStore {
         let state = if path.exists() {
             let raw = std::fs::read_to_string(&path)
                 .map_err(|e| format!("read {}: {e}", path.display()))?;
-            serde_json::from_str(&raw)
-                .map_err(|e| format!("parse {}: {e}", path.display()))?
+            serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", path.display()))?
         } else {
             PersistedState::default()
         };
@@ -59,12 +58,8 @@ impl FileDeliveryStore {
     /// A delivery whose status is [`DeliveryStatus::DeadLetter`] is
     /// moved to the dead-letter list; any other status stays active.
     pub fn record(&mut self, delivery: WebhookDelivery) -> Result<(), String> {
-        self.state
-            .deliveries
-            .retain(|d| d.id != delivery.id);
-        self.state
-            .dead_letter
-            .retain(|d| d.id != delivery.id);
+        self.state.deliveries.retain(|d| d.id != delivery.id);
+        self.state.dead_letter.retain(|d| d.id != delivery.id);
         if delivery.status == DeliveryStatus::DeadLetter {
             self.state.dead_letter.push(delivery);
         } else {
@@ -120,8 +115,7 @@ impl FileDeliveryStore {
         let raw = serde_json::to_string_pretty(&self.state)
             .map_err(|e| format!("serialise deliveries: {e}"))?;
         let tmp = self.path.with_extension("json.tmp");
-        std::fs::write(&tmp, raw)
-            .map_err(|e| format!("write {}: {e}", tmp.display()))?;
+        std::fs::write(&tmp, raw).map_err(|e| format!("write {}: {e}", tmp.display()))?;
         std::fs::rename(&tmp, &self.path)
             .map_err(|e| format!("rename to {}: {e}", self.path.display()))?;
         Ok(())

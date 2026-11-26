@@ -125,9 +125,9 @@ async fn ensure_owned_merchant(
     merchant_id: &str,
 ) -> Result<(), ApiError> {
     let merchants = state.merchants.read().await;
-    let merchant = merchants.get(merchant_id).ok_or_else(|| {
-        ApiError::NotFound(format!("merchant {merchant_id} not found"))
-    })?;
+    let merchant = merchants
+        .get(merchant_id)
+        .ok_or_else(|| ApiError::NotFound(format!("merchant {merchant_id} not found")))?;
     if merchant.owner_user_id != auth.user_id {
         return Err(ApiError::Forbidden("forbidden".to_string()));
     }
@@ -257,9 +257,8 @@ pub async fn delete_gateway_config(
 ) -> Result<StatusCode, ApiError> {
     ensure_owned_merchant(&state, &auth, &merchant_id).await?;
 
-    let gateway = GatewayId::from_str(&gateway_str).ok_or_else(|| {
-        ApiError::NotFound(format!("gateway {gateway_str} not configured"))
-    })?;
+    let gateway = GatewayId::from_str(&gateway_str)
+        .ok_or_else(|| ApiError::NotFound(format!("gateway {gateway_str} not configured")))?;
 
     let mut all_configs = state.gateway_configs.write().await;
     let configs = all_configs.get_mut(&merchant_id).ok_or_else(|| {

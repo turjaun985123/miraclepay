@@ -71,20 +71,29 @@ pub async fn init(database_url: Option<&str>) -> DbInit {
             "[miraclepay] DATABASE_URL not set — running with the in-memory store \
              (data will not persist across restarts)"
         );
-        return DbInit { mode: DbMode::InMemory, pool: None };
+        return DbInit {
+            mode: DbMode::InMemory,
+            pool: None,
+        };
     }
     let url = database_url.expect("intended_mode checked non-empty");
     match connect_and_migrate(url).await {
         Ok(pool) => {
             eprintln!("[miraclepay] Postgres connected; migrations applied");
-            DbInit { mode: DbMode::Postgres, pool: Some(pool) }
+            DbInit {
+                mode: DbMode::Postgres,
+                pool: Some(pool),
+            }
         }
         Err(err) => {
             eprintln!(
                 "[miraclepay] Postgres init failed ({err}) — falling back to the \
                  in-memory store; set a valid DATABASE_URL to persist data"
             );
-            DbInit { mode: DbMode::InMemory, pool: None }
+            DbInit {
+                mode: DbMode::InMemory,
+                pool: None,
+            }
         }
     }
 }

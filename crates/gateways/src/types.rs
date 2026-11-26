@@ -115,10 +115,7 @@ impl GatewayId {
             | GatewayId::Rocket
             | GatewayId::Upay
             | GatewayId::Surecash => "BD",
-            GatewayId::Upi
-            | GatewayId::Paytm
-            | GatewayId::Phonepe
-            | GatewayId::Razorpay => "IN",
+            GatewayId::Upi | GatewayId::Paytm | GatewayId::Phonepe | GatewayId::Razorpay => "IN",
             GatewayId::Easypaisa | GatewayId::Jazzcash => "PK",
             GatewayId::Stripe | GatewayId::Paypal | GatewayId::Manual => "GLOBAL",
         }
@@ -130,6 +127,10 @@ impl GatewayId {
     /// `"BKASH"` all resolve to [`GatewayId::Bkash`]) and surrounding
     /// whitespace is ignored. Returns `None` for an identifier the
     /// platform does not support.
+    // Option-returning parse, matching Currency::from_code's
+    // convention; the FromStr trait (Result-based) is deliberately
+    // not implemented for this infallible-shape lookup.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<GatewayId> {
         match s.trim().to_ascii_lowercase().as_str() {
             "bkash" => Some(GatewayId::Bkash),

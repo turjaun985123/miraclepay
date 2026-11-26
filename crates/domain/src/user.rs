@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 /// Role of a [`User`], determining what the account may access.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum UserRole {
     /// Platform administrator with full access, including the admin panel.
     Admin,
@@ -18,6 +19,7 @@ pub enum UserRole {
     /// Member of a merchant's (or the platform's) staff.
     Staff,
     /// End customer who pays merchants.
+    #[default]
     Customer,
 }
 
@@ -33,12 +35,6 @@ impl UserRole {
     /// are all denied admin-panel access.
     pub fn can_access_admin_panel(&self) -> bool {
         matches!(self, Self::Admin)
-    }
-}
-
-impl Default for UserRole {
-    fn default() -> Self {
-        Self::Customer
     }
 }
 
@@ -188,7 +184,10 @@ mod tests {
         for bad in ["@example.com", "ayesha@", "@", ""] {
             let mut input = valid_input();
             input.email = bad.to_string();
-            assert!(validate_register(&input).is_err(), "email {bad:?} must fail");
+            assert!(
+                validate_register(&input).is_err(),
+                "email {bad:?} must fail"
+            );
         }
     }
 
@@ -198,7 +197,9 @@ mod tests {
         input.password = "abc123".to_string();
         let errors = validate_register(&input).expect_err("must fail");
         assert!(
-            errors.iter().any(|e| e.contains("password") && e.contains("8")),
+            errors
+                .iter()
+                .any(|e| e.contains("password") && e.contains("8")),
             "{errors:?}"
         );
     }
@@ -208,10 +209,7 @@ mod tests {
         let mut input = valid_input();
         input.password = "onlyletters".to_string();
         let errors = validate_register(&input).expect_err("must fail");
-        assert!(
-            errors.iter().any(|e| e.contains("digit")),
-            "{errors:?}"
-        );
+        assert!(errors.iter().any(|e| e.contains("digit")), "{errors:?}");
     }
 
     #[test]
@@ -294,10 +292,9 @@ mod tests {
 
     fn sample_user_without_time() -> User {
         let mut user = sample_user();
-        user.created_at =
-            DateTime::parse_from_rfc3339("2026-11-26T00:00:00Z")
-                .expect("timestamp parses")
-                .with_timezone(&Utc);
+        user.created_at = DateTime::parse_from_rfc3339("2026-11-26T00:00:00Z")
+            .expect("timestamp parses")
+            .with_timezone(&Utc);
         user
     }
 

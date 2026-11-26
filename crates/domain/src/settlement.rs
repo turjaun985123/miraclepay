@@ -246,5 +246,4 @@ mod tests {
         assert!(!SettlementStatus::Processing.is_terminal());
         assert!(!SettlementStatus::OnHold.is_terminal());
     }
-
 }

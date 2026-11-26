@@ -56,8 +56,7 @@ pub struct KycProfile {
 /// BD NID numbers are 10, 13, or 17 digits.
 pub fn valid_nid(nid: &str) -> bool {
     let digits = nid.trim();
-    digits.bytes().all(|b| b.is_ascii_digit())
-        && matches!(digits.len(), 10 | 13 | 17)
+    digits.bytes().all(|b| b.is_ascii_digit()) && matches!(digits.len(), 10 | 13 | 17)
 }
 
 /// Validate a submission; returns every problem found (the API
@@ -84,7 +83,10 @@ pub fn validate_submission(
     if let Some(license) = trade_license_no {
         let license = license.trim();
         if !license.is_empty()
-            && (license.len() < 6 || !license.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'/'))
+            && (license.len() < 6
+                || !license
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'/'))
         {
             errors.push("trade_license_no looks malformed".to_string());
         }

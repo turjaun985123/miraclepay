@@ -152,9 +152,7 @@ impl SubscriptionStatus {
     pub fn allows_billing(self) -> bool {
         matches!(
             self,
-            SubscriptionStatus::Trialing
-                | SubscriptionStatus::Active
-                | SubscriptionStatus::PastDue
+            SubscriptionStatus::Trialing | SubscriptionStatus::Active | SubscriptionStatus::PastDue
         )
     }
 }
@@ -265,9 +263,7 @@ impl Subscription {
     ///   instead of being charged); and
     /// * the current period has ended: `now >= current_period_end`.
     pub fn is_billable(&self, now: DateTime<Utc>) -> bool {
-        self.status.allows_billing()
-            && !self.cancel_at_period_end
-            && now >= self.current_period_end
+        self.status.allows_billing() && !self.cancel_at_period_end && now >= self.current_period_end
     }
 
     /// Whether the current period has ended by `now`, regardless of

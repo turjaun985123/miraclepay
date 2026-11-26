@@ -26,9 +26,14 @@ async fn main() {
         let hash = miraclepay_domain::password::hash_password(&password);
         state.seed_admin(&email.to_lowercase(), hash).await;
     }
-    let port: u16 = std::env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8080);
+    let port: u16 = std::env::var("PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(8080);
     let app = build_router(state);
-    let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await.expect("bind");
+    let listener = tokio::net::TcpListener::bind(("0.0.0.0", port))
+        .await
+        .expect("bind");
     println!("MiraclePay API v0.0.1 listening on port {port}");
     axum::serve(listener, app).await.expect("serve");
 }

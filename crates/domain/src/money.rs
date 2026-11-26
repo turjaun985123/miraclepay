@@ -178,6 +178,9 @@ impl Money {
     /// - [`DomainError::CurrencyMismatch`] if the currencies differ.
     /// - [`DomainError::Overflow`] if the result does not fit in an
     ///   `i64` count of minor units.
+    // Not the Add trait on purpose: money addition is checked
+    // (currency match + overflow) and returns a Result.
+    #[allow(clippy::should_implement_trait)]
     pub fn add(self, other: Money) -> Result<Money, DomainError> {
         self.ensure_same_currency(&other)?;
         self.amount_minor
@@ -196,6 +199,8 @@ impl Money {
     /// - [`DomainError::CurrencyMismatch`] if the currencies differ.
     /// - [`DomainError::Overflow`] if the result does not fit in an
     ///   `i64` count of minor units.
+    // See `add`: checked arithmetic, deliberately not the trait.
+    #[allow(clippy::should_implement_trait)]
     pub fn sub(self, other: Money) -> Result<Money, DomainError> {
         self.ensure_same_currency(&other)?;
         self.amount_minor
@@ -238,12 +243,12 @@ impl Money {
     /// Checked multiplication by an integer quantity (for example a
     /// number of identical line items). Returns `None` on overflow.
     pub fn checked_mul(self, quantity: i64) -> Option<Money> {
-        self.amount_minor.checked_mul(quantity).map(|amount_minor| {
-            Money {
+        self.amount_minor
+            .checked_mul(quantity)
+            .map(|amount_minor| Money {
                 amount_minor,
                 currency: self.currency,
-            }
-        })
+            })
     }
 
     /// The negation of this amount, or `None` if it cannot be
@@ -286,11 +291,7 @@ impl Money {
             product - divisor / 2
         };
         let fee = adjusted / divisor;
-        let amount_minor = i64::try_from(fee).unwrap_or(if fee < 0 {
-            i64::MIN
-        } else {
-            i64::MAX
-        });
+        let amount_minor = i64::try_from(fee).unwrap_or(if fee < 0 { i64::MIN } else { i64::MAX });
         Money {
             amount_minor,
             currency: self.currency,
@@ -335,7 +336,7 @@ fn group_thousands(value: u64) -> String {
     for (i, byte) in bytes.iter().enumerate() {
         // A separator goes before a digit when the number of digits
         // remaining after it is a multiple of three.
-        if i > 0 && (bytes.len() - i) % 3 == 0 {
+        if i > 0 && (bytes.len() - i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(*byte as char);
@@ -439,12 +440,12 @@ mod tests {
     #[test]
     fn checked_mul_neg_and_abs() {
         let money = Money::new(-250, Currency::PKR);
-        assert_eq!(money.checked_mul(4), Some(Money::new(-1_000, Currency::PKR)));
-        assert_eq!(money.checked_mul(0), Some(Money::zero(Currency::PKR)));
         assert_eq!(
-            Money::new(i64::MAX, Currency::PKR).checked_mul(2),
-            None
+            money.checked_mul(4),
+            Some(Money::new(-1_000, Currency::PKR))
         );
+        assert_eq!(money.checked_mul(0), Some(Money::zero(Currency::PKR)));
+        assert_eq!(Money::new(i64::MAX, Currency::PKR).checked_mul(2), None);
         assert_eq!(money.checked_neg(), Some(Money::new(250, Currency::PKR)));
         assert_eq!(money.checked_abs(), Some(Money::new(250, Currency::PKR)));
         assert_eq!(Money::new(i64::MIN, Currency::PKR).checked_neg(), None);
@@ -458,7 +459,10 @@ mod tests {
         assert_eq!(amount.fee_bps(250), Money::new(250, Currency::BDT));
         assert_eq!(amount.fee_bps(0), Money::zero(Currency::BDT));
         assert_eq!(amount.fee_bps(10_000), amount);
-        assert_eq!(Money::zero(Currency::BDT).fee_bps(500), Money::zero(Currency::BDT));
+        assert_eq!(
+            Money::zero(Currency::BDT).fee_bps(500),
+            Money::zero(Currency::BDT)
+        );
     }
 
     #[test]
@@ -504,11 +508,15 @@ mod tests {
         );
         // An absurd rate on a huge amount saturates instead of overflowing.
         assert_eq!(
-            Money::new(i64::MAX, Currency::BDT).fee_bps(u32::MAX).amount_minor,
+            Money::new(i64::MAX, Currency::BDT)
+                .fee_bps(u32::MAX)
+                .amount_minor,
             i64::MAX
         );
         assert_eq!(
-            Money::new(i64::MIN, Currency::BDT).fee_bps(u32::MAX).amount_minor,
+            Money::new(i64::MIN, Currency::BDT)
+                .fee_bps(u32::MAX)
+                .amount_minor,
             i64::MIN
         );
     }

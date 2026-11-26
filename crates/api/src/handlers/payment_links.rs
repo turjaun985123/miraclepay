@@ -15,9 +15,6 @@
 //! * `GET    /pay/{slug}`                  — [`public_link`]
 //! * `POST   /pay/{slug}`                  — [`pay_link`]
 
-use std::collections::HashMap;
-use std::sync::Arc;
-
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
@@ -220,12 +217,10 @@ fn merchant_name(state: &AppState, merchant_id: &str) -> String {
 /// API error that best describes it to the caller.
 fn map_link_use_error(error: DomainError) -> ApiError {
     match error {
-        DomainError::LinkInactive => {
-            ApiError::Conflict("payment link is inactive".to_string())
+        DomainError::LinkInactive => ApiError::Conflict("payment link is inactive".to_string()),
+        DomainError::LinkExhausted => {
+            ApiError::Conflict("payment link has reached its maximum number of uses".to_string())
         }
-        DomainError::LinkExhausted => ApiError::Conflict(
-            "payment link has reached its maximum number of uses".to_string(),
-        ),
         other => ApiError::BadRequest(other.to_string()),
     }
 }
@@ -277,7 +272,11 @@ pub async fn create_link(
 
     let id = payment_link_id();
     let base = slugify(&req.title);
-    let base = if base.is_empty() { "link".to_string() } else { base };
+    let base = if base.is_empty() {
+        "link".to_string()
+    } else {
+        base
+    };
     // The id is long, ASCII and well over six characters, so taking
     // its last six bytes is always on a char boundary.
     let suffix = &id[id.len().saturating_sub(6)..];
@@ -442,7 +441,9 @@ pub async fn pay_link(
     Json(req): Json<PayLinkRequest>,
 ) -> Result<(StatusCode, Json<PayLinkResponse>), ApiError> {
     if req.gateway.trim().is_empty() {
-        return Err(ApiError::BadRequest("gateway must not be empty".to_string()));
+        return Err(ApiError::BadRequest(
+            "gateway must not be empty".to_string(),
+        ));
     }
     let now = Utc::now();
 
@@ -497,8 +498,7 @@ pub async fn pay_link(
     };
 
     {
-        let mut transactions =
-            state.transactions.write().await;
+        let mut transactions = state.transactions.write().await;
         transactions.insert(id.clone(), transaction.clone());
     }
     state.assess_risk(&transaction).await;
@@ -544,7 +544,10 @@ mod expiry_tests {
     #[test]
     fn explicit_future_expiry_wins_over_hours() {
         let at = now() + chrono::Duration::days(2);
-        assert_eq!(resolve_expiry(&req(Some(at), Some(1)), now()).unwrap(), Some(at));
+        assert_eq!(
+            resolve_expiry(&req(Some(at), Some(1)), now()).unwrap(),
+            Some(at)
+        );
     }
 
     #[test]

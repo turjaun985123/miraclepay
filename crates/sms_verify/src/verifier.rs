@@ -284,7 +284,10 @@ mod tests {
 
     #[test]
     fn parse_incoming_rejects_non_payment_sms() {
-        let parsed = parse_incoming(&sms("Friend", "Meeting moved to 3pm tomorrow, see you there."));
+        let parsed = parse_incoming(&sms(
+            "Friend",
+            "Meeting moved to 3pm tomorrow, see you there.",
+        ));
         assert_eq!(parsed, Err(SmsParseError::NotAPaymentSms));
     }
 

@@ -21,9 +21,7 @@ use chrono::Utc;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use miraclepay_domain::dispute::{
-    validate_open, Dispute, DisputeReason, DisputeStatus,
-};
+use miraclepay_domain::dispute::{validate_open, Dispute, DisputeReason, DisputeStatus};
 use miraclepay_domain::ids::new_id;
 use miraclepay_domain::money::{Currency, Money};
 
@@ -87,9 +85,9 @@ pub async fn open_dispute(
     })?;
 
     let mut disputes = state.disputes.write().await;
-    let already_open = disputes.values().any(|dispute| {
-        dispute.transaction_id == tx.id && !dispute.status.is_terminal()
-    });
+    let already_open = disputes
+        .values()
+        .any(|dispute| dispute.transaction_id == tx.id && !dispute.status.is_terminal());
     if already_open {
         return Err(ApiError::Conflict(format!(
             "transaction {} already has an open dispute",
@@ -117,14 +115,17 @@ pub async fn open_dispute(
         "dispute",
         None,
     );
-    state
-        .emit_webhook(&tx.merchant_id, "dispute.opened", json!({
+    state.emit_webhook(
+        &tx.merchant_id,
+        "dispute.opened",
+        json!({
             "dispute_id": dispute.id,
             "transaction_id": dispute.transaction_id,
             "amount_minor": dispute.amount.amount_minor,
             "currency": dispute.amount.currency.code(),
             "reason": dispute.reason,
-        }));
+        }),
+    );
     Ok((StatusCode::CREATED, Json(dispute)))
 }
 
@@ -149,11 +150,7 @@ pub async fn list_disputes(
 }
 
 /// Load a dispute the caller may see.
-async fn load_visible(
-    state: &AppState,
-    auth: &AuthUser,
-    id: &str,
-) -> Result<Dispute, ApiError> {
+async fn load_visible(state: &AppState, auth: &AuthUser, id: &str) -> Result<Dispute, ApiError> {
     let disputes = state.disputes.read().await;
     let dispute = disputes
         .get(id)
@@ -261,13 +258,16 @@ pub async fn decide_dispute(
         "dispute",
         None,
     );
-    state
-        .emit_webhook(&decided.merchant_id, "dispute.closed", json!({
+    state.emit_webhook(
+        &decided.merchant_id,
+        "dispute.closed",
+        json!({
             "dispute_id": decided.id,
             "transaction_id": decided.transaction_id,
             "status": decided.status,
             "amount_minor": decided.amount.amount_minor,
             "currency": decided.amount.currency.code(),
-        }));
+        }),
+    );
     Ok(Json(decided))
 }

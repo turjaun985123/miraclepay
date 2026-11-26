@@ -52,7 +52,9 @@ pub fn allowed_origins() -> &'static [String] {
 /// Whether `origin` is allowed by `allowlist` (exact match, or a
 /// `*` entry). An empty allowlist allows nothing (CORS off).
 pub fn origin_allowed(allowlist: &[String], origin: &str) -> bool {
-    allowlist.iter().any(|entry| entry == "*" || entry == origin)
+    allowlist
+        .iter()
+        .any(|entry| entry == "*" || entry == origin)
 }
 
 const ALLOW_METHODS: &str = "GET, POST, PUT, PATCH, DELETE, OPTIONS";

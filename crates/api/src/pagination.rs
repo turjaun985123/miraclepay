@@ -107,7 +107,7 @@ fn total_pages_for(total: u64, per_page: u32) -> u32 {
     let per_page = u64::from(per_page);
     // Ceiling division without overflow: (total + per_page - 1) / per_page
     // rewritten using the remainder.
-    let pages = total / per_page + u64::from(total % per_page != 0);
+    let pages = total / per_page + u64::from(!total.is_multiple_of(per_page));
     // A collection addressable through this API cannot realistically
     // exceed u32::MAX pages; saturate instead of wrapping if it did.
     u32::try_from(pages).unwrap_or(u32::MAX)
@@ -306,8 +306,14 @@ mod apply_page_tests {
     #[test]
     fn page_and_per_page_window_the_list() {
         let items: Vec<i32> = (1..=25).collect();
-        assert_eq!(apply_page(items.clone(), Some(2), Some(10)), (11..=20).collect::<Vec<_>>());
-        assert_eq!(apply_page(items.clone(), Some(3), Some(10)), (21..=25).collect::<Vec<_>>());
+        assert_eq!(
+            apply_page(items.clone(), Some(2), Some(10)),
+            (11..=20).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            apply_page(items.clone(), Some(3), Some(10)),
+            (21..=25).collect::<Vec<_>>()
+        );
         assert!(apply_page(items, Some(9), Some(10)).is_empty());
     }
 

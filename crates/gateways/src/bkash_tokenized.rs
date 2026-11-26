@@ -59,13 +59,11 @@ impl BkashTokenizedConfig {
     /// a variable by name.
     pub fn from_lookup(get: impl Fn(&str) -> Option<String>) -> Result<Self, GatewayError> {
         let mut missing: Vec<&str> = Vec::new();
-        let mut take = |name: &'static str| {
-            match get(name) {
-                Some(v) if !v.trim().is_empty() => v,
-                _ => {
-                    missing.push(name);
-                    String::new()
-                }
+        let mut take = |name: &'static str| match get(name) {
+            Some(v) if !v.trim().is_empty() => v,
+            _ => {
+                missing.push(name);
+                String::new()
             }
         };
         let username = take("BKASH_USERNAME");
@@ -78,8 +76,16 @@ impl BkashTokenizedConfig {
                 missing.join(", ")
             )));
         }
-        let sandbox = get("BKASH_SANDBOX").map(|v| v != "0" && v.to_lowercase() != "false").unwrap_or(true);
-        Ok(Self { username, password, app_key, app_secret, sandbox })
+        let sandbox = get("BKASH_SANDBOX")
+            .map(|v| v != "0" && v.to_lowercase() != "false")
+            .unwrap_or(true);
+        Ok(Self {
+            username,
+            password,
+            app_key,
+            app_secret,
+            sandbox,
+        })
     }
 
     /// Build from the process environment.
@@ -89,7 +95,11 @@ impl BkashTokenizedConfig {
 
     /// Base URL for the configured environment.
     pub fn base_url(&self) -> &'static str {
-        if self.sandbox { SANDBOX_BASE } else { LIVE_BASE }
+        if self.sandbox {
+            SANDBOX_BASE
+        } else {
+            LIVE_BASE
+        }
     }
 
     /// Shape the grant-token request.
@@ -246,7 +256,10 @@ mod tests {
         let body: serde_json::Value = serde_json::from_str(&spec.body).unwrap();
         assert_eq!(body["app_key"], "appkey123");
         assert_eq!(body["app_secret"], "secret456");
-        assert!(spec.headers.iter().any(|(k, v)| k == "username" && v == "merchant@example.com"));
+        assert!(spec
+            .headers
+            .iter()
+            .any(|(k, v)| k == "username" && v == "merchant@example.com"));
     }
 
     #[test]
@@ -264,8 +277,14 @@ mod tests {
         assert_eq!(body["currency"], "BDT");
         assert_eq!(body["intent"], "sale");
         assert_eq!(body["merchantInvoiceNumber"], "INV-42");
-        assert!(spec.headers.iter().any(|(k, v)| k == "Authorization" && v == "tok123"));
-        assert!(spec.headers.iter().any(|(k, v)| k == "X-APP-Key" && v == "appkey123"));
+        assert!(spec
+            .headers
+            .iter()
+            .any(|(k, v)| k == "Authorization" && v == "tok123"));
+        assert!(spec
+            .headers
+            .iter()
+            .any(|(k, v)| k == "X-APP-Key" && v == "appkey123"));
     }
 
     #[test]

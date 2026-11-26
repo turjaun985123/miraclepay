@@ -191,11 +191,18 @@ mod tests {
     #[test]
     fn new_id_uses_given_prefix() {
         let id = new_id("xyz");
-        assert!(id.starts_with("xyz_"), "id {id:?} should start with \"xyz_\"");
+        assert!(
+            id.starts_with("xyz_"),
+            "id {id:?} should start with \"xyz_\""
+        );
     }
 
     #[test]
     fn convenience_functions_use_expected_prefixes() {
+        // A table of (generator, prefix) pairs — the fn-pointer
+        // type is the point of the test, so the complexity lint is
+        // allowed here rather than factored away.
+        #[allow(clippy::type_complexity)]
         let cases: [(fn() -> String, &str); 10] = [
             (transaction_id, "txn_"),
             (merchant_id, "mer_"),

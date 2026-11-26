@@ -117,7 +117,11 @@ pub fn assess(input: &RiskInput) -> RiskAssessment {
     } else {
         RiskLevel::Low
     };
-    RiskAssessment { score, level, signals }
+    RiskAssessment {
+        score,
+        level,
+        signals,
+    }
 }
 
 #[cfg(test)]

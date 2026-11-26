@@ -159,11 +159,7 @@ mod tests {
     use super::*;
     use miraclepay_domain::{Currency, Money};
 
-    fn config(
-        enabled: bool,
-        api_key: Option<&str>,
-        api_secret: Option<&str>,
-    ) -> GatewayConfig {
+    fn config(enabled: bool, api_key: Option<&str>, api_secret: Option<&str>) -> GatewayConfig {
         GatewayConfig {
             gateway: GatewayId::Razorpay,
             merchant_number: None,
@@ -207,8 +203,7 @@ mod tests {
         assert!(!key_only.is_configured());
 
         // Symmetrically, the secret without the key is incomplete.
-        let secret_only =
-            RazorpayGateway::with_config(config(true, None, Some("rzp_test_secret")));
+        let secret_only = RazorpayGateway::with_config(config(true, None, Some("rzp_test_secret")));
         assert!(!secret_only.is_configured());
 
         // A complete pair on a disabled config is still not usable.

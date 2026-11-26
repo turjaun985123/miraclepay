@@ -262,9 +262,8 @@ pub async fn create_invoice(
             "discount_minor must not be negative".to_string(),
         ));
     }
-    let currency = Currency::from_code(&req.currency).ok_or_else(|| {
-        ApiError::BadRequest(format!("unsupported currency: {}", req.currency))
-    })?;
+    let currency = Currency::from_code(&req.currency)
+        .ok_or_else(|| ApiError::BadRequest(format!("unsupported currency: {}", req.currency)))?;
 
     let now = Utc::now();
     let id = invoice_id();
@@ -368,7 +367,10 @@ pub async fn get_invoice_pdf(
     Ok((
         StatusCode::OK,
         [
-            (axum::http::header::CONTENT_TYPE, "application/pdf".to_string()),
+            (
+                axum::http::header::CONTENT_TYPE,
+                "application/pdf".to_string(),
+            ),
             (
                 axum::http::header::CONTENT_DISPOSITION,
                 format!("attachment; filename=\"{filename}\""),

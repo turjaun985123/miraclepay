@@ -181,10 +181,9 @@ mod tests {
 
     #[test]
     fn parse_order_response() {
-        let order = parse_order(
-            r#"{"id":"order_ABC","amount":50000,"currency":"INR","status":"created"}"#,
-        )
-        .unwrap();
+        let order =
+            parse_order(r#"{"id":"order_ABC","amount":50000,"currency":"INR","status":"created"}"#)
+                .unwrap();
         assert_eq!(order.id, "order_ABC");
         assert_eq!(order.status, "created");
     }

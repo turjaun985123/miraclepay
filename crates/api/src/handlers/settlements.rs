@@ -67,7 +67,7 @@ pub async fn list_settlements(
             }
         }
         if let Some(status) = query.status.as_deref() {
-            if format!("{:?}", settlement.status).to_ascii_lowercase() != status.to_ascii_lowercase() {
+            if !format!("{:?}", settlement.status).eq_ignore_ascii_case(status) {
                 continue;
             }
         }
@@ -83,7 +83,7 @@ pub async fn list_settlements(
             owned.push(settlement);
         }
     }
-    owned.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    owned.sort_by_key(|a| std::cmp::Reverse(a.created_at));
     let owned = crate::pagination::apply_page(owned, query.page, query.per_page);
     Ok(Json(owned))
 }

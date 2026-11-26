@@ -173,9 +173,7 @@ pub fn validate_merchant_settings(settings: &MerchantSettings) -> Result<(), Vec
 
 /// Whether `value` is a `#rrggbb` hex colour.
 pub fn is_hex_color(value: &str) -> bool {
-    value.len() == 7
-        && value.starts_with('#')
-        && value[1..].chars().all(|c| c.is_ascii_hexdigit())
+    value.len() == 7 && value.starts_with('#') && value[1..].chars().all(|c| c.is_ascii_hexdigit())
 }
 
 #[cfg(test)]
@@ -276,10 +274,7 @@ mod tests {
             settings.settle_threshold_minor = bad;
             let errors = validate_merchant_settings(&settings).expect_err("must fail");
             assert_eq!(errors.len(), 1, "{errors:?}");
-            assert!(
-                errors[0].contains("settle_threshold_minor"),
-                "{errors:?}"
-            );
+            assert!(errors[0].contains("settle_threshold_minor"), "{errors:?}");
         }
     }
 

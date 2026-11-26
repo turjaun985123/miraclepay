@@ -344,18 +344,30 @@ mod tests {
 
     #[test]
     fn amount_tk_without_space() {
-        assert_eq!(extract_amount_minor("Tk1250 debited from your account."), Some(125000));
+        assert_eq!(
+            extract_amount_minor("Tk1250 debited from your account."),
+            Some(125000)
+        );
     }
 
     #[test]
     fn amount_bdt_prefix_and_suffix() {
-        assert_eq!(extract_amount_minor("Payment of BDT 3,000 received."), Some(300000));
-        assert_eq!(extract_amount_minor("Payment of 3,000 BDT received."), Some(300000));
+        assert_eq!(
+            extract_amount_minor("Payment of BDT 3,000 received."),
+            Some(300000)
+        );
+        assert_eq!(
+            extract_amount_minor("Payment of 3,000 BDT received."),
+            Some(300000)
+        );
     }
 
     #[test]
     fn amount_taka_sign() {
-        assert_eq!(extract_amount_minor("You paid ৳850.50 at the shop."), Some(85050));
+        assert_eq!(
+            extract_amount_minor("You paid ৳850.50 at the shop."),
+            Some(85050)
+        );
     }
 
     #[test]
@@ -364,7 +376,10 @@ mod tests {
             extract_amount_minor("Rs 2,499.00 credited to your account."),
             Some(249900)
         );
-        assert_eq!(extract_amount_minor("INR 999 received via UPI."), Some(99900));
+        assert_eq!(
+            extract_amount_minor("INR 999 received via UPI."),
+            Some(99900)
+        );
     }
 
     #[test]
@@ -377,8 +392,14 @@ mod tests {
 
     #[test]
     fn amount_after_amount_label() {
-        assert_eq!(extract_amount_minor("Amount: 750.25 confirmed."), Some(75025));
-        assert_eq!(extract_amount_minor("Transfer Amount Tk 420 done."), Some(42000));
+        assert_eq!(
+            extract_amount_minor("Amount: 750.25 confirmed."),
+            Some(75025)
+        );
+        assert_eq!(
+            extract_amount_minor("Transfer Amount Tk 420 done."),
+            Some(42000)
+        );
     }
 
     #[test]
@@ -389,7 +410,10 @@ mod tests {
 
     #[test]
     fn amount_is_none_without_currency_context() {
-        assert_eq!(extract_amount_minor("Your OTP is 482913. Do not share it."), None);
+        assert_eq!(
+            extract_amount_minor("Your OTP is 482913. Do not share it."),
+            None
+        );
         assert_eq!(extract_amount_minor("Hello, welcome to our service."), None);
         assert_eq!(extract_amount_minor(""), None);
     }
@@ -411,7 +435,10 @@ mod tests {
 
     #[test]
     fn balance_without_currency_marker() {
-        assert_eq!(extract_balance_minor("Your new balance is 640.00."), Some(64000));
+        assert_eq!(
+            extract_balance_minor("Your new balance is 640.00."),
+            Some(64000)
+        );
     }
 
     #[test]

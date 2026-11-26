@@ -89,7 +89,7 @@ pub struct DispatchSummary {
 /// batch; the remaining queued notifications are still attempted.
 pub async fn dispatch_batch(
     transport: &dyn NotificationTransport,
-    queue: &mut Vec<Notification>,
+    queue: &mut [Notification],
 ) -> DispatchSummary {
     let mut summary = DispatchSummary::default();
 
@@ -157,7 +157,7 @@ pub fn payment_completed_notification(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Mutex;
 
     // ---- minimal std-only executor -------------------------------------
     //
@@ -165,14 +165,10 @@ mod tests {
     // poll loop with a no-op waker is enough to drive `dispatch_batch`
     // in tests without adding an async-runtime dependency here.
 
-    struct NoopWaker;
-
-    impl std::task::Wake for NoopWaker {
-        fn wake(self: Arc<Self>) {}
-    }
-
     fn block_on<F: Future>(future: F) -> F::Output {
-        let waker = std::task::Waker::from(Arc::new(NoopWaker));
+        // std::task::Waker::noop (stable since Rust 1.85) replaces
+        // the hand-rolled no-op waker this test used before.
+        let waker = std::task::Waker::noop().clone();
         let mut context = std::task::Context::from_waker(&waker);
         let mut future = Box::pin(future);
         loop {
@@ -215,10 +211,7 @@ mod tests {
             _subject: Option<&'a str>,
             _body: &'a str,
         ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>> {
-            self.attempted
-                .lock()
-                .unwrap()
-                .push(recipient.to_string());
+            self.attempted.lock().unwrap().push(recipient.to_string());
             let should_fail = recipient == self.failing_recipient.as_str();
             Box::pin(async move {
                 if should_fail {
@@ -314,10 +307,7 @@ mod tests {
 
         // Only the queued one is counted or attempted.
         assert_eq!(summary, DispatchSummary { sent: 1, failed: 0 });
-        assert_eq!(
-            transport.attempted(),
-            vec!["good@example.com".to_string()]
-        );
+        assert_eq!(transport.attempted(), vec!["good@example.com".to_string()]);
         // Non-queued records are untouched.
         assert_eq!(queue[0].status, NotificationStatus::Sent);
         assert_eq!(queue[1].status, NotificationStatus::Failed);

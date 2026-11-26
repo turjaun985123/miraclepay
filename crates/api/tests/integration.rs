@@ -225,7 +225,11 @@ async fn configure_bkash(app: &Router, token: &str, merchant_id: &str) {
     .await;
     assert_eq!(status, StatusCode::OK, "configure bkash: {body}");
     assert_eq!(body["gateway"], json!("bkash"));
-    assert_eq!(body["configured"], json!(true), "bkash must be configured: {body}");
+    assert_eq!(
+        body["configured"],
+        json!(true),
+        "bkash must be configured: {body}"
+    );
 }
 
 /// Create a bKash payment of [`AMOUNT_MINOR`] for the merchant;
@@ -291,8 +295,7 @@ async fn health_reports_ok_and_version_0_0_1() {
 #[tokio::test]
 async fn register_login_merchant_gateway_payment_flow() {
     let app = app();
-    let (token, merchant_id) =
-        setup_merchant_with_bkash(&app, "flow-owner@example.com").await;
+    let (token, merchant_id) = setup_merchant_with_bkash(&app, "flow-owner@example.com").await;
 
     let (transaction_id, body) = create_bkash_payment(&app, &token, &merchant_id).await;
 
@@ -328,8 +331,7 @@ async fn register_login_merchant_gateway_payment_flow() {
 #[tokio::test]
 async fn api_key_device_sms_matches_pending_payment() {
     let app = app();
-    let (token, merchant_id) =
-        setup_merchant_with_bkash(&app, "sms-owner@example.com").await;
+    let (token, merchant_id) = setup_merchant_with_bkash(&app, "sms-owner@example.com").await;
     let (transaction_id, _) = create_bkash_payment(&app, &token, &merchant_id).await;
 
     // Create an API key with the payments_write scope — the scope
@@ -406,7 +408,10 @@ async fn api_key_device_sms_matches_pending_payment() {
     assert_eq!(status, StatusCode::OK, "get payment: {body}");
     let tx_status = body["transaction"]["status"].as_str().unwrap_or_default();
     if outcome == "verified" {
-        assert_eq!(tx_status, "completed", "verified sms must complete the payment");
+        assert_eq!(
+            tx_status, "completed",
+            "verified sms must complete the payment"
+        );
     } else {
         assert_eq!(
             tx_status, "processing",
@@ -423,8 +428,11 @@ async fn api_key_device_sms_matches_pending_payment() {
 async fn unauthenticated_merchants_list_is_401() {
     let app = app();
 
-    let (status, body) =
-        send(&app, request(Method::GET, "/api/v1/merchants", None, None, None)).await;
+    let (status, body) = send(
+        &app,
+        request(Method::GET, "/api/v1/merchants", None, None, None),
+    )
+    .await;
 
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     assert_eq!(body["error"], json!("unauthorized"));

@@ -76,33 +76,33 @@ const IN_PK_SENDER_IDS: &[&str] = &[
 /// `"AD-ICICIB-S"`, …), so a bank is recognised by a distinctive
 /// fragment of its header or by its name appearing in the header.
 const INDIAN_BANK_SENDER_MARKERS: &[&str] = &[
-    "sbi",     // State Bank of India (SBIINB, SBIBNK, …)
-    "hdfc",    // HDFC Bank
-    "icici",   // ICICI Bank
-    "axis",    // Axis Bank
-    "kotak",   // Kotak Mahindra Bank
-    "pnb",     // Punjab National Bank
-    "baroda",  // Bank of Baroda
-    "canara",  // Canara Bank
-    "canbnk",  // Canara Bank header fragment
-    "idbi",    // IDBI Bank
-    "yesbnk",  // Yes Bank
+    "sbi",    // State Bank of India (SBIINB, SBIBNK, …)
+    "hdfc",   // HDFC Bank
+    "icici",  // ICICI Bank
+    "axis",   // Axis Bank
+    "kotak",  // Kotak Mahindra Bank
+    "pnb",    // Punjab National Bank
+    "baroda", // Bank of Baroda
+    "canara", // Canara Bank
+    "canbnk", // Canara Bank header fragment
+    "idbi",   // IDBI Bank
+    "yesbnk", // Yes Bank
     "yes bank",
     "federal", // Federal Bank
     "fedbnk",  // Federal Bank header fragment
     "iob",     // Indian Overseas Bank
     "central bank",
-    "centbk",  // Central Bank of India header fragment
+    "centbk", // Central Bank of India header fragment
     "union bank",
-    "uboibk",  // Union Bank of India header fragment
-    "bobinb",  // Bank of Baroda header fragment
-    "mahabk",  // Bank of Maharashtra header fragment
-    "psbibk",  // Punjab & Sind Bank header fragment
+    "uboibk", // Union Bank of India header fragment
+    "bobinb", // Bank of Baroda header fragment
+    "mahabk", // Bank of Maharashtra header fragment
+    "psbibk", // Punjab & Sind Bank header fragment
     "indian bank",
-    "idfc",    // IDFC First Bank
-    "rblbnk",  // RBL Bank
-    "bandhan", // Bandhan Bank
-    "aubank",  // AU Small Finance Bank
+    "idfc",      // IDFC First Bank
+    "rblbnk",    // RBL Bank
+    "bandhan",   // Bandhan Bank
+    "aubank",    // AU Small Finance Bank
     "paytmbank", // Paytm Payments Bank — a bank sender, not the wallet brand alone
 ];
 
@@ -159,9 +159,7 @@ pub fn in_pk_sender_ids() -> &'static [&'static str] {
 /// which are this module's neighbours but not its region.
 pub fn region_of(gateway: GatewayId) -> Option<&'static str> {
     match gateway {
-        GatewayId::Upi | GatewayId::Paytm | GatewayId::Phonepe | GatewayId::Razorpay => {
-            Some("IN")
-        }
+        GatewayId::Upi | GatewayId::Paytm | GatewayId::Phonepe | GatewayId::Razorpay => Some("IN"),
         GatewayId::Easypaisa | GatewayId::Jazzcash => Some("PK"),
         _ => None,
     }
@@ -237,9 +235,7 @@ pub fn detect_in_pk_gateway(sender_id: &str, body: &str) -> Option<GatewayId> {
     // the known-bank list still self-identify with a UPI reference
     // label ("UPI Ref 123456789012") — that label is UPI-specific,
     // so it identifies the gateway without the sender list.
-    if (contains(&text, "upi ref") || contains(&text, "upi reference"))
-        && mentions_payment(&text)
-    {
+    if (contains(&text, "upi ref") || contains(&text, "upi reference")) && mentions_payment(&text) {
         return Some(GatewayId::Upi);
     }
 
@@ -426,10 +422,7 @@ mod tests {
     #[test]
     fn detects_easypaisa_from_body_case_insensitively() {
         assert_eq!(
-            detect_in_pk_gateway(
-                "3737",
-                "EASYPAISA: payment of PKR 2,500 sent successfully."
-            ),
+            detect_in_pk_gateway("3737", "EASYPAISA: payment of PKR 2,500 sent successfully."),
             Some(GatewayId::Easypaisa)
         );
     }
@@ -578,7 +571,14 @@ mod tests {
     fn sender_ids_cover_brands_and_banks() {
         let ids = in_pk_sender_ids();
         assert!(!ids.is_empty());
-        for expected in ["Paytm", "PhonePe", "Razorpay", "Easypaisa", "JazzCash", "HDFCBK"] {
+        for expected in [
+            "Paytm",
+            "PhonePe",
+            "Razorpay",
+            "Easypaisa",
+            "JazzCash",
+            "HDFCBK",
+        ] {
             assert!(ids.contains(&expected), "missing sender id {expected}");
         }
         // No Bangladesh sender belongs in the IN/PK list.

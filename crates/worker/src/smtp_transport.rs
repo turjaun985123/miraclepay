@@ -124,12 +124,24 @@ fn base64_encode(data: &[u8]) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::new();
     for chunk in data.chunks(3) {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
         let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
         out.push(ALPHABET[(n >> 18) as usize & 63] as char);
         out.push(ALPHABET[(n >> 12) as usize & 63] as char);
-        out.push(if chunk.len() > 1 { ALPHABET[(n >> 6) as usize & 63] as char } else { '=' });
-        out.push(if chunk.len() > 2 { ALPHABET[n as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 1 {
+            ALPHABET[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            ALPHABET[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     out
 }
@@ -239,11 +251,11 @@ impl NotificationTransport for SmtpTransport {
     ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>> {
         Box::pin(async move {
             if channel != NotificationChannel::Email {
-                return Err(format!(
-                    "SMTP transport cannot deliver channel {channel:?}"
-                ));
+                return Err(format!("SMTP transport cannot deliver channel {channel:?}"));
             }
-            let date = chrono::Utc::now().format("%a, %d %b %Y %H:%M:%S +0000").to_string();
+            let date = chrono::Utc::now()
+                .format("%a, %d %b %Y %H:%M:%S +0000")
+                .to_string();
             let message = render_message(
                 &self.config,
                 recipient,
@@ -259,7 +271,6 @@ impl NotificationTransport for SmtpTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::io::AsyncBufReadExt as _;
     use tokio::net::TcpListener;
 
     fn lookup<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
@@ -286,8 +297,14 @@ mod tests {
             ("SMTP_FROM", "pay@example.com"),
         ]))
         .unwrap();
-        let err = render_message(&config, "victim@example.com\r\nBcc: all@example.com", "Hi", "body", "date")
-            .unwrap_err();
+        let err = render_message(
+            &config,
+            "victim@example.com\r\nBcc: all@example.com",
+            "Hi",
+            "body",
+            "date",
+        )
+        .unwrap_err();
         assert!(err.contains("recipient"));
     }
 
@@ -298,7 +315,10 @@ mod tests {
     }
 
     /// A fake SMTP server that plays the dialogue and captures DATA.
-    async fn fake_server(listener: TcpListener, captured: std::sync::Arc<std::sync::Mutex<String>>) {
+    async fn fake_server(
+        listener: TcpListener,
+        captured: std::sync::Arc<std::sync::Mutex<String>>,
+    ) {
         let (stream, _) = listener.accept().await.unwrap();
         let (read_half, mut write_half) = stream.into_split();
         let mut reader = BufReader::new(read_half);
@@ -363,7 +383,10 @@ mod tests {
         let data = captured.lock().unwrap().clone();
         assert!(data.contains("Subject: Invoice INV-1"), "captured: {data}");
         assert!(data.contains("You owe BDT 500.00."), "captured: {data}");
-        assert!(data.contains("To: customer@example.com"), "captured: {data}");
+        assert!(
+            data.contains("To: customer@example.com"),
+            "captured: {data}"
+        );
     }
 
     #[tokio::test]

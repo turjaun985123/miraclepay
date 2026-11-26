@@ -147,13 +147,13 @@ pub async fn list_events(
             query
                 .merchant_id
                 .as_deref()
-                .map_or(true, |merchant_id| event.merchant_id == merchant_id)
+                .is_none_or(|merchant_id| event.merchant_id == merchant_id)
         })
         .cloned()
         .collect();
 
     // Newest first, capped so one response stays bounded.
-    events.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    events.sort_by_key(|a| std::cmp::Reverse(a.created_at));
     if query.page.is_some() || query.per_page.is_some() {
         events = crate::pagination::apply_page(events, query.page, query.per_page);
     } else {
@@ -198,7 +198,7 @@ pub async fn list_deliveries(
             query
                 .event_id
                 .as_deref()
-                .map_or(true, |event_id| delivery.event_id == event_id)
+                .is_none_or(|event_id| delivery.event_id == event_id)
         })
         .cloned()
         .collect();
@@ -243,9 +243,7 @@ pub async fn redeliver(
         .values()
         .find(|merchant| merchant.id == event.merchant_id)
         .cloned()
-        .ok_or_else(|| {
-            ApiError::NotFound(format!("merchant {} not found", event.merchant_id))
-        })?;
+        .ok_or_else(|| ApiError::NotFound(format!("merchant {} not found", event.merchant_id)))?;
 
     if !is_admin(&auth) && merchant.owner_user_id != auth.user_id {
         return Err(ApiError::Forbidden(

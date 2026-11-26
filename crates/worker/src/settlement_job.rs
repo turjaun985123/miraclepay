@@ -93,13 +93,11 @@ pub fn collect_candidates(
         }
 
         match candidates.iter_mut().find(|candidate| {
-            candidate.merchant_id == tx.merchant_id
-                && candidate.currency == tx.amount.currency
+            candidate.merchant_id == tx.merchant_id && candidate.currency == tx.amount.currency
         }) {
             Some(candidate) => {
-                candidate.gross_minor = candidate
-                    .gross_minor
-                    .saturating_add(tx.amount.amount_minor);
+                candidate.gross_minor =
+                    candidate.gross_minor.saturating_add(tx.amount.amount_minor);
             }
             None => candidates.push(SettlementCandidate {
                 merchant_id: tx.merchant_id.clone(),
@@ -177,10 +175,7 @@ pub fn build_settlements(
 /// `OnHold`): paying an already-paid settlement again would pay the
 /// merchant twice, and a failed or held settlement must be resolved
 /// through its own path first. On error the settlement is unchanged.
-pub fn mark_paid(
-    settlement: &mut Settlement,
-    payout_reference: &str,
-) -> Result<(), DomainError> {
+pub fn mark_paid(settlement: &mut Settlement, payout_reference: &str) -> Result<(), DomainError> {
     match settlement.status {
         SettlementStatus::Pending | SettlementStatus::Processing => {
             settlement.status = SettlementStatus::Paid;
@@ -258,7 +253,14 @@ mod tests {
         currency: Currency,
         created_at: DateTime<Utc>,
     ) -> Transaction {
-        tx(id, merchant_id, amount_minor, currency, TxStatus::Completed, created_at)
+        tx(
+            id,
+            merchant_id,
+            amount_minor,
+            currency,
+            TxStatus::Completed,
+            created_at,
+        )
     }
 
     fn candidate(merchant_id: &str, gross_minor: i64, currency: Currency) -> SettlementCandidate {
@@ -285,8 +287,7 @@ mod tests {
             completed("tx_5", "mch_b", 3_500, Currency::BDT, at(300)),
         ];
 
-        let candidates =
-            collect_candidates(&txs, &no_settled(), period_start(), period_end());
+        let candidates = collect_candidates(&txs, &no_settled(), period_start(), period_end());
 
         // Sorted by merchant, then currency code: BDT before USD.
         assert_eq!(
@@ -302,10 +303,38 @@ mod tests {
     #[test]
     fn non_completed_transactions_never_contribute() {
         let txs = vec![
-            tx("tx_1", "mch_a", 10_000, Currency::BDT, TxStatus::Pending, at(60)),
-            tx("tx_2", "mch_a", 10_000, Currency::BDT, TxStatus::Processing, at(60)),
-            tx("tx_3", "mch_a", 10_000, Currency::BDT, TxStatus::Failed, at(60)),
-            tx("tx_4", "mch_a", 10_000, Currency::BDT, TxStatus::Refunded, at(60)),
+            tx(
+                "tx_1",
+                "mch_a",
+                10_000,
+                Currency::BDT,
+                TxStatus::Pending,
+                at(60),
+            ),
+            tx(
+                "tx_2",
+                "mch_a",
+                10_000,
+                Currency::BDT,
+                TxStatus::Processing,
+                at(60),
+            ),
+            tx(
+                "tx_3",
+                "mch_a",
+                10_000,
+                Currency::BDT,
+                TxStatus::Failed,
+                at(60),
+            ),
+            tx(
+                "tx_4",
+                "mch_a",
+                10_000,
+                Currency::BDT,
+                TxStatus::Refunded,
+                at(60),
+            ),
             tx(
                 "tx_5",
                 "mch_a",
@@ -314,11 +343,17 @@ mod tests {
                 TxStatus::PartiallyRefunded,
                 at(60),
             ),
-            tx("tx_6", "mch_a", 10_000, Currency::BDT, TxStatus::Expired, at(60)),
+            tx(
+                "tx_6",
+                "mch_a",
+                10_000,
+                Currency::BDT,
+                TxStatus::Expired,
+                at(60),
+            ),
         ];
 
-        assert!(collect_candidates(&txs, &no_settled(), period_start(), period_end())
-            .is_empty());
+        assert!(collect_candidates(&txs, &no_settled(), period_start(), period_end()).is_empty());
     }
 
     #[test]
@@ -330,8 +365,7 @@ mod tests {
             completed("tx_4", "mch_ok", 1_000, Currency::BDT, at(240)),
         ];
 
-        let candidates =
-            collect_candidates(&txs, &no_settled(), period_start(), period_end());
+        let candidates = collect_candidates(&txs, &no_settled(), period_start(), period_end());
 
         assert_eq!(candidates, vec![candidate("mch_ok", 1_000, Currency::BDT)]);
     }
@@ -359,8 +393,7 @@ mod tests {
             completed("tx_after", "mch_a", 16_000, Currency::BDT, at(90_000)),
         ];
 
-        let candidates =
-            collect_candidates(&txs, &no_settled(), period_start(), period_end());
+        let candidates = collect_candidates(&txs, &no_settled(), period_start(), period_end());
 
         assert_eq!(
             candidates,
@@ -386,16 +419,12 @@ mod tests {
 
         // tx_1 is skipped so mch_a keeps only tx_2; mch_b's only
         // transaction was already settled, so mch_b disappears.
-        assert_eq!(
-            candidates,
-            vec![candidate("mch_a", 5_000, Currency::BDT)]
-        );
+        assert_eq!(candidates, vec![candidate("mch_a", 5_000, Currency::BDT)]);
     }
 
     #[test]
     fn empty_input_collects_nothing() {
-        assert!(collect_candidates(&[], &no_settled(), period_start(), period_end())
-            .is_empty());
+        assert!(collect_candidates(&[], &no_settled(), period_start(), period_end()).is_empty());
     }
 
     // ---- build_settlements -------------------------------------------
@@ -404,13 +433,8 @@ mod tests {
     fn build_applies_fee_at_250_bps_and_starts_pending_manual() {
         let candidates = vec![candidate("mch_a", 100_000, Currency::BDT)];
 
-        let settlements = build_settlements(
-            &candidates,
-            250,
-            period_start(),
-            period_end(),
-            "stl_run1",
-        );
+        let settlements =
+            build_settlements(&candidates, 250, period_start(), period_end(), "stl_run1");
 
         assert_eq!(settlements.len(), 1);
         let s = &settlements[0];
@@ -434,13 +458,8 @@ mod tests {
             candidate("mch_b", 30_000, Currency::BDT),
         ];
 
-        let settlements = build_settlements(
-            &candidates,
-            250,
-            period_start(),
-            period_end(),
-            "stl_run1",
-        );
+        let settlements =
+            build_settlements(&candidates, 250, period_start(), period_end(), "stl_run1");
 
         let ids: Vec<&str> = settlements.iter().map(|s| s.id.as_str()).collect();
         assert_eq!(
@@ -457,8 +476,7 @@ mod tests {
 
     #[test]
     fn build_with_no_candidates_builds_nothing() {
-        assert!(build_settlements(&[], 250, period_start(), period_end(), "stl_x")
-            .is_empty());
+        assert!(build_settlements(&[], 250, period_start(), period_end(), "stl_x").is_empty());
     }
 
     // ---- mark_paid -----------------------------------------------------
@@ -589,8 +607,7 @@ mod tests {
             completed("tx_3", "mch_b", 10_000, Currency::USD, at(180)),
         ];
 
-        let candidates =
-            collect_candidates(&txs, &no_settled(), period_start(), period_end());
+        let candidates = collect_candidates(&txs, &no_settled(), period_start(), period_end());
         let mut settlements =
             build_settlements(&candidates, 250, period_start(), period_end(), "stl_e2e");
 

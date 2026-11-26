@@ -26,8 +26,10 @@ use crate::money::{Currency, Money};
 /// Lifecycle state of an [`Invoice`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum InvoiceStatus {
     /// Created but not yet issued to the customer.
+    #[default]
     Draft,
     /// Issued to the customer and awaiting payment.
     Sent,
@@ -51,12 +53,6 @@ impl InvoiceStatus {
     }
 }
 
-impl Default for InvoiceStatus {
-    fn default() -> Self {
-        InvoiceStatus::Draft
-    }
-}
-
 /// A single line on an [`Invoice`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InvoiceItem {
@@ -70,11 +66,7 @@ pub struct InvoiceItem {
 
 impl InvoiceItem {
     /// Create a new line item.
-    pub fn new(
-        description: impl Into<String>,
-        quantity: u32,
-        unit_amount_minor: i64,
-    ) -> Self {
+    pub fn new(description: impl Into<String>, quantity: u32, unit_amount_minor: i64) -> Self {
         Self {
             description: description.into(),
             quantity,

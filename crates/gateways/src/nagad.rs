@@ -114,9 +114,7 @@ impl PaymentGateway for NagadGateway {
     }
 
     async fn refund(&self, _req: &RefundRequest) -> Result<RefundResult, GatewayError> {
-        Err(GatewayError::Unsupported(
-            "nagad refunds are manual".into(),
-        ))
+        Err(GatewayError::Unsupported("nagad refunds are manual".into()))
     }
 }
 

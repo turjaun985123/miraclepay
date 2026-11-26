@@ -25,15 +25,37 @@ jobs:
 
       - name: Install the stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - name: Cache Cargo dependencies and build artifacts
         uses: Swatinem/rust-cache@v2
+
+      # Wave 49: formatting + lints are release gates, not advice.
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run clippy (warnings denied)
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Run the workspace test suite
         run: cargo test --workspace
 
       - name: Build the workspace
         run: cargo build --workspace
+
+  # Wave 49: dependency audit against the RustSec advisory DB.
+  audit:
+    name: Dependency audit (RustSec)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Run cargo audit
+        uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   frontend:
     name: Frontend (Astro build)

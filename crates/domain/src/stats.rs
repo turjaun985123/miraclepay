@@ -17,9 +17,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::money::Currency;
-use crate::refund::{Refund, RefundStatus};
-use crate::settlement::{Settlement, SettlementStatus};
-use crate::transaction::{Transaction, TxStatus};
+use crate::refund::RefundStatus;
+use crate::settlement::SettlementStatus;
+use crate::transaction::TxStatus;
 
 /// Aggregated transaction statistics for a dashboard, in one currency.
 ///
@@ -80,14 +80,12 @@ pub fn compute_stats(
             TxStatus::Completed => {
                 completed_transactions += 1;
                 if tx.amount.currency == currency {
-                    gross_volume_minor =
-                        gross_volume_minor.saturating_add(tx.amount.amount_minor);
+                    gross_volume_minor = gross_volume_minor.saturating_add(tx.amount.amount_minor);
                 }
             }
             TxStatus::PartiallyRefunded => {
                 if tx.amount.currency == currency {
-                    gross_volume_minor =
-                        gross_volume_minor.saturating_add(tx.amount.amount_minor);
+                    gross_volume_minor = gross_volume_minor.saturating_add(tx.amount.amount_minor);
                 }
             }
             TxStatus::Pending => pending_transactions += 1,
@@ -220,13 +218,22 @@ pub fn compute_balance(
 mod tests {
     use super::*;
     use crate::money::Money;
+    use crate::refund::Refund;
+    use crate::settlement::Settlement;
+    use crate::transaction::Transaction;
     use chrono::{DateTime, Utc};
 
     fn at(secs: i64) -> DateTime<Utc> {
         DateTime::<Utc>::from_timestamp(secs, 0).unwrap()
     }
 
-    fn tx(id: &str, merchant_id: &str, amount_minor: i64, currency: Currency, status: TxStatus) -> Transaction {
+    fn tx(
+        id: &str,
+        merchant_id: &str,
+        amount_minor: i64,
+        currency: Currency,
+        status: TxStatus,
+    ) -> Transaction {
         Transaction {
             id: id.to_string(),
             merchant_id: merchant_id.to_string(),
@@ -244,7 +251,13 @@ mod tests {
         }
     }
 
-    fn refund(id: &str, merchant_id: &str, amount_minor: i64, currency: Currency, status: RefundStatus) -> Refund {
+    fn refund(
+        id: &str,
+        merchant_id: &str,
+        amount_minor: i64,
+        currency: Currency,
+        status: RefundStatus,
+    ) -> Refund {
         Refund {
             id: id.to_string(),
             transaction_id: "tx_1".to_string(),
@@ -315,7 +328,13 @@ mod tests {
     fn gross_counts_completed_and_partially_refunded_in_currency_only() {
         let txs = vec![
             tx("1", "mch_1", 10_000, Currency::BDT, TxStatus::Completed),
-            tx("2", "mch_1", 5_000, Currency::BDT, TxStatus::PartiallyRefunded),
+            tx(
+                "2",
+                "mch_1",
+                5_000,
+                Currency::BDT,
+                TxStatus::PartiallyRefunded,
+            ),
             // Wrong currency: counted in totals, excluded from gross.
             tx("3", "mch_1", 7_000, Currency::USD, TxStatus::Completed),
             // Not captured statuses: excluded from gross.
@@ -358,7 +377,10 @@ mod tests {
             tx("5", "mch_1", 100, Currency::BDT, TxStatus::Pending),
         ];
         // 3 / (3 + 1) = 75% = 7_500 bps.
-        assert_eq!(compute_stats(&txs, &[], Currency::BDT).success_rate_bps, 7_500);
+        assert_eq!(
+            compute_stats(&txs, &[], Currency::BDT).success_rate_bps,
+            7_500
+        );
     }
 
     #[test]
@@ -375,7 +397,10 @@ mod tests {
         );
 
         let all_failed = vec![tx("1", "mch_1", 100, Currency::BDT, TxStatus::Failed)];
-        assert_eq!(compute_stats(&all_failed, &[], Currency::BDT).success_rate_bps, 0);
+        assert_eq!(
+            compute_stats(&all_failed, &[], Currency::BDT).success_rate_bps,
+            0
+        );
 
         let all_completed = vec![tx("1", "mch_1", 100, Currency::BDT, TxStatus::Completed)];
         assert_eq!(
@@ -385,7 +410,10 @@ mod tests {
 
         // No decided transactions at all: 0, not a division by zero.
         let only_pending = vec![tx("1", "mch_1", 100, Currency::BDT, TxStatus::Pending)];
-        assert_eq!(compute_stats(&only_pending, &[], Currency::BDT).success_rate_bps, 0);
+        assert_eq!(
+            compute_stats(&only_pending, &[], Currency::BDT).success_rate_bps,
+            0
+        );
     }
 
     #[test]
@@ -393,7 +421,10 @@ mod tests {
         let txs = vec![tx("1", "mch_1", 250, Currency::EUR, TxStatus::Completed)];
         let stats = compute_stats(&txs, &[], Currency::EUR);
         let json = serde_json::to_string(&stats).unwrap();
-        assert_eq!(serde_json::from_str::<DashboardStats>(&json).unwrap(), stats);
+        assert_eq!(
+            serde_json::from_str::<DashboardStats>(&json).unwrap(),
+            stats
+        );
     }
 
     // ---- compute_balance --------------------------------------------
@@ -413,9 +444,23 @@ mod tests {
         ];
         let settlements = vec![
             // Net 4_000 - 100 = 3_900 already paid out.
-            settlement("s1", "mch_1", 4_000, 100, Currency::BDT, SettlementStatus::Paid),
+            settlement(
+                "s1",
+                "mch_1",
+                4_000,
+                100,
+                Currency::BDT,
+                SettlementStatus::Paid,
+            ),
             // Not paid: must not reduce the balance.
-            settlement("s2", "mch_1", 8_000, 0, Currency::BDT, SettlementStatus::Pending),
+            settlement(
+                "s2",
+                "mch_1",
+                8_000,
+                0,
+                Currency::BDT,
+                SettlementStatus::Pending,
+            ),
         ];
         let balance = compute_balance("mch_1", &txs, &refunds, &settlements, Currency::BDT);
         assert_eq!(balance.merchant_id, "mch_1");
@@ -435,12 +480,38 @@ mod tests {
             tx("5", "mch_1", 99_000, Currency::USD, TxStatus::Pending),
         ];
         let refunds = vec![
-            refund("r1", "mch_2", 99_000, Currency::BDT, RefundStatus::Succeeded),
-            refund("r2", "mch_1", 99_000, Currency::USD, RefundStatus::Succeeded),
+            refund(
+                "r1",
+                "mch_2",
+                99_000,
+                Currency::BDT,
+                RefundStatus::Succeeded,
+            ),
+            refund(
+                "r2",
+                "mch_1",
+                99_000,
+                Currency::USD,
+                RefundStatus::Succeeded,
+            ),
         ];
         let settlements = vec![
-            settlement("s1", "mch_2", 99_000, 0, Currency::BDT, SettlementStatus::Paid),
-            settlement("s2", "mch_1", 99_000, 0, Currency::USD, SettlementStatus::Paid),
+            settlement(
+                "s1",
+                "mch_2",
+                99_000,
+                0,
+                Currency::BDT,
+                SettlementStatus::Paid,
+            ),
+            settlement(
+                "s2",
+                "mch_1",
+                99_000,
+                0,
+                Currency::USD,
+                SettlementStatus::Paid,
+            ),
         ];
         let balance = compute_balance("mch_1", &txs, &refunds, &settlements, Currency::BDT);
         assert_eq!(balance.available_minor, 10_000);
@@ -459,7 +530,13 @@ mod tests {
     #[test]
     fn balance_can_go_negative_when_refunds_exceed_completed_volume() {
         let txs = vec![tx("1", "mch_1", 1_000, Currency::BDT, TxStatus::Completed)];
-        let refunds = vec![refund("r1", "mch_1", 1_500, Currency::BDT, RefundStatus::Succeeded)];
+        let refunds = vec![refund(
+            "r1",
+            "mch_1",
+            1_500,
+            Currency::BDT,
+            RefundStatus::Succeeded,
+        )];
         let balance = compute_balance("mch_1", &txs, &refunds, &[], Currency::BDT);
         assert_eq!(balance.available_minor, -500);
     }
@@ -468,6 +545,9 @@ mod tests {
     fn balance_round_trips_through_serde_json() {
         let balance = compute_balance("mch_1", &[], &[], &[], Currency::USD);
         let json = serde_json::to_string(&balance).unwrap();
-        assert_eq!(serde_json::from_str::<MerchantBalance>(&json).unwrap(), balance);
+        assert_eq!(
+            serde_json::from_str::<MerchantBalance>(&json).unwrap(),
+            balance
+        );
     }
 }

@@ -107,9 +107,7 @@ impl PaymentGateway for PaytmGateway {
     }
 
     async fn refund(&self, _req: &RefundRequest) -> Result<RefundResult, GatewayError> {
-        Err(GatewayError::Unsupported(
-            "paytm refunds are manual".into(),
-        ))
+        Err(GatewayError::Unsupported("paytm refunds are manual".into()))
     }
 }
 

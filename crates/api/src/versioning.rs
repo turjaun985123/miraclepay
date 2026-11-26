@@ -79,11 +79,9 @@ pub async fn api_fallback(request: Request) -> Response {
             })),
         )
             .into_response(),
-        FallbackKind::NotFound => (
-            StatusCode::NOT_FOUND,
-            Json(json!({ "error": "not_found" })),
-        )
-            .into_response(),
+        FallbackKind::NotFound => {
+            (StatusCode::NOT_FOUND, Json(json!({ "error": "not_found" }))).into_response()
+        }
     }
 }
 
@@ -105,8 +103,14 @@ mod tests {
 
     #[test]
     fn unsupported_versions_are_classified() {
-        assert_eq!(classify_path("/api/v2/merchants"), FallbackKind::UnsupportedVersion);
-        assert_eq!(classify_path("/api/v99/x"), FallbackKind::UnsupportedVersion);
+        assert_eq!(
+            classify_path("/api/v2/merchants"),
+            FallbackKind::UnsupportedVersion
+        );
+        assert_eq!(
+            classify_path("/api/v99/x"),
+            FallbackKind::UnsupportedVersion
+        );
         assert_eq!(classify_path("/api/v1/merchants"), FallbackKind::NotFound);
         assert_eq!(classify_path("/api/v1/typo"), FallbackKind::NotFound);
         assert_eq!(classify_path("/api/versions"), FallbackKind::NotFound);

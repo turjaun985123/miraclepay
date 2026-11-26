@@ -35,11 +35,31 @@ pub struct FxRate {
 /// 1 BDT ≈ 0.00837 USD, 0.701 INR, 2.33 PKR, 0.00771 EUR.
 pub fn default_rates() -> Vec<FxRate> {
     vec![
-        FxRate { currency: Currency::BDT, num: 1, den: 1 },
-        FxRate { currency: Currency::USD, num: 837, den: 100_000 },
-        FxRate { currency: Currency::INR, num: 701, den: 1_000 },
-        FxRate { currency: Currency::PKR, num: 233, den: 100 },
-        FxRate { currency: Currency::EUR, num: 771, den: 100_000 },
+        FxRate {
+            currency: Currency::BDT,
+            num: 1,
+            den: 1,
+        },
+        FxRate {
+            currency: Currency::USD,
+            num: 837,
+            den: 100_000,
+        },
+        FxRate {
+            currency: Currency::INR,
+            num: 701,
+            den: 1_000,
+        },
+        FxRate {
+            currency: Currency::PKR,
+            num: 233,
+            den: 100,
+        },
+        FxRate {
+            currency: Currency::EUR,
+            num: 771,
+            den: 100_000,
+        },
     ]
 }
 
@@ -64,8 +84,7 @@ pub fn convert(money: Money, target: Currency, rates: &[FxRate]) -> Result<Money
     if money.currency == target {
         return Ok(money);
     }
-    let from = rate_of(rates, money.currency)
-        .ok_or(FxError::MissingRate(money.currency.code()))?;
+    let from = rate_of(rates, money.currency).ok_or(FxError::MissingRate(money.currency.code()))?;
     let to = rate_of(rates, target).ok_or(FxError::MissingRate(target.code()))?;
     if from.num == 0 || from.den == 0 || to.num == 0 || to.den == 0 {
         return Err(FxError::InvalidRate(target.code()));
@@ -126,7 +145,11 @@ mod tests {
 
     #[test]
     fn missing_rate_is_an_error_not_a_guess() {
-        let rates = vec![FxRate { currency: Currency::BDT, num: 1, den: 1 }];
+        let rates = vec![FxRate {
+            currency: Currency::BDT,
+            num: 1,
+            den: 1,
+        }];
         let err = convert(Money::new(100, Currency::EUR), Currency::BDT, &rates).unwrap_err();
         assert_eq!(err, FxError::MissingRate("EUR"));
     }
@@ -135,8 +158,16 @@ mod tests {
     fn rounding_is_half_up() {
         // Custom table: 1 BDT = 0.5 XYZ-like USD units → 1 minor → 0.5 → 1.
         let rates = vec![
-            FxRate { currency: Currency::BDT, num: 1, den: 1 },
-            FxRate { currency: Currency::USD, num: 1, den: 2 },
+            FxRate {
+                currency: Currency::BDT,
+                num: 1,
+                den: 1,
+            },
+            FxRate {
+                currency: Currency::USD,
+                num: 1,
+                den: 2,
+            },
         ];
         let out = convert(Money::new(1, Currency::BDT), Currency::USD, &rates).unwrap();
         assert_eq!(out.amount_minor, 1);

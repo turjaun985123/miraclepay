@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::traits::PaymentGateway;
-use crate::types::{GatewayConfig, GatewayId};
+use crate::types::GatewayId;
 
 /// A collection of payment gateway adapters, keyed by gateway id.
 pub struct GatewayRegistry {
@@ -111,28 +111,26 @@ impl GatewayRegistry {
                 GatewayId::Rocket => {
                     Arc::new(crate::rocket::RocketGateway::with_config(config.clone()))
                 }
-                GatewayId::Upay => {
-                    Arc::new(crate::upay::UpayGateway::with_config(config.clone()))
-                }
-                GatewayId::Surecash => Arc::new(
-                    crate::surecash::SurecashGateway::with_config(config.clone()),
-                ),
+                GatewayId::Upay => Arc::new(crate::upay::UpayGateway::with_config(config.clone())),
+                GatewayId::Surecash => Arc::new(crate::surecash::SurecashGateway::with_config(
+                    config.clone(),
+                )),
                 GatewayId::Upi => Arc::new(crate::upi::UpiGateway::with_config(config.clone())),
                 GatewayId::Paytm => {
                     Arc::new(crate::paytm::PaytmGateway::with_config(config.clone()))
                 }
-                GatewayId::Phonepe => Arc::new(
-                    crate::phonepe::PhonepeGateway::with_config(config.clone()),
-                ),
-                GatewayId::Razorpay => Arc::new(
-                    crate::razorpay::RazorpayGateway::with_config(config.clone()),
-                ),
-                GatewayId::Easypaisa => Arc::new(
-                    crate::easypaisa::EasypaisaGateway::with_config(config.clone()),
-                ),
-                GatewayId::Jazzcash => Arc::new(
-                    crate::jazzcash::JazzcashGateway::with_config(config.clone()),
-                ),
+                GatewayId::Phonepe => {
+                    Arc::new(crate::phonepe::PhonepeGateway::with_config(config.clone()))
+                }
+                GatewayId::Razorpay => Arc::new(crate::razorpay::RazorpayGateway::with_config(
+                    config.clone(),
+                )),
+                GatewayId::Easypaisa => Arc::new(crate::easypaisa::EasypaisaGateway::with_config(
+                    config.clone(),
+                )),
+                GatewayId::Jazzcash => Arc::new(crate::jazzcash::JazzcashGateway::with_config(
+                    config.clone(),
+                )),
                 GatewayId::Stripe => {
                     Arc::new(crate::stripe::StripeGateway::with_config(config.clone()))
                 }
@@ -166,9 +164,7 @@ impl GatewayRegistry {
         ));
         registry.register(Arc::new(crate::upi::UpiGateway::new_unconfigured()));
         registry.register(Arc::new(crate::paytm::PaytmGateway::new_unconfigured()));
-        registry.register(Arc::new(
-            crate::phonepe::PhonepeGateway::new_unconfigured(),
-        ));
+        registry.register(Arc::new(crate::phonepe::PhonepeGateway::new_unconfigured()));
         registry.register(Arc::new(
             crate::razorpay::RazorpayGateway::new_unconfigured(),
         ));
@@ -194,6 +190,7 @@ impl Default for GatewayRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::GatewayConfig;
 
     fn bkash_config() -> GatewayConfig {
         GatewayConfig {
@@ -211,9 +208,7 @@ mod tests {
     fn from_configs_with_enabled_bkash_number_is_configured() {
         let registry = GatewayRegistry::from_configs(&[bkash_config()]);
 
-        assert!(registry
-            .configured_ids()
-            .contains(&GatewayId::Bkash));
+        assert!(registry.configured_ids().contains(&GatewayId::Bkash));
         assert_eq!(registry.list(), vec![GatewayId::Bkash]);
 
         let gateway = registry

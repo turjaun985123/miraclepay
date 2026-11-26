@@ -156,11 +156,7 @@ mod tests {
     use super::*;
     use miraclepay_domain::{Currency, Money};
 
-    fn config(
-        enabled: bool,
-        api_key: Option<&str>,
-        api_secret: Option<&str>,
-    ) -> GatewayConfig {
+    fn config(enabled: bool, api_key: Option<&str>, api_secret: Option<&str>) -> GatewayConfig {
         GatewayConfig {
             gateway: GatewayId::Stripe,
             merchant_number: None,
@@ -173,11 +169,7 @@ mod tests {
     }
 
     fn configured_gateway() -> StripeGateway {
-        StripeGateway::with_config(config(
-            true,
-            Some("pk_test_key"),
-            Some("sk_test_secret"),
-        ))
+        StripeGateway::with_config(config(true, Some("pk_test_key"), Some("sk_test_secret")))
     }
 
     fn sample_request() -> PaymentRequest {
@@ -209,16 +201,12 @@ mod tests {
         assert!(!key_only.is_configured());
 
         // Symmetrically, the secret without the key is incomplete.
-        let secret_only =
-            StripeGateway::with_config(config(true, None, Some("sk_test_secret")));
+        let secret_only = StripeGateway::with_config(config(true, None, Some("sk_test_secret")));
         assert!(!secret_only.is_configured());
 
         // A complete pair on a disabled config is still not usable.
-        let disabled = StripeGateway::with_config(config(
-            false,
-            Some("pk_test_key"),
-            Some("sk_test_secret"),
-        ));
+        let disabled =
+            StripeGateway::with_config(config(false, Some("pk_test_key"), Some("sk_test_secret")));
         assert!(!disabled.is_configured());
 
         assert!(configured_gateway().is_configured());

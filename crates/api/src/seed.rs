@@ -98,10 +98,7 @@ impl AppState {
             let date = now - Duration::days(13 - day);
             let count = 1 + (day % 3);
             for n in 0..count {
-                let amount = Money::new(
-                    (450 + day * 137 + n * 265) * 100,
-                    Currency::BDT,
-                );
+                let amount = Money::new((450 + day * 137 + n * 265) * 100, Currency::BDT);
                 let status = if n == 0 && day == 13 {
                     TxStatus::Pending
                 } else if n == 1 && day == 12 {

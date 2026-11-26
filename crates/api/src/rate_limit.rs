@@ -144,10 +144,16 @@ mod tests {
 
     #[test]
     fn classify_routes_to_classes() {
-        assert_eq!(classify("/api/v1/auth/login", "POST"), Some(("auth", AUTH_LIMIT)));
+        assert_eq!(
+            classify("/api/v1/auth/login", "POST"),
+            Some(("auth", AUTH_LIMIT))
+        );
         assert_eq!(classify("/api/v1/sms", "POST"), Some(("sms", SMS_LIMIT)));
         assert_eq!(classify("/api/v1/sms", "GET"), Some(("api", API_LIMIT)));
-        assert_eq!(classify("/api/v1/transactions", "GET"), Some(("api", API_LIMIT)));
+        assert_eq!(
+            classify("/api/v1/transactions", "GET"),
+            Some(("api", API_LIMIT))
+        );
         assert_eq!(classify("/health", "GET"), None);
     }
 

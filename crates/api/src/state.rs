@@ -98,8 +98,7 @@ pub struct AppState {
     /// Disputes / chargebacks by id (Wave 38).
     pub disputes: Arc<RwLock<HashMap<String, miraclepay_domain::dispute::Dispute>>>,
     /// Fraud risk assessments by transaction id (Wave 39).
-    pub risk_assessments:
-        Arc<RwLock<HashMap<String, miraclepay_domain::fraud::RiskAssessment>>>,
+    pub risk_assessments: Arc<RwLock<HashMap<String, miraclepay_domain::fraud::RiskAssessment>>>,
     /// Provider transaction references already consumed by the SMS
     /// verification flow.
     ///
@@ -187,8 +186,8 @@ impl AppState {
         // Development-only fallback ("dev-secret-change-me"): fine
         // for a local checkout, never acceptable in production,
         // where JWT_SECRET must be set to a private random value.
-        let jwt_secret = std::env::var("JWT_SECRET")
-            .unwrap_or_else(|_| "dev-secret-change-me".to_string());
+        let jwt_secret =
+            std::env::var("JWT_SECRET").unwrap_or_else(|_| "dev-secret-change-me".to_string());
         Self::new(jwt_secret)
     }
 
@@ -295,12 +294,7 @@ impl AppState {
     /// Synchronous and non-blocking like `audit`: on a contended
     /// lock the event is skipped rather than stalling the action
     /// that produced it.
-    pub fn emit_webhook(
-        &self,
-        merchant_id: &str,
-        event_type: &str,
-        payload: serde_json::Value,
-    ) {
+    pub fn emit_webhook(&self, merchant_id: &str, event_type: &str, payload: serde_json::Value) {
         let event = miraclepay_domain::webhook::WebhookEvent {
             id: miraclepay_domain::ids::webhook_event_id(),
             merchant_id: merchant_id.to_string(),
@@ -332,9 +326,7 @@ impl AppState {
     pub fn registry_for(&self, merchant_id: &str) -> GatewayRegistry {
         match self.gateway_configs.try_read() {
             Ok(configs) => match configs.get(merchant_id) {
-                Some(configs) if !configs.is_empty() => {
-                    GatewayRegistry::from_configs(configs)
-                }
+                Some(configs) if !configs.is_empty() => GatewayRegistry::from_configs(configs),
                 _ => GatewayRegistry::all_unconfigured(),
             },
             Err(_) => GatewayRegistry::all_unconfigured(),

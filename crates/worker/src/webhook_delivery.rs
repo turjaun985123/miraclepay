@@ -26,9 +26,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 use chrono::{DateTime, Duration, Utc};
-use miraclepay_domain::webhook::{
-    self, DeliveryStatus, WebhookDelivery, WebhookEvent,
-};
+use miraclepay_domain::webhook::{self, DeliveryStatus, WebhookDelivery, WebhookEvent};
 
 // ---------------------------------------------------------------------------
 // Transport
@@ -144,7 +142,10 @@ pub async fn attempt_delivery(
         ("content-type".to_string(), "application/json".to_string()),
         ("x-miraclepay-signature".to_string(), signature),
         ("x-miraclepay-signature-v2".to_string(), signature_v2),
-        ("x-miraclepay-event".to_string(), job.event.event_type.clone()),
+        (
+            "x-miraclepay-event".to_string(),
+            job.event.event_type.clone(),
+        ),
         ("x-miraclepay-delivery".to_string(), delivery.id.clone()),
     ];
 
@@ -226,7 +227,7 @@ fn is_due(delivery: &WebhookDelivery, now: DateTime<Utc>) -> bool {
 /// them against the due subset — or simply count them by kind.
 pub async fn process_due(
     transport: &dyn HttpTransport,
-    jobs: &mut Vec<(DeliveryJob, WebhookDelivery)>,
+    jobs: &mut [(DeliveryJob, WebhookDelivery)],
     now: DateTime<Utc>,
 ) -> Vec<DeliveryOutcome> {
     let mut outcomes = Vec::new();
@@ -501,7 +502,11 @@ mod tests {
 
         for attempt in 1..webhook::max_attempts() {
             let outcome = attempt_delivery(&transport, &job(), &mut delivery, now()).await;
-            assert_eq!(outcome, DeliveryOutcome::RetryScheduled, "attempt {attempt}");
+            assert_eq!(
+                outcome,
+                DeliveryOutcome::RetryScheduled,
+                "attempt {attempt}"
+            );
             assert_eq!(delivery.status, DeliveryStatus::Failed);
         }
         let outcome = attempt_delivery(&transport, &job(), &mut delivery, now()).await;

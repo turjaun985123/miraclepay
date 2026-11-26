@@ -167,17 +167,16 @@ pub async fn create_payment(
         ));
     }
 
-    let currency = Currency::from_code(&req.currency).ok_or_else(|| {
-        ApiError::BadRequest(format!("unsupported currency: {}", req.currency))
-    })?;
+    let currency = Currency::from_code(&req.currency)
+        .ok_or_else(|| ApiError::BadRequest(format!("unsupported currency: {}", req.currency)))?;
     let amount = Money::new(req.amount_minor, currency);
 
     // Resolve the gateway through this merchant's registry so a
     // merchant can only pay through gateways configured for them.
     let registry = state.registry_for(&req.merchant_id);
-    let gateway = registry.get_by_str(&req.gateway).ok_or_else(|| {
-        ApiError::BadRequest(format!("unknown gateway: {}", req.gateway))
-    })?;
+    let gateway = registry
+        .get_by_str(&req.gateway)
+        .ok_or_else(|| ApiError::BadRequest(format!("unknown gateway: {}", req.gateway)))?;
 
     let now = Utc::now();
     let mut transaction = Transaction {
@@ -293,9 +292,10 @@ pub async fn list_payments(
     Query(query): Query<ListQ>,
 ) -> Result<Json<Value>, ApiError> {
     let status_filter = match query.status.as_deref() {
-        Some(raw) => Some(parse_status(raw).ok_or_else(|| {
-            ApiError::BadRequest(format!("unknown status filter: {raw}"))
-        })?),
+        Some(raw) => Some(
+            parse_status(raw)
+                .ok_or_else(|| ApiError::BadRequest(format!("unknown status filter: {raw}")))?,
+        ),
         None => None,
     };
 
@@ -342,7 +342,7 @@ pub async fn list_payments(
         true
     });
 
-    transactions.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    transactions.sort_by_key(|a| std::cmp::Reverse(a.created_at));
     transactions.truncate(100);
 
     Ok(Json(json!({ "transactions": transactions })))

@@ -216,9 +216,7 @@ pub fn validate_url(value: &str) -> Result<(), String> {
 
     // Host is the segment before the first path/query/fragment delimiter
     // or port colon.
-    let host_end = rest
-        .find(|c| c == '/' || c == '?' || c == '#' || c == ':')
-        .unwrap_or(rest.len());
+    let host_end = rest.find(['/', '?', '#', ':']).unwrap_or(rest.len());
     let host = &rest[..host_end];
 
     if host.is_empty() {

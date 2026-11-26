@@ -59,7 +59,11 @@ impl PayPalConfig {
         let sandbox = get("PAYPAL_SANDBOX")
             .map(|v| v != "0" && v.to_lowercase() != "false")
             .unwrap_or(true);
-        Ok(Self { client_id, client_secret, sandbox })
+        Ok(Self {
+            client_id,
+            client_secret,
+            sandbox,
+        })
     }
 
     /// Build from the process environment.
@@ -69,7 +73,11 @@ impl PayPalConfig {
 
     /// Base URL for the configured environment.
     pub fn base_url(&self) -> &'static str {
-        if self.sandbox { SANDBOX_BASE } else { LIVE_BASE }
+        if self.sandbox {
+            SANDBOX_BASE
+        } else {
+            LIVE_BASE
+        }
     }
 
     /// Shape the OAuth client-credentials token request. The Basic
@@ -81,9 +89,17 @@ impl PayPalConfig {
             headers: vec![
                 (
                     "Authorization".to_string(),
-                    format!("Basic {}", base64_encode(format!("{}:{}", self.client_id, self.client_secret).as_bytes())),
+                    format!(
+                        "Basic {}",
+                        base64_encode(
+                            format!("{}:{}", self.client_id, self.client_secret).as_bytes()
+                        )
+                    ),
                 ),
-                ("Content-Type".to_string(), "application/x-www-form-urlencoded".to_string()),
+                (
+                    "Content-Type".to_string(),
+                    "application/x-www-form-urlencoded".to_string(),
+                ),
             ],
             body: "grant_type=client_credentials".to_string(),
         }
@@ -104,7 +120,10 @@ impl PayPalConfig {
             method: "POST",
             url: format!("{}/v2/checkout/orders", self.base_url()),
             headers: vec![
-                ("Authorization".to_string(), format!("Bearer {access_token}")),
+                (
+                    "Authorization".to_string(),
+                    format!("Bearer {access_token}"),
+                ),
                 ("Content-Type".to_string(), "application/json".to_string()),
                 // Idempotency: one order per reference even on retries.
                 ("PayPal-Request-Id".to_string(), reference.to_string()),
@@ -138,12 +157,24 @@ pub(crate) fn base64_encode(data: &[u8]) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
         let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
         out.push(ALPHABET[(n >> 18) as usize & 63] as char);
         out.push(ALPHABET[(n >> 12) as usize & 63] as char);
-        out.push(if chunk.len() > 1 { ALPHABET[(n >> 6) as usize & 63] as char } else { '=' });
-        out.push(if chunk.len() > 2 { ALPHABET[n as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 1 {
+            ALPHABET[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            ALPHABET[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     out
 }
@@ -226,7 +257,11 @@ mod tests {
         assert!(spec.url.starts_with(SANDBOX_BASE));
         assert!(spec.url.ends_with("/v1/oauth2/token"));
         assert_eq!(spec.body, "grant_type=client_credentials");
-        let auth = spec.headers.iter().find(|(k, _)| k == "Authorization").unwrap();
+        let auth = spec
+            .headers
+            .iter()
+            .find(|(k, _)| k == "Authorization")
+            .unwrap();
         // base64("cid-123:sec-456")
         assert_eq!(auth.1, "Basic Y2lkLTEyMzpzZWMtNDU2");
     }
@@ -234,15 +269,22 @@ mod tests {
     #[test]
     fn create_order_request_shape() {
         let spec = config().create_order_request(
-            "tok", "12.50", "USD", "MP-REF-9",
-            "https://shop.example.com/ok", "https://shop.example.com/cancel",
+            "tok",
+            "12.50",
+            "USD",
+            "MP-REF-9",
+            "https://shop.example.com/ok",
+            "https://shop.example.com/cancel",
         );
         let body: serde_json::Value = serde_json::from_str(&spec.body).unwrap();
         assert_eq!(body["intent"], "CAPTURE");
         assert_eq!(body["purchase_units"][0]["amount"]["value"], "12.50");
         assert_eq!(body["purchase_units"][0]["amount"]["currency_code"], "USD");
         assert_eq!(body["purchase_units"][0]["custom_id"], "MP-REF-9");
-        assert!(spec.headers.iter().any(|(k, v)| k == "PayPal-Request-Id" && v == "MP-REF-9"));
+        assert!(spec
+            .headers
+            .iter()
+            .any(|(k, v)| k == "PayPal-Request-Id" && v == "MP-REF-9"));
     }
 
     #[test]
@@ -252,8 +294,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(order.id, "5O190127TN364715T");
-        assert!(order.payer_action_url().unwrap().contains("paypal.com/checkoutnow"));
-        let token = parse_token(r#"{"access_token":"A21AA-example","token_type":"Bearer","expires_in":32400}"#).unwrap();
+        assert!(order
+            .payer_action_url()
+            .unwrap()
+            .contains("paypal.com/checkoutnow"));
+        let token = parse_token(
+            r#"{"access_token":"A21AA-example","token_type":"Bearer","expires_in":32400}"#,
+        )
+        .unwrap();
         assert_eq!(token.access_token, "A21AA-example");
     }
 

@@ -31,10 +31,7 @@ pub enum InIdentifier {
 
 /// Whether `number` is shaped like an Indian mobile number.
 pub fn valid_in_mobile(number: &str) -> bool {
-    let digits: String = number
-        .chars()
-        .filter(|c| *c != ' ' && *c != '-')
-        .collect();
+    let digits: String = number.chars().filter(|c| *c != ' ' && *c != '-').collect();
     let digits = digits.strip_prefix('+').unwrap_or(&digits);
     if !digits.bytes().all(|b| b.is_ascii_digit()) {
         return false;
@@ -73,10 +70,7 @@ pub fn valid_identifier(kind: InIdentifier, identifier: &str) -> bool {
 }
 
 /// The merchant identifier, when configured + valid for `kind`.
-pub fn merchant_identifier<'a>(
-    config: Option<&'a GatewayConfig>,
-    kind: InIdentifier,
-) -> Option<&'a str> {
+pub fn merchant_identifier(config: Option<&GatewayConfig>, kind: InIdentifier) -> Option<&str> {
     config
         .filter(|config| config.enabled)
         .and_then(|config| config.merchant_number.as_deref())

@@ -184,12 +184,15 @@ pub const V2_TOLERANCE_SECS: i64 = 300;
 /// Build the v2 signature header value for `payload` at
 /// `timestamp` (Unix seconds).
 pub fn sign_payload_v2(secret: &str, timestamp: i64, payload: &[u8]) -> String {
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-        .expect("HMAC accepts keys of any length");
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepts keys of any length");
     mac.update(timestamp.to_string().as_bytes());
     mac.update(b".");
     mac.update(payload);
-    format!("t={timestamp},v2={}", hex_encode(&mac.finalize().into_bytes()))
+    format!(
+        "t={timestamp},v2={}",
+        hex_encode(&mac.finalize().into_bytes())
+    )
 }
 
 /// Verify a v2 signature header value against `payload`, rejecting
@@ -221,8 +224,8 @@ pub fn verify_signature_v2(
     let Some(signature) = hex_decode(signature_hex) else {
         return false;
     };
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-        .expect("HMAC accepts keys of any length");
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepts keys of any length");
     mac.update(timestamp.to_string().as_bytes());
     mac.update(b".");
     mac.update(payload);
@@ -298,11 +301,11 @@ fn hex_encode(bytes: &[u8]) -> String {
 /// Returns `None` for an odd number of characters or any non-hex digit.
 fn hex_decode(text: &str) -> Option<Vec<u8>> {
     let bytes = text.as_bytes();
-    if bytes.len() % 2 != 0 {
+    if !bytes.len().is_multiple_of(2) {
         return None;
     }
     let mut out = Vec::with_capacity(bytes.len() / 2);
-    for pair in bytes.chunks_exact(2) {
+    for pair in bytes.as_chunks::<2>().0 {
         let high = hex_value(pair[0])?;
         let low = hex_value(pair[1])?;
         out.push((high << 4) | low);
@@ -339,16 +342,58 @@ mod tests {
         let header = sign_payload_v2(SECRET, 1_700_000_000, PAYLOAD);
         assert!(header.starts_with("t=1700000000,v2="));
         // In-window: verifies.
-        assert!(verify_signature_v2(SECRET, &header, PAYLOAD, 1_700_000_000, V2_TOLERANCE_SECS));
-        assert!(verify_signature_v2(SECRET, &header, PAYLOAD, 1_700_000_299, V2_TOLERANCE_SECS));
+        assert!(verify_signature_v2(
+            SECRET,
+            &header,
+            PAYLOAD,
+            1_700_000_000,
+            V2_TOLERANCE_SECS
+        ));
+        assert!(verify_signature_v2(
+            SECRET,
+            &header,
+            PAYLOAD,
+            1_700_000_299,
+            V2_TOLERANCE_SECS
+        ));
         // Replayed after the window: rejected.
-        assert!(!verify_signature_v2(SECRET, &header, PAYLOAD, 1_700_000_301, V2_TOLERANCE_SECS));
+        assert!(!verify_signature_v2(
+            SECRET,
+            &header,
+            PAYLOAD,
+            1_700_000_301,
+            V2_TOLERANCE_SECS
+        ));
         // Tampered body or wrong secret: rejected.
-        assert!(!verify_signature_v2(SECRET, &header, b"{}", 1_700_000_000, V2_TOLERANCE_SECS));
-        assert!(!verify_signature_v2("whsec_other", &header, PAYLOAD, 1_700_000_000, V2_TOLERANCE_SECS));
+        assert!(!verify_signature_v2(
+            SECRET,
+            &header,
+            b"{}",
+            1_700_000_000,
+            V2_TOLERANCE_SECS
+        ));
+        assert!(!verify_signature_v2(
+            "whsec_other",
+            &header,
+            PAYLOAD,
+            1_700_000_000,
+            V2_TOLERANCE_SECS
+        ));
         // Malformed headers: rejected, never panic.
-        assert!(!verify_signature_v2(SECRET, "garbage", PAYLOAD, 1_700_000_000, V2_TOLERANCE_SECS));
-        assert!(!verify_signature_v2(SECRET, "t=abc,v2=zz", PAYLOAD, 1_700_000_000, V2_TOLERANCE_SECS));
+        assert!(!verify_signature_v2(
+            SECRET,
+            "garbage",
+            PAYLOAD,
+            1_700_000_000,
+            V2_TOLERANCE_SECS
+        ));
+        assert!(!verify_signature_v2(
+            SECRET,
+            "t=abc,v2=zz",
+            PAYLOAD,
+            1_700_000_000,
+            V2_TOLERANCE_SECS
+        ));
     }
 
     #[test]
@@ -357,7 +402,11 @@ mod tests {
         sorted.sort_unstable();
         assert_eq!(sorted, EVENT_TYPES, "catalogue must stay sorted");
         sorted.dedup();
-        assert_eq!(sorted.len(), EVENT_TYPES.len(), "catalogue must not repeat types");
+        assert_eq!(
+            sorted.len(),
+            EVENT_TYPES.len(),
+            "catalogue must not repeat types"
+        );
     }
 
     #[test]
@@ -396,10 +445,7 @@ mod tests {
             sign_payload(SECRET, PAYLOAD),
             sign_payload("whsec_other_secret", PAYLOAD)
         );
-        assert_ne!(
-            sign_payload(SECRET, PAYLOAD),
-            sign_payload(SECRET, b"{}")
-        );
+        assert_ne!(sign_payload(SECRET, PAYLOAD), sign_payload(SECRET, b"{}"));
     }
 
     #[test]

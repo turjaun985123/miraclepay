@@ -129,8 +129,8 @@ pub fn base64url_decode(input: &str) -> Result<Vec<u8>, ApiError> {
 /// Raw HMAC-SHA256 signature bytes over a signing input.
 fn sign(signing_input: &str, secret: &str) -> Vec<u8> {
     // HMAC accepts a key of any length, so this cannot fail.
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-        .expect("HMAC accepts keys of any length");
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepts keys of any length");
     mac.update(signing_input.as_bytes());
     mac.finalize().into_bytes().to_vec()
 }
@@ -200,8 +200,8 @@ pub fn verify_token(token: &str, secret: &str) -> Result<Claims, ApiError> {
     }
 
     let signature = base64url_decode(signature_b64)?;
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-        .expect("HMAC accepts keys of any length");
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepts keys of any length");
     mac.update(format!("{header_b64}.{payload_b64}").as_bytes());
     // Constant-time comparison of the recomputed MAC against the
     // decoded signature bytes.
@@ -315,12 +315,7 @@ mod tests {
 
     #[test]
     fn create_token_for_carries_merchant_scope() {
-        let token = create_token_for(
-            "usr_2",
-            "admin",
-            Some("mch_9".to_string()),
-            SECRET,
-        );
+        let token = create_token_for("usr_2", "admin", Some("mch_9".to_string()), SECRET);
         let claims = verify_token(&token, SECRET).unwrap();
         assert_eq!(claims.sub, "usr_2");
         assert_eq!(claims.role, "admin");

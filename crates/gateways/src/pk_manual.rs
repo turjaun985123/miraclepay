@@ -21,10 +21,7 @@ use crate::types::{GatewayConfig, GatewayError, InitiatedPayment, PaymentRequest
 
 /// Whether `number` is shaped like a Pakistani mobile number.
 pub fn valid_pk_mobile(number: &str) -> bool {
-    let digits: String = number
-        .chars()
-        .filter(|c| *c != ' ' && *c != '-')
-        .collect();
+    let digits: String = number.chars().filter(|c| *c != ' ' && *c != '-').collect();
     let digits = digits.strip_prefix('+').unwrap_or(&digits);
     if !digits.bytes().all(|b| b.is_ascii_digit()) {
         return false;
@@ -38,7 +35,7 @@ pub fn valid_pk_mobile(number: &str) -> bool {
 /// and carries a *valid Pakistani mobile* number. A present but
 /// malformed number is a configuration error, not "unconfigured" —
 /// callers distinguish the two via [`config_problem`].
-pub fn merchant_number<'a>(config: Option<&'a GatewayConfig>) -> Option<&'a str> {
+pub fn merchant_number(config: Option<&GatewayConfig>) -> Option<&str> {
     config
         .filter(|config| config.enabled)
         .and_then(|config| config.merchant_number.as_deref())
@@ -72,8 +69,8 @@ pub fn checked_manual_initiate(
     if let Some(problem) = config_problem(config, gateway) {
         return Err(GatewayError::InvalidConfig(problem));
     }
-    let merchant_number = merchant_number(config)
-        .ok_or_else(|| GatewayError::NotConfigured(gateway.into()))?;
+    let merchant_number =
+        merchant_number(config).ok_or_else(|| GatewayError::NotConfigured(gateway.into()))?;
     if req.amount.currency != Currency::PKR {
         return Err(GatewayError::Provider(format!(
             "{gateway} payments must be in PKR, got {}",

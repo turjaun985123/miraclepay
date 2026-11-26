@@ -39,9 +39,7 @@ use serde::Deserialize;
 
 use miraclepay_domain::ids::new_id;
 use miraclepay_domain::money::Money;
-use miraclepay_domain::subscription::{
-    BillingInterval, Plan, Subscription, SubscriptionStatus,
-};
+use miraclepay_domain::subscription::{BillingInterval, Plan, Subscription, SubscriptionStatus};
 
 use crate::auth_middleware::AuthUser;
 use crate::dto::ApiError;
@@ -180,9 +178,10 @@ async fn load_owned_subscription(
 ) -> Result<Subscription, ApiError> {
     let subscription = {
         let subscriptions = state.subscriptions.read().await;
-        subscriptions.get(id).cloned().ok_or_else(|| {
-            ApiError::NotFound(format!("subscription {id} not found"))
-        })?
+        subscriptions
+            .get(id)
+            .cloned()
+            .ok_or_else(|| ApiError::NotFound(format!("subscription {id} not found")))?
     };
     ensure_merchant_owned(state, auth, &subscription.merchant_id)?;
     Ok(subscription)
@@ -211,8 +210,7 @@ pub async fn create_plan(
     if let Some(count) = req.interval_count {
         if count != 1 {
             return Err(ApiError::BadRequest(
-                "interval_count must be 1 in v0.0.1: plans bill once per interval unit"
-                    .to_string(),
+                "interval_count must be 1 in v0.0.1: plans bill once per interval unit".to_string(),
             ));
         }
     }
@@ -405,9 +403,10 @@ pub async fn create_subscription(
 
     let plan = {
         let plans = state.plans.read().await;
-        plans.get(&req.plan_id).cloned().ok_or_else(|| {
-            ApiError::NotFound(format!("plan {} not found", req.plan_id))
-        })?
+        plans
+            .get(&req.plan_id)
+            .cloned()
+            .ok_or_else(|| ApiError::NotFound(format!("plan {} not found", req.plan_id)))?
     };
     ensure_merchant_owned(&state, &auth, &plan.merchant_id)?;
     if !plan.active {
@@ -417,12 +416,8 @@ pub async fn create_subscription(
         )));
     }
 
-    let subscription = Subscription::start(
-        new_id("sub"),
-        &plan,
-        customer_email.to_string(),
-        Utc::now(),
-    );
+    let subscription =
+        Subscription::start(new_id("sub"), &plan, customer_email.to_string(), Utc::now());
 
     {
         let mut subscriptions = state.subscriptions.write().await;
@@ -466,9 +461,9 @@ pub async fn cancel_subscription(
 
     let subscription = {
         let mut subscriptions = state.subscriptions.write().await;
-        let subscription = subscriptions.get_mut(&id).ok_or_else(|| {
-            ApiError::NotFound(format!("subscription {id} not found"))
-        })?;
+        let subscription = subscriptions
+            .get_mut(&id)
+            .ok_or_else(|| ApiError::NotFound(format!("subscription {id} not found")))?;
         if subscription.status.is_terminal() {
             return Err(ApiError::Conflict(format!(
                 "subscription {id} is already {:?} and cannot be cancelled",
@@ -518,9 +513,9 @@ pub async fn pause_subscription(
 
     let subscription = {
         let mut subscriptions = state.subscriptions.write().await;
-        let subscription = subscriptions.get_mut(&id).ok_or_else(|| {
-            ApiError::NotFound(format!("subscription {id} not found"))
-        })?;
+        let subscription = subscriptions
+            .get_mut(&id)
+            .ok_or_else(|| ApiError::NotFound(format!("subscription {id} not found")))?;
         if subscription.status.is_terminal() {
             return Err(ApiError::Conflict(format!(
                 "subscription {id} is {:?} and cannot be paused",
@@ -570,9 +565,9 @@ pub async fn resume_subscription(
 
     let subscription = {
         let mut subscriptions = state.subscriptions.write().await;
-        let subscription = subscriptions.get_mut(&id).ok_or_else(|| {
-            ApiError::NotFound(format!("subscription {id} not found"))
-        })?;
+        let subscription = subscriptions
+            .get_mut(&id)
+            .ok_or_else(|| ApiError::NotFound(format!("subscription {id} not found")))?;
         if subscription.status.is_terminal() {
             return Err(ApiError::Conflict(format!(
                 "subscription {id} is {:?} and cannot be resumed",

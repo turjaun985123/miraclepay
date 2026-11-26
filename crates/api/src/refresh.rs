@@ -70,10 +70,7 @@ pub enum RefreshError {
 /// Validate a presented token **and rotate it**: on success the old
 /// token is revoked and the user id returned; the caller issues the
 /// replacement pair. Reuse of a rotated token fails as `Revoked`.
-pub async fn rotate_refresh_token(
-    state: &AppState,
-    raw: &str,
-) -> Result<String, RefreshError> {
+pub async fn rotate_refresh_token(state: &AppState, raw: &str) -> Result<String, RefreshError> {
     let hash = hash_refresh_token(raw);
     let mut tokens = state.refresh_tokens.write().await;
     let record = tokens.get_mut(&hash).ok_or(RefreshError::Unknown)?;

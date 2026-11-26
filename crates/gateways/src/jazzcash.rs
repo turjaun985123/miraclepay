@@ -75,12 +75,7 @@ impl PaymentGateway for JazzcashGateway {
     async fn initiate(&self, req: &PaymentRequest) -> Result<InitiatedPayment, GatewayError> {
         // Wave 29: shared PK-manual gate — valid PK mobile config +
         // PKR-only amounts (see `pk_manual::checked_manual_initiate`).
-        crate::pk_manual::checked_manual_initiate(
-            "jazzcash",
-            "JazzCash",
-            self.config.as_ref(),
-            req,
-        )
+        crate::pk_manual::checked_manual_initiate("jazzcash", "JazzCash", self.config.as_ref(), req)
     }
 
     async fn verify(&self, provider_ref: &str) -> Result<VerifyResult, GatewayError> {

@@ -9,8 +9,10 @@ use serde::{Deserialize, Serialize};
 /// Lifecycle status of a merchant account.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum MerchantStatus {
     /// Created but not yet approved / activated.
+    #[default]
     Pending,
     /// Approved and able to accept payments.
     Active,
@@ -18,12 +20,6 @@ pub enum MerchantStatus {
     Suspended,
     /// Permanently closed.
     Closed,
-}
-
-impl Default for MerchantStatus {
-    fn default() -> Self {
-        Self::Pending
-    }
 }
 
 /// A merchant (business) registered on the platform.

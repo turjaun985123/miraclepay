@@ -44,9 +44,7 @@ use miraclepay_domain::{
     stats::{compute_balance, MerchantBalance},
 };
 
-use crate::{
-    auth_middleware::AuthUser, dto::ApiError, state::AppState,
-};
+use crate::{auth_middleware::AuthUser, dto::ApiError, state::AppState};
 
 /// Request body for [`update_merchant`].
 ///
@@ -88,8 +86,7 @@ pub async fn create_merchant(
     // Ownership comes from the authenticated session, never the body.
     input.owner_user_id = auth.user_id.clone();
 
-    validate_create(&input)
-        .map_err(|errors| ApiError::BadRequest(errors.join("; ")))?;
+    validate_create(&input).map_err(|errors| ApiError::BadRequest(errors.join("; ")))?;
 
     let merchant = Merchant {
         id: merchant_id(),
@@ -235,29 +232,11 @@ pub async fn merchant_balance(
     // Snapshot the three ledgers, then let the domain do the maths.
     // `compute_balance` itself restricts every sum to this merchant
     // and to the requested currency.
-    let transactions: Vec<_> = state
-        .transactions
-        .read()
-        .await
-        .values()
-        .cloned()
-        .collect();
+    let transactions: Vec<_> = state.transactions.read().await.values().cloned().collect();
     let refunds: Vec<_> = state.refunds.read().await.values().cloned().collect();
-    let settlements: Vec<_> = state
-        .settlements
-        .read()
-        .await
-        .values()
-        .cloned()
-        .collect();
+    let settlements: Vec<_> = state.settlements.read().await.values().cloned().collect();
 
-    let balance = compute_balance(
-        &id,
-        &transactions,
-        &refunds,
-        &settlements,
-        Currency::BDT,
-    );
+    let balance = compute_balance(&id, &transactions, &refunds, &settlements, Currency::BDT);
 
     Ok(Json(balance))
 }

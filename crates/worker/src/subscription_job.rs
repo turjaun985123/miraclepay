@@ -125,7 +125,16 @@ mod tests {
     }
 
     fn sub(id: &str, status: SubscriptionStatus, period_end: DateTime<Utc>) -> Subscription {
-        Subscription::new(id, "plan_1", "merch_1", "c@example.com", status, period_end, false, at(1))
+        Subscription::new(
+            id,
+            "plan_1",
+            "merch_1",
+            "c@example.com",
+            status,
+            period_end,
+            false,
+            at(1),
+        )
     }
 
     struct OkCharger;
@@ -202,7 +211,13 @@ mod tests {
     #[test]
     fn missing_plan_is_skipped_not_charged() {
         let mut subs = vec![sub("s1", SubscriptionStatus::Active, at(10))];
-        let report = run_billing_cycle(&mut subs, &HashMap::new(), at(11), DEFAULT_GRACE, &mut OkCharger);
+        let report = run_billing_cycle(
+            &mut subs,
+            &HashMap::new(),
+            at(11),
+            DEFAULT_GRACE,
+            &mut OkCharger,
+        );
         assert_eq!(report.skipped, 1);
         assert!(report.renewed.is_empty());
     }

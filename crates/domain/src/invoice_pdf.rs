@@ -49,7 +49,12 @@ pub fn render_invoice_pdf(invoice: &Invoice) -> Vec<u8> {
 
     let mut content = String::new();
     content.push_str(&text_run(56, 790, 20, "MiraclePay — Invoice"));
-    content.push_str(&text_run(56, 762, 12, &format!("Invoice {}", invoice.number)));
+    content.push_str(&text_run(
+        56,
+        762,
+        12,
+        &format!("Invoice {}", invoice.number),
+    ));
     content.push_str(&text_run(
         380,
         762,
@@ -60,10 +65,7 @@ pub fn render_invoice_pdf(invoice: &Invoice) -> Vec<u8> {
         56,
         744,
         11,
-        &format!(
-            "Issued: {}",
-            invoice.created_at.format("%Y-%m-%d")
-        ),
+        &format!("Issued: {}", invoice.created_at.format("%Y-%m-%d")),
     ));
     if let Some(due) = invoice.due_at {
         content.push_str(&text_run(
@@ -106,7 +108,12 @@ pub fn render_invoice_pdf(invoice: &Invoice) -> Vec<u8> {
     content.push_str(&text_run(480, ty, 11, &fmt(invoice.subtotal_minor())));
     content.push_str(&text_run(360, ty - 18, 11, "Discount:"));
     content.push_str(&text_run(480, ty - 18, 11, &fmt(invoice.discount_minor)));
-    content.push_str(&text_run(360, ty - 36, 11, &format!("Tax ({} bps):", invoice.tax_bps)));
+    content.push_str(&text_run(
+        360,
+        ty - 36,
+        11,
+        &format!("Tax ({} bps):", invoice.tax_bps),
+    ));
     content.push_str(&text_run(480, ty - 36, 11, &fmt(invoice.tax_minor())));
     content.push_str(&text_run(360, ty - 58, 13, "Total:"));
     content.push_str(&text_run(480, ty - 58, 13, &fmt(invoice.total_minor())));

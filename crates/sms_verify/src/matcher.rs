@@ -131,8 +131,7 @@ pub fn score_candidate(parsed: &ParsedSms, tx: &Transaction) -> u32 {
     let gateway_matches = parsed
         .gateway
         .is_some_and(|gateway| gateway.as_str().eq_ignore_ascii_case(tx.gateway.trim()));
-    let receiver_matches =
-        both_present_and_equal(&parsed.receiver_number, &tx.customer_phone);
+    let receiver_matches = both_present_and_equal(&parsed.receiver_number, &tx.customer_phone);
     if gateway_matches || receiver_matches {
         score += 20;
     }
@@ -185,9 +184,8 @@ pub fn match_transaction(
     // (100 points) settled a transaction for a different amount —
     // a Tk 999 payment verified against a Tk 1,250 SMS. A missing SMS
     // amount does not block exactness; a conflicting one does.
-    let amount_contradicted = |tx: &Transaction| {
-        parsed.amount_minor.is_some() && !amount_matches(parsed, tx)
-    };
+    let amount_contradicted =
+        |tx: &Transaction| parsed.amount_minor.is_some() && !amount_matches(parsed, tx);
     let mut exact: Vec<&Transaction> = candidates
         .iter()
         .copied()
@@ -209,7 +207,9 @@ pub fn match_transaction(
         .collect();
     // Highest score first, oldest first within the same score.
     probable.sort_by(|(score_a, a), (score_b, b)| {
-        score_b.cmp(score_a).then_with(|| a.created_at.cmp(&b.created_at))
+        score_b
+            .cmp(score_a)
+            .then_with(|| a.created_at.cmp(&b.created_at))
     });
     if let Some((_, tx)) = probable.first() {
         return MatchOutcome::Probable(tx.id.clone());
@@ -362,13 +362,19 @@ mod tests {
         let mut used = HashSet::new();
         used.insert("TRX-ABC123".to_string());
 
-        assert_eq!(match_transaction(&parsed, &[], &used), MatchOutcome::Duplicate);
+        assert_eq!(
+            match_transaction(&parsed, &[], &used),
+            MatchOutcome::Duplicate
+        );
     }
 
     #[test]
     fn no_match_when_nothing_is_pending() {
         let parsed = sms();
-        assert_eq!(match_transaction(&parsed, &[], &no_used()), MatchOutcome::NoMatch);
+        assert_eq!(
+            match_transaction(&parsed, &[], &no_used()),
+            MatchOutcome::NoMatch
+        );
     }
 
     #[test]

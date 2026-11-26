@@ -42,7 +42,10 @@ pub enum DisputeStatus {
 impl DisputeStatus {
     /// Terminal states no longer accept evidence or decisions.
     pub fn is_terminal(self) -> bool {
-        matches!(self, DisputeStatus::Won | DisputeStatus::Lost | DisputeStatus::Closed)
+        matches!(
+            self,
+            DisputeStatus::Won | DisputeStatus::Lost | DisputeStatus::Closed
+        )
     }
 }
 
@@ -120,7 +123,10 @@ mod tests {
     #[test]
     fn a_completed_payment_can_be_disputed_up_to_its_amount() {
         let tx = make_tx(TxStatus::Completed);
-        assert_eq!(validate_open(&tx, Money::new(50_000, Currency::BDT)), Ok(()));
+        assert_eq!(
+            validate_open(&tx, Money::new(50_000, Currency::BDT)),
+            Ok(())
+        );
         assert_eq!(validate_open(&tx, Money::new(1, Currency::BDT)), Ok(()));
     }
 

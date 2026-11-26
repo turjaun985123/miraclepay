@@ -57,7 +57,10 @@ impl TxStatus {
     /// the payment itself has succeeded, because a (further) refund can
     /// still follow.
     pub fn is_final(&self) -> bool {
-        matches!(self, TxStatus::Failed | TxStatus::Refunded | TxStatus::Expired)
+        matches!(
+            self,
+            TxStatus::Failed | TxStatus::Refunded | TxStatus::Expired
+        )
     }
 
     /// Returns `true` when a transaction currently in `self` may move

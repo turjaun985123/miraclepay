@@ -401,3 +401,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - `docs/API.md`: §3.2 now documents the Wave-45 error envelope with the errors.md pointer; §4 declares the OpenAPI document (89 operations) the canonical endpoint catalogue instead of pretending the hand tables are complete.
 - `docs/ARCHITECTURE.md` §6.2 corrected: it claimed the API "does not use Postgres yet" — since Wave 2 the pool connects and migrations run at startup (handlers still use in-memory collections; stated plainly as the v0.0.1 limit).
 - `.env.example` gains the CORS, SMTP and SANDBOX sections it was missing.
+
+### Wave 48 — CI verdict ✅
+- Commit `2ff3e39`, CI run **45764663551**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 49 — Pre-release hardening: fmt + clippy gates + dependency audit (this commit)
+- The codebase had never been rustfmt-clean (245 diff hunks across 79 files) and carried ~40 clippy warnings. Now: `cargo fmt --check` clean, `cargo clippy --workspace --all-targets -- -D warnings` clean, all 678 tests still pass.
+- Real fixes inside the cleanup: unused imports removed; `dispatch_batch`/`process_due` now take slices instead of `&mut Vec`; descending sorts use `sort_by_key(Reverse)`; the hand-rolled no-op waker in worker tests replaced with `std::task::Waker::noop()`; dead `[workspace.package]` removed. Three deliberate conventions are allowed with written reasons: major_minor digit grouping for money literals, and the checked `Money::add/sub` + `GatewayId::from_str` not implementing std traits.
+- CI: the Rust job now runs fmt --check and clippy -D warnings as gates, and a fifth job (Dependency audit, RustSec `audit-check`) scans Cargo.lock against the advisory database on every push.
