@@ -250,3 +250,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - Found by audit: both PK adapters accepted **any** non-empty merchant number and **any** currency (their own tests even used a Bangladeshi number + BDT for a Pakistani gateway).
 - New shared `gateways::pk_manual`: `valid_pk_mobile` (03XXXXXXXXX / +923XXXXXXXXX shapes), config classification (malformed number → `InvalidConfig`, missing → `NotConfigured`), and `checked_manual_initiate` enforcing **PKR-only** amounts — both adapters now route through it (one reusable unit, no duplicated logic).
 - Tests corrected to PK fixtures (0300… number, PKR) + new cases: BD number rejected as InvalidConfig, BDT amount rejected. Gateways crate: 136 tests pass; workspace 639.
+
+### Wave 29 — CI verdict ✅
+- Commit `9d06372`, CI run **45758705889**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 30 — UPI/Paytm/PhonePe/Razorpay hardening + fabricated URLs removed (this commit)
+- New shared `gateways::in_manual` (mirrors Wave 29's `pk_manual`): strict Indian mobile (6–9 start, optional +91) and **strict VPA** validation (UPI previously accepted anything containing '@'), INR-only initiate for UPI/Paytm/PhonePe; fixtures corrected from BD/BDT to IN/INR with negative tests.
+- **Honesty fix:** Razorpay and Stripe adapters returned fabricated checkout URLs (`checkout.js?order_ref=…`, `checkout.stripe.com/c/pay/<ref>`) that could never take a payment. Both now fail with a `Provider` error pointing at the real request-spec modules; new `gateways::razorpay_orders` adds the Razorpay Orders API spec (Basic auth, paise, receipt = reference, `rzp_test_/rzp_live_` key validation, response parser) in the Wave 7/9/10 style.
+- Workspace: 645 tests pass; gateways crate 142.

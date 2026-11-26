@@ -13,7 +13,7 @@
 
 use async_trait::async_trait;
 
-use crate::traits::{manual_instructions, PaymentGateway};
+use crate::traits::PaymentGateway;
 use crate::types::{
     GatewayConfig, GatewayError, GatewayId, InitiatedPayment, PaymentRequest, RefundRequest,
     RefundResult, VerifyResult,
@@ -47,11 +47,11 @@ impl PhonepeGateway {
     /// configured: a config is present, it is enabled, and it carries a
     /// non-empty merchant number.
     fn merchant_number(&self) -> Option<&str> {
-        self.config
-            .as_ref()
-            .filter(|config| config.enabled)
-            .and_then(|config| config.merchant_number.as_deref())
-            .filter(|number| !number.trim().is_empty())
+        // Wave 30: Indian mobile or VPA required (see `in_manual`).
+        crate::in_manual::merchant_identifier(
+            self.config.as_ref(),
+            crate::in_manual::InIdentifier::MobileOrVpa,
+        )
     }
 }
 
@@ -76,21 +76,14 @@ impl PaymentGateway for PhonepeGateway {
     }
 
     async fn initiate(&self, req: &PaymentRequest) -> Result<InitiatedPayment, GatewayError> {
-        let merchant_number = self
-            .merchant_number()
-            .ok_or_else(|| GatewayError::NotConfigured("phonepe".into()))?;
-
-        Ok(InitiatedPayment {
-            provider_ref: req.reference.clone(),
-            redirect_url: None,
-            instructions: Some(manual_instructions(
-                "PhonePe",
-                merchant_number,
-                &req.amount.format_display(),
-                &req.reference,
-            )),
-            expires_at: None,
-        })
+        // Wave 30: shared IN-manual gate (identifier shape + INR-only).
+        crate::in_manual::checked_manual_initiate_in(
+            "phonepe",
+            "PhonePe",
+            crate::in_manual::InIdentifier::MobileOrVpa,
+            self.config.as_ref(),
+            req,
+        )
     }
 
     async fn verify(&self, provider_ref: &str) -> Result<VerifyResult, GatewayError> {
@@ -138,13 +131,13 @@ mod tests {
     }
 
     fn configured_gateway() -> PhonepeGateway {
-        PhonepeGateway::with_config(config(true, Some("01700000000")))
+        PhonepeGateway::with_config(config(true, Some("9876543210")))
     }
 
     fn sample_request() -> PaymentRequest {
         PaymentRequest {
             merchant_id: "merchant-1".to_string(),
-            amount: Money::new(50_000, Currency::BDT),
+            amount: Money::new(50_000, Currency::INR),
             reference: "MP-TEST-001".to_string(),
             customer_name: None,
             customer_email: None,
@@ -164,7 +157,7 @@ mod tests {
 
     #[test]
     fn disabled_or_numberless_config_is_not_configured() {
-        let disabled = PhonepeGateway::with_config(config(false, Some("01700000000")));
+        let disabled = PhonepeGateway::with_config(config(false, Some("9876543210")));
         assert!(!disabled.is_configured());
 
         let numberless = PhonepeGateway::with_config(config(true, None));
@@ -216,7 +209,7 @@ mod tests {
             .instructions
             .expect("manual gateway must return payment instructions");
         assert!(
-            instructions.contains("01700000000"),
+            instructions.contains("9876543210"),
             "instructions must contain the merchant number, got: {instructions}"
         );
         assert!(
@@ -224,7 +217,7 @@ mod tests {
             "instructions must name the gateway, got: {instructions}"
         );
         assert!(
-            instructions.contains("BDT 500.00"),
+            instructions.contains("INR 500.00"),
             "instructions must contain the formatted amount, got: {instructions}"
         );
         assert!(

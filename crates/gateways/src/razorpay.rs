@@ -98,24 +98,24 @@ impl PaymentGateway for RazorpayGateway {
         if !self.is_configured() {
             return Err(GatewayError::NotConfigured("razorpay".into()));
         }
+        if req.amount.currency != miraclepay_domain::Currency::INR {
+            return Err(GatewayError::Provider(format!(
+                "razorpay payments must be in INR, got {}",
+                req.amount.currency.code()
+            )));
+        }
 
-        Ok(InitiatedPayment {
-            provider_ref: req.reference.clone(),
-            // Placeholder checkout URL: this only points at
-            // Razorpay's checkout script with the caller's reference
-            // attached. A real payment requires creating an order
-            // through the Razorpay Orders API using the merchant's
-            // server-side API key / secret, then handing the
-            // returned Razorpay order id to the checkout — no order
-            // is created here, so no money can move from this URL
-            // alone.
-            redirect_url: Some(format!(
-                "https://checkout.razorpay.com/v1/checkout.js?order_ref={}",
-                req.reference
-            )),
-            instructions: None,
-            expires_at: None,
-        })
+        // Wave 30: NO fabricated checkout URL. A real Razorpay
+        // payment needs an Order created server-side first; the
+        // request spec for that call lives in `razorpay_orders`
+        // (env-gated credentials, transport lands with live keys).
+        // Until the transport exists, fail honestly instead of
+        // handing the customer a URL that cannot take a payment.
+        Err(GatewayError::Provider(
+            "razorpay: create an order via razorpay_orders::RazorpayConfig \
+             (Orders API) before checkout; direct initiate is not supported"
+                .into(),
+        ))
     }
 
     async fn verify(&self, provider_ref: &str) -> Result<VerifyResult, GatewayError> {
@@ -249,28 +249,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn configured_initiate_returns_redirect_url_containing_reference() {
+    async fn configured_initiate_fails_honestly_without_orders_transport() {
+        // Wave 30: previously this returned a fabricated checkout
+        // URL that could never take a payment. It must now error,
+        // pointing at the Orders API spec module.
         let gateway = configured_gateway();
-
-        let initiated = gateway
+        let err = gateway
             .initiate(&sample_request())
             .await
-            .expect("configured gateway should initiate a payment");
-
-        assert_eq!(initiated.provider_ref, "MP-TEST-001");
-        assert_eq!(initiated.instructions, None);
-        assert!(initiated.expires_at.is_none());
-
-        let redirect_url = initiated
-            .redirect_url
-            .expect("API gateway must return a redirect URL");
+            .expect_err("no fabricated Razorpay checkout URL may be returned");
         assert!(
-            redirect_url.contains("MP-TEST-001"),
-            "redirect URL must contain the payment reference, got: {redirect_url}"
-        );
-        assert!(
-            redirect_url.starts_with("https://checkout.razorpay.com/"),
-            "redirect URL must point at Razorpay checkout, got: {redirect_url}"
+            matches!(&err, GatewayError::Provider(msg) if msg.contains("razorpay_orders")),
+            "expected Provider(..razorpay_orders..), got: {err:?}"
         );
     }
 

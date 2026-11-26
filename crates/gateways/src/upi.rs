@@ -20,7 +20,7 @@
 
 use async_trait::async_trait;
 
-use crate::traits::{manual_instructions, PaymentGateway};
+use crate::traits::PaymentGateway;
 use crate::types::{
     GatewayConfig, GatewayError, GatewayId, InitiatedPayment, PaymentRequest, RefundRequest,
     RefundResult, VerifyResult,
@@ -55,12 +55,11 @@ impl UpiGateway {
     /// `merchant_number` field carries a non-empty VPA — a value
     /// containing an `@`, as in `name@bank`.
     fn merchant_vpa(&self) -> Option<&str> {
-        self.config
-            .as_ref()
-            .filter(|config| config.enabled)
-            .and_then(|config| config.merchant_number.as_deref())
-            .filter(|vpa| !vpa.trim().is_empty())
-            .filter(|vpa| vpa.contains('@'))
+        // Wave 30: strict VPA shape via `in_manual` (was: contains '@').
+        crate::in_manual::merchant_identifier(
+            self.config.as_ref(),
+            crate::in_manual::InIdentifier::Vpa,
+        )
     }
 }
 
@@ -85,21 +84,14 @@ impl PaymentGateway for UpiGateway {
     }
 
     async fn initiate(&self, req: &PaymentRequest) -> Result<InitiatedPayment, GatewayError> {
-        let merchant_vpa = self
-            .merchant_vpa()
-            .ok_or_else(|| GatewayError::NotConfigured("upi".into()))?;
-
-        Ok(InitiatedPayment {
-            provider_ref: req.reference.clone(),
-            redirect_url: None,
-            instructions: Some(manual_instructions(
-                "UPI",
-                merchant_vpa,
-                &req.amount.format_display(),
-                &req.reference,
-            )),
-            expires_at: None,
-        })
+        // Wave 30: shared IN-manual gate (VPA shape + INR-only).
+        crate::in_manual::checked_manual_initiate_in(
+            "upi",
+            "UPI",
+            crate::in_manual::InIdentifier::Vpa,
+            self.config.as_ref(),
+            req,
+        )
     }
 
     async fn verify(&self, provider_ref: &str) -> Result<VerifyResult, GatewayError> {
@@ -205,15 +197,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn vpa_without_at_sign_initiate_is_not_configured_error() {
+    async fn vpa_without_at_sign_initiate_is_invalid_config_error() {
+        // Wave 30: a present-but-malformed VPA is InvalidConfig
+        // (the merchant can fix it), not NotConfigured.
         let gateway = UpiGateway::with_config(config(true, Some("merchantbank")));
         let err = gateway
             .initiate(&sample_request())
             .await
             .expect_err("a VPA without '@' must not initiate a payment");
         assert!(
-            matches!(&err, GatewayError::NotConfigured(name) if name == "upi"),
-            "expected NotConfigured(\"upi\"), got: {err:?}"
+            matches!(&err, GatewayError::InvalidConfig(_)),
+            "expected InvalidConfig, got: {err:?}"
         );
     }
 

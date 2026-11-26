@@ -97,27 +97,22 @@ impl PaymentGateway for StripeGateway {
         self.has_credentials()
     }
 
-    async fn initiate(&self, req: &PaymentRequest) -> Result<InitiatedPayment, GatewayError> {
+    async fn initiate(&self, _req: &PaymentRequest) -> Result<InitiatedPayment, GatewayError> {
         if !self.is_configured() {
             return Err(GatewayError::NotConfigured("stripe".into()));
         }
 
-        Ok(InitiatedPayment {
-            provider_ref: req.reference.clone(),
-            // Placeholder checkout URL: this only points at
-            // Stripe's hosted checkout with the caller's reference
-            // attached. A real payment requires creating a Checkout
-            // Session through the Stripe API using the merchant's
-            // server-side secret key, then handing the customer the
-            // URL of the returned session — no session is created
-            // here, so no money can move from this URL alone.
-            redirect_url: Some(format!(
-                "https://checkout.stripe.com/c/pay/{}",
-                req.reference
-            )),
-            instructions: None,
-            expires_at: None,
-        })
+        // Wave 30: NO fabricated checkout URL (previously
+        // `checkout.stripe.com/c/pay/<reference>`, a URL that could
+        // never take a payment). A real payment needs a Checkout
+        // Session created server-side; the request spec lives in
+        // `stripe_checkout` (Wave 9, env-gated). Fail honestly until
+        // the transport lands.
+        Err(GatewayError::Provider(
+            "stripe: create a Checkout Session via stripe_checkout::StripeCheckoutConfig \
+             before redirecting; direct initiate is not supported"
+                .into(),
+        ))
     }
 
     async fn verify(&self, provider_ref: &str) -> Result<VerifyResult, GatewayError> {
@@ -256,28 +251,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn configured_initiate_returns_redirect_url_containing_reference() {
+    async fn configured_initiate_fails_honestly_without_session_transport() {
+        // Wave 30: no fabricated Stripe checkout URL may be returned.
         let gateway = configured_gateway();
-
-        let initiated = gateway
+        let err = gateway
             .initiate(&sample_request())
             .await
-            .expect("configured gateway should initiate a payment");
-
-        assert_eq!(initiated.provider_ref, "MP-TEST-001");
-        assert_eq!(initiated.instructions, None);
-        assert!(initiated.expires_at.is_none());
-
-        let redirect_url = initiated
-            .redirect_url
-            .expect("API gateway must return a redirect URL");
+            .expect_err("no fabricated Stripe checkout URL may be returned");
         assert!(
-            redirect_url.contains("MP-TEST-001"),
-            "redirect URL must contain the payment reference, got: {redirect_url}"
-        );
-        assert!(
-            redirect_url.starts_with("https://checkout.stripe.com/"),
-            "redirect URL must point at Stripe checkout, got: {redirect_url}"
+            matches!(&err, GatewayError::Provider(msg) if msg.contains("stripe_checkout")),
+            "expected Provider(..stripe_checkout..), got: {err:?}"
         );
     }
 

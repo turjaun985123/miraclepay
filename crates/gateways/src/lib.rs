@@ -3,6 +3,7 @@
 pub mod bkash;
 pub mod bkash_tokenized;
 pub mod easypaisa;
+pub mod in_manual;
 pub mod jazzcash;
 pub mod manual;
 pub mod nagad;
@@ -12,6 +13,7 @@ pub mod paytm;
 pub mod pk_manual;
 pub mod phonepe;
 pub mod razorpay;
+pub mod razorpay_orders;
 pub mod registry;
 pub mod rocket;
 pub mod stripe;
