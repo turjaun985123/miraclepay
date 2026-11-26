@@ -42,6 +42,8 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
         "version": base.version,
         "name": base.name,
         "db": state.db_mode().as_str(),
+        // Wave 46: sandbox deployments are discoverable, never stealthy.
+        "sandbox": crate::seed::sandbox_enabled(),
     }))
 }
 

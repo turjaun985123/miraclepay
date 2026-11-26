@@ -378,3 +378,10 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - Every `ApiError` response now uses one envelope: `{error, code, status}` — `error` (human message) is byte-identical to before for compatibility; `code` is a new stable machine-readable field (`bad_request`, `unauthorized`, `totp_required`, `totp_invalid`, `forbidden`, `not_found`, `conflict`, `internal_error`) that never changes within API v1, and `status` mirrors the HTTP status. The rate-limit 429 body is aligned to the same shape.
 - `docs/errors.md` catalogues every code with meaning + retry guidance (including `rate_limited` and `unsupported_api_version`), and notes the owner-scoping convention (invisible resources answer 404, not 403).
 - The JS SDK's `MiraclePayError` now exposes `.code` (typed in the .d.ts, covered by a new SDK test — 7/7 pass); Rust envelope mapping is unit-tested per variant. Workspace: 677 tests pass.
+
+### Wave 45 — CI verdict ✅
+- Commit `1212638`, CI run **45763906121**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 46 — Seed / demo data + sandbox mode (this commit)
+- `SANDBOX_MODE=1` at startup seeds an empty store: demo owner (`demo@miraclepay.local` / `demo1234`, published on purpose), one active merchant, 14 days of demo transactions (chart-ready, `"demo": true` metadata), a ৳500 payment link and a sent invoice. Seeding is startup-only, empty-store-only, and idempotent (unit-tested: second run is a no-op).
+- Safety rails: no HTTP seed trigger; `/health` reports `"sandbox": true`; the startup log warns loudly; `docs/operations/sandbox.md` documents the flow and the never-in-production rule. Workspace: 678 tests pass.

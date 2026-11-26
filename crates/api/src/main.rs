@@ -7,6 +7,18 @@ use miraclepay_api::{build_router, AppState};
 async fn main() {
     let db = miraclepay_api::db::init_from_env().await;
     let state = AppState::from_env().with_db_pool(db.pool);
+    if miraclepay_api::seed::sandbox_enabled() {
+        // Wave 46: sandbox mode seeds a demo dataset into an empty
+        // store. The demo password is published — local evaluation
+        // only, never a public deployment.
+        let created = state.seed_demo().await;
+        println!(
+            "SANDBOX MODE: seeded {created} demo transactions; demo login {} / {} — \
+             do NOT run sandbox mode on a public deployment",
+            miraclepay_api::seed::DEMO_EMAIL,
+            miraclepay_api::seed::DEMO_PASSWORD
+        );
+    }
     if let (Ok(email), Ok(password)) = (
         std::env::var("ADMIN_EMAIL"),
         std::env::var("ADMIN_PASSWORD"),

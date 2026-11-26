@@ -11,6 +11,7 @@ pub mod rate_limit;
 pub mod refresh;
 pub mod routes;
 pub mod security;
+pub mod seed;
 pub mod state;
 pub mod validation;
 pub mod versioning;
