@@ -61,6 +61,7 @@ pub fn build_router(state: AppState) -> Router {
         // Health
         // ---------------------------------------------------------
         .route("/health", get(health))
+        .route("/metrics", get(crate::metrics::metrics_handler))
         .route("/openapi.json", get(openapi_spec))
         // ---------------------------------------------------------
         // Auth
@@ -293,6 +294,8 @@ pub fn build_router(state: AppState) -> Router {
         .fallback(crate::versioning::api_fallback)
         // Wave 40: API-Version response header on /api/v1 calls.
         .layer(axum::middleware::from_fn(crate::versioning::version_middleware))
+        // Wave 44: structured JSON request log + x-request-id.
+        .layer(axum::middleware::from_fn(crate::metrics::request_log_middleware))
         // Wave 12: rate-limit middleware (auth 10/min, SMS ingest
         // 120/min, general API 600/min per client; see `rate_limit`).
         .layer(axum::middleware::from_fn_with_state(

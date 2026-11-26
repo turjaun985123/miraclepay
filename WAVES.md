@@ -362,3 +362,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - WorkManager's queue was durable but invisible. New `OutboxStore` (SharedPreferences JSON, capped at 200 entries, oldest FAILED dropped first) mirrors every queued message with status/attempts/last-error.
 - `SmsReceiver` records each message in the outbox before enqueueing through the new shared `Forwarder` (single enqueue path: constraints, backoff, keys). `SmsForwardWorker` reports outcomes back: success removes the entry, 4xx/unconfigured marks it FAILED with the reason, transient errors bump the attempt count.
 - Main screen shows "Queue: N waiting · M failed" and a "Retry queued messages" button (visible only when the queue is non-empty) that re-enqueues everything and flips FAILED back to pending. Verified by the CI Android job; no local Android SDK exists.
+
+### Wave 43 — CI verdict ✅
+- Commit `ee76d1e`, CI run **45763423075**: verified twice at job+step level — all 4 jobs success (0 failed steps), Android job compiling the new outbox code.
+
+### Wave 44 — Observability: /metrics + structured request logs (this commit)
+- New `GET /metrics`: Prometheus text exposition rendered by hand (no new deps) from the live collections on each scrape — uptime, users/merchants, db mode, transactions by status, webhook deliveries by status, open disputes, queued notifications. Label escaping is unit-tested.
+- Structured request logs: one JSON line per request on stdout (ts, request_id, method, path, status, latency_ms — no bodies or headers logged), with `x-request-id` generated/propagated and echoed on the response.
+- Live-smoke-verified locally before push: metrics render, request-id header present, JSON log lines emitted, and the Wave-40 `/api/v2/...` structured error confirmed working end-to-end. OpenAPI now 89 operations. Workspace: 676 tests pass.

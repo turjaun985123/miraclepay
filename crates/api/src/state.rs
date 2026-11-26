@@ -118,6 +118,8 @@ pub struct AppState {
     /// Fixed-window rate limiter (Wave 12), enforced by middleware
     /// in `routes::build_router`.
     pub rate_limiter: Arc<crate::rate_limit::RateLimiter>,
+    /// Process start instant, for the metrics uptime gauge (Wave 44).
+    pub started_at: std::time::Instant,
 }
 
 impl AppState {
@@ -153,6 +155,7 @@ impl AppState {
             jwt_secret,
             db_pool: None,
             rate_limiter: Arc::new(crate::rate_limit::RateLimiter::new()),
+            started_at: std::time::Instant::now(),
         }
     }
 
