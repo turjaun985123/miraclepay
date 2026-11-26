@@ -1,0 +1,624 @@
+---
+// Static-output placeholder: the real checkout id is read client-side
+// from the URL (see below); the host serves this page for /checkout/<id>.
+export function getStaticPaths() {
+  return [{ params: { id: 'checkout' } }];
+}
+
+// MiraclePay v0.0.1 — Hosted checkout page (clean-room, original).
+//
+// PUBLIC page: no login, no token. A customer lands here to pay a
+// merchant. The site is built with static output, so there is no
+// server-side route parameter available at build time — the checkout
+// id is read client-side from the last segment of
+// `window.location.pathname` and the details are loaded with the
+// public `checkoutDetails` call from the API client.
+//
+// Flow by status:
+//   pending    -> payment instructions + a form for the customer's
+//                 wallet number (`sender_number`) and the transaction
+//                 id from their payment (`provider_trx_id`), submitted
+//                 with the public `submitCheckout` call.
+//   processing -> the payment was submitted and is awaiting
+//                 confirmation (the verification SMS has not matched
+//                 yet).
+//   completed  -> payment complete.
+// Any load failure (unknown id, expired checkout, network problem)
+// is shown as a single error card instead of a broken form.
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Checkout">
+  <main class="container checkout-page">
+    <p class="checkout-brand" aria-hidden="true">MiraclePay</p>
+
+    <!-- Loading state -->
+    <section id="checkout-loading" class="card empty" aria-live="polite">
+      <p>Loading checkout…</p>
+    </section>
+
+    <!-- Error state: invalid / expired checkout, or a failed load -->
+    <section id="checkout-error" class="card checkout-error" hidden>
+      <p class="checkout-error-icon" aria-hidden="true">!</p>
+      <h1>Checkout unavailable</h1>
+      <p id="checkout-error-message" class="muted">
+        This checkout link is invalid or has expired. Please ask the
+        merchant for a new payment link.
+      </p>
+    </section>
+
+    <!-- Loaded checkout -->
+    <section id="checkout-card" class="card checkout-card" hidden>
+      <header class="checkout-head">
+        <img
+          id="merchant-logo"
+          class="merchant-logo"
+          alt=""
+          width="48"
+          height="48"
+          hidden
+        />
+        <div>
+          <p class="small muted checkout-eyebrow">Pay</p>
+          <h1 id="merchant-name">Merchant</h1>
+        </div>
+        <span id="checkout-status" class="badge badge-pending">pending</span>
+      </header>
+
+      <p id="checkout-description" class="muted" hidden></p>
+
+      <dl class="checkout-summary">
+        <div class="checkout-row">
+          <dt>Amount due</dt>
+          <dd id="checkout-amount" class="checkout-amount">—</dd>
+        </div>
+        <div class="checkout-row" id="gateway-row" hidden>
+          <dt>Payment method</dt>
+          <dd id="checkout-gateway">—</dd>
+        </div>
+        <div class="checkout-row" id="expires-row" hidden>
+          <dt>Expires</dt>
+          <dd id="checkout-expires">—</dd>
+        </div>
+      </dl>
+
+      <!-- Gateway redirect, when the gateway sent the customer elsewhere -->
+      <p id="redirect-area" class="redirect-area" hidden>
+        <a id="redirect-link" class="btn" href="#" rel="noopener noreferrer">
+          Continue to payment
+        </a>
+        <span class="small muted">
+          You will be redirected to the payment provider to finish paying.
+        </span>
+      </p>
+
+      <!-- Pending: instructions + submission form -->
+      <div id="pending-area" hidden>
+        <div class="alert checkout-instructions">
+          <h2 class="instructions-heading">How to pay</h2>
+          <p id="checkout-instructions">
+            Send the amount shown above to the merchant using the payment
+            method above, then enter your wallet number and the
+            transaction ID from that payment below.
+          </p>
+        </div>
+
+        <form id="checkout-form" novalidate>
+          <div class="field">
+            <label class="label" for="sender_number">Your wallet number</label>
+            <input
+              class="input"
+              id="sender_number"
+              name="sender_number"
+              type="tel"
+              inputmode="tel"
+              autocomplete="tel"
+              placeholder="01XXXXXXXXX"
+              required
+            />
+            <p class="field-hint">
+              The mobile wallet number you sent the payment from.
+            </p>
+          </div>
+
+          <div class="field">
+            <label class="label" for="provider_trx_id">Transaction ID</label>
+            <input
+              class="input"
+              id="provider_trx_id"
+              name="provider_trx_id"
+              type="text"
+              autocomplete="off"
+              autocapitalize="characters"
+              spellcheck="false"
+              placeholder="e.g. 9HX7K2LMNP"
+              required
+            />
+            <p class="field-hint">
+              The transaction ID shown in your payment confirmation / SMS.
+            </p>
+          </div>
+
+          <p id="form-error" class="alert alert-error" role="alert" hidden></p>
+
+          <button id="submit-button" class="btn checkout-submit" type="submit">
+            I have paid — submit details
+          </button>
+        </form>
+      </div>
+
+      <!-- After a successful submission -->
+      <div id="submitted-area" class="alert alert-success" role="status" hidden>
+        <h2>Payment submitted</h2>
+        <p>
+          Payment submitted — it will be confirmed automatically once the
+          payment SMS is verified.
+        </p>
+      </div>
+
+      <!-- Processing -->
+      <div id="processing-area" class="alert" role="status" hidden>
+        <h2>Awaiting confirmation</h2>
+        <p class="muted">
+          Awaiting confirmation — your payment has been submitted and is
+          being verified. You can safely close this page; there is nothing
+          else you need to do.
+        </p>
+      </div>
+
+      <!-- Completed -->
+      <div id="completed-area" class="alert alert-success" role="status" hidden>
+        <p class="completed-check" aria-hidden="true">✓</p>
+        <h2>Payment complete</h2>
+        <p>Payment complete. Thank you — the merchant has been notified.</p>
+      </div>
+
+      <!-- Any other terminal status (failed, cancelled, refunded, …) -->
+      <div id="status-area" class="alert" role="status" hidden>
+        <h2 id="status-heading">Payment status</h2>
+        <p id="status-message" class="muted"></p>
+      </div>
+    </section>
+
+    <p class="small muted checkout-footnote">
+      Secure hosted checkout by MiraclePay. Never share your wallet PIN —
+      you only need to enter the number you paid from and its transaction ID.
+    </p>
+  </main>
+</BaseLayout>
+
+<style>
+  .checkout-page {
+    max-width: 560px;
+  }
+
+  .checkout-brand {
+    margin: 0.5rem 0 1rem;
+    text-align: center;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--brand-dark);
+  }
+
+  .checkout-card {
+    padding: 1.5rem;
+  }
+
+  .checkout-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.875rem;
+    margin-bottom: 1rem;
+  }
+
+  .checkout-head h1 {
+    margin-bottom: 0;
+    font-size: 1.375rem;
+    overflow-wrap: anywhere;
+  }
+
+  .checkout-head .badge {
+    margin-left: auto;
+    text-transform: capitalize;
+  }
+
+  .checkout-eyebrow {
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+
+  .merchant-logo {
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    object-fit: contain;
+    background: var(--surface);
+  }
+
+  .checkout-summary {
+    margin: 0 0 1.25rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .checkout-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.625rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .checkout-row dt {
+    color: var(--muted);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .checkout-row dd {
+    margin: 0;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .checkout-amount {
+    font-size: 1.375rem;
+    font-weight: 700;
+  }
+
+  .redirect-area {
+    display: grid;
+    gap: 0.5rem;
+    justify-items: start;
+    margin-bottom: 1.25rem;
+  }
+
+  .checkout-instructions {
+    margin-bottom: 1.25rem;
+    background: var(--brand-soft);
+    border-color: transparent;
+  }
+
+  .instructions-heading {
+    font-size: 1rem;
+    margin-bottom: 0.375rem;
+  }
+
+  .checkout-instructions p {
+    margin: 0;
+    white-space: pre-line;
+  }
+
+  .checkout-submit {
+    width: 100%;
+  }
+
+  .completed-check {
+    display: grid;
+    place-items: center;
+    width: 3rem;
+    height: 3rem;
+    margin: 0 0 0.75rem;
+    border-radius: 999px;
+    background: var(--brand);
+    color: #fff;
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .checkout-error {
+    text-align: center;
+    padding: 2rem 1.5rem;
+  }
+
+  .checkout-error-icon {
+    display: grid;
+    place-items: center;
+    width: 3rem;
+    height: 3rem;
+    margin: 0 auto 0.75rem;
+    border-radius: 999px;
+    background: var(--danger-soft);
+    color: var(--danger);
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .checkout-footnote {
+    margin-top: 1rem;
+    text-align: center;
+  }
+</style>
+
+<script>
+  import {
+    checkoutDetails,
+    formatMoney,
+    submitCheckout,
+    type CheckoutDetails,
+    type SubmitCheckoutData,
+  } from '../../lib/api';
+
+  // Loose view over the public checkout payload: the typed fields come
+  // from `CheckoutDetails`; the optional extras below are fields the
+  // backend may add at creation time (display instructions, a gateway
+  // redirect, a nested merchant / business name, a chosen gateway).
+  interface CheckoutView extends CheckoutDetails {
+    business_name?: string;
+    gateway?: string;
+    instructions?: string;
+    redirect_url?: string;
+    merchant?: {
+      name?: string;
+      business_name?: string;
+      logo_url?: string;
+      [key: string]: unknown;
+    } | null;
+  }
+
+  const loadingEl = document.getElementById('checkout-loading');
+  const errorEl = document.getElementById('checkout-error');
+  const errorMessageEl = document.getElementById('checkout-error-message');
+  const cardEl = document.getElementById('checkout-card');
+  const merchantNameEl = document.getElementById('merchant-name');
+  const merchantLogoEl = document.getElementById(
+    'merchant-logo',
+  ) as HTMLImageElement | null;
+  const statusEl = document.getElementById('checkout-status');
+  const descriptionEl = document.getElementById('checkout-description');
+  const amountEl = document.getElementById('checkout-amount');
+  const gatewayRowEl = document.getElementById('gateway-row');
+  const gatewayEl = document.getElementById('checkout-gateway');
+  const expiresRowEl = document.getElementById('expires-row');
+  const expiresEl = document.getElementById('checkout-expires');
+  const redirectAreaEl = document.getElementById('redirect-area');
+  const redirectLinkEl = document.getElementById(
+    'redirect-link',
+  ) as HTMLAnchorElement | null;
+  const pendingAreaEl = document.getElementById('pending-area');
+  const instructionsEl = document.getElementById('checkout-instructions');
+  const form = document.getElementById(
+    'checkout-form',
+  ) as HTMLFormElement | null;
+  const senderInput = document.getElementById(
+    'sender_number',
+  ) as HTMLInputElement | null;
+  const trxInput = document.getElementById(
+    'provider_trx_id',
+  ) as HTMLInputElement | null;
+  const formErrorEl = document.getElementById('form-error');
+  const submitButton = document.getElementById(
+    'submit-button',
+  ) as HTMLButtonElement | null;
+  const submittedAreaEl = document.getElementById('submitted-area');
+  const processingAreaEl = document.getElementById('processing-area');
+  const completedAreaEl = document.getElementById('completed-area');
+  const statusAreaEl = document.getElementById('status-area');
+  const statusHeadingEl = document.getElementById('status-heading');
+  const statusMessageEl = document.getElementById('status-message');
+
+  // Static output: no build-time route param. The checkout id is the
+  // last non-empty segment of the current path (ignoring a trailing
+  // slash and any file extension a static host may append).
+  function checkoutIdFromLocation(): string {
+    const segments = window.location.pathname
+      .split('/')
+      .map((segment) => segment.trim())
+      .filter((segment) => segment.length > 0);
+    const last = segments[segments.length - 1] ?? '';
+    return decodeURIComponent(last).replace(/\.html?$/i, '');
+  }
+
+  function showError(message?: string): void {
+    if (loadingEl) loadingEl.hidden = true;
+    if (cardEl) cardEl.hidden = true;
+    if (errorMessageEl && message) errorMessageEl.textContent = message;
+    if (errorEl) errorEl.hidden = false;
+  }
+
+  function prettify(value: string): string {
+    const text = value.replace(/[_-]+/g, ' ').trim();
+    return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
+  }
+
+  function gatewayDisplay(details: CheckoutView): string {
+    if (typeof details.gateway === 'string' && details.gateway.trim()) {
+      return prettify(details.gateway);
+    }
+    const gateways = details.gateways ?? details.methods ?? [];
+    return gateways.map((gateway) => prettify(String(gateway))).join(', ');
+  }
+
+  function badgeClass(status: string): string {
+    if (status === 'completed' || status === 'paid' || status === 'success') {
+      return 'badge badge-success';
+    }
+    if (status === 'failed' || status === 'expired' || status === 'cancelled') {
+      return 'badge badge-failed';
+    }
+    return 'badge badge-pending';
+  }
+
+  function showFormError(message: string): void {
+    if (!formErrorEl) return;
+    formErrorEl.textContent = message;
+    formErrorEl.hidden = false;
+  }
+
+  function hideFormError(): void {
+    if (!formErrorEl) return;
+    formErrorEl.textContent = '';
+    formErrorEl.hidden = true;
+  }
+
+  let currentId = '';
+  let currentGateway = '';
+
+  function render(details: CheckoutView): void {
+    const status = String(details.status ?? 'pending').toLowerCase();
+
+    const businessName =
+      details.merchant_name ??
+      details.business_name ??
+      details.merchant?.business_name ??
+      details.merchant?.name ??
+      '';
+    if (merchantNameEl) {
+      merchantNameEl.textContent = businessName || 'Merchant';
+    }
+
+    const logoUrl = details.merchant_logo_url ?? details.merchant?.logo_url;
+    if (merchantLogoEl && typeof logoUrl === 'string' && logoUrl) {
+      merchantLogoEl.src = logoUrl;
+      merchantLogoEl.hidden = false;
+    }
+
+    if (statusEl) {
+      statusEl.textContent = prettify(status);
+      statusEl.className = badgeClass(status);
+    }
+
+    if (descriptionEl && details.description) {
+      descriptionEl.textContent = details.description;
+      descriptionEl.hidden = false;
+    }
+
+    if (amountEl) {
+      amountEl.textContent = formatMoney(
+        details.amount_minor,
+        details.currency,
+      );
+    }
+
+    currentGateway =
+      (typeof details.gateway === 'string' && details.gateway) ||
+      details.gateways?.[0] ||
+      details.methods?.[0] ||
+      '';
+    const gatewayText = gatewayDisplay(details);
+    if (gatewayRowEl && gatewayEl && gatewayText) {
+      gatewayEl.textContent = gatewayText;
+      gatewayRowEl.hidden = false;
+    }
+
+    if (expiresRowEl && expiresEl && details.expires_at) {
+      const expires = new Date(details.expires_at);
+      expiresEl.textContent = Number.isNaN(expires.getTime())
+        ? String(details.expires_at)
+        : expires.toLocaleString();
+      expiresRowEl.hidden = false;
+    }
+
+    // A gateway may hand the customer a provider page to pay on.
+    if (
+      redirectAreaEl &&
+      redirectLinkEl &&
+      typeof details.redirect_url === 'string' &&
+      details.redirect_url
+    ) {
+      redirectLinkEl.href = details.redirect_url;
+      redirectAreaEl.hidden = false;
+    }
+
+    if (loadingEl) loadingEl.hidden = true;
+    if (cardEl) cardEl.hidden = false;
+
+    if (status === 'pending') {
+      // Instructions supplied at creation time win over the generic text.
+      if (instructionsEl && typeof details.instructions === 'string' && details.instructions.trim()) {
+        instructionsEl.textContent = details.instructions;
+      }
+      if (pendingAreaEl) pendingAreaEl.hidden = false;
+    } else if (status === 'processing') {
+      if (processingAreaEl) processingAreaEl.hidden = false;
+    } else if (status === 'completed' || status === 'paid' || status === 'success') {
+      if (completedAreaEl) completedAreaEl.hidden = false;
+    } else if (status === 'expired') {
+      showError(
+        'This checkout has expired. Please ask the merchant for a new payment link.',
+      );
+    } else {
+      if (statusHeadingEl) {
+        statusHeadingEl.textContent = `Payment ${prettify(status).toLowerCase()}`;
+      }
+      if (statusMessageEl) {
+        statusMessageEl.textContent =
+          'This checkout is no longer awaiting payment. If you believe this is a mistake, please contact the merchant.';
+      }
+      if (statusAreaEl) statusAreaEl.hidden = false;
+    }
+  }
+
+  async function load(): Promise<void> {
+    currentId = checkoutIdFromLocation();
+    if (!currentId || currentId === 'checkout') {
+      showError(
+        'This checkout link is invalid or has expired. Please ask the merchant for a new payment link.',
+      );
+      return;
+    }
+
+    try {
+      const details = (await checkoutDetails(currentId)) as CheckoutView;
+      render(details);
+    } catch (error) {
+      showError(
+        error instanceof Error && error.message
+          ? `This checkout could not be loaded: ${error.message}`
+          : 'This checkout link is invalid or has expired. Please ask the merchant for a new payment link.',
+      );
+    }
+  }
+
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    hideFormError();
+
+    const sender_number = senderInput?.value.trim() ?? '';
+    const provider_trx_id = trxInput?.value.trim() ?? '';
+
+    if (!sender_number) {
+      showFormError('Please enter the wallet number you paid from.');
+      senderInput?.focus();
+      return;
+    }
+    if (!provider_trx_id) {
+      showFormError('Please enter the transaction ID from your payment.');
+      trxInput?.focus();
+      return;
+    }
+
+    if (submitButton) submitButton.disabled = true;
+
+    try {
+      const data = {
+        sender_number,
+        provider_trx_id,
+        // The API client also accepts the provider transaction id under
+        // its canonical name, and needs the gateway when one is known.
+        transaction_id: provider_trx_id,
+        ...(currentGateway ? { gateway: currentGateway } : {}),
+      } as SubmitCheckoutData;
+      await submitCheckout(currentId, data);
+
+      if (pendingAreaEl) pendingAreaEl.hidden = true;
+      if (statusEl) {
+        statusEl.textContent = 'Processing';
+        statusEl.className = 'badge badge-pending';
+      }
+      if (submittedAreaEl) submittedAreaEl.hidden = false;
+    } catch (error) {
+      showFormError(
+        error instanceof Error && error.message
+          ? error.message
+          : 'Your payment details could not be submitted. Please check them and try again.',
+      );
+      if (submitButton) submitButton.disabled = false;
+    }
+  });
+
+  void load();
+</script>

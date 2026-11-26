@@ -1,0 +1,13 @@
+// MiraclePay v0.0.1 — top-level build file (clean-room original)
+//
+// Plugin versions are declared here with the modern plugins DSL and
+// resolved via the pluginManagement block in settings.gradle.
+// Modules apply the plugins without repeating a version.
+//
+// Requires Gradle 8.7+ and Android Gradle Plugin 8.5.2.
+
+plugins {
+    id 'com.android.application' version '8.5.2' apply false
+    id 'com.android.library' version '8.5.2' apply false
+    id 'org.jetbrains.kotlin.android' version '2.0.20' apply false
+}

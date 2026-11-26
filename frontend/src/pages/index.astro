@@ -1,0 +1,404 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const gateways = [
+  "bKash",
+  "Nagad",
+  "Rocket",
+  "Upay",
+  "SureCash",
+  "UPI",
+  "Paytm",
+  "PhonePe",
+  "Razorpay",
+  "Easypaisa",
+  "JazzCash",
+  "Stripe",
+  "PayPal",
+];
+
+const features = [
+  {
+    title: "Hosted checkout",
+    description:
+      "A ready-made, mobile-first checkout page for every payment. Share it, redirect to it, or embed it — no PCI scope and no custom payment page to build or maintain.",
+  },
+  {
+    title: "Payment links",
+    description:
+      "Create a link for any amount and share it anywhere — Messenger, WhatsApp, SMS, or social media. Customers open the link, pay, and you get notified.",
+  },
+  {
+    title: "Invoices",
+    description:
+      "Issue clean, trackable invoices with a built-in pay button. See at a glance what is unpaid, paid, or overdue, and let customers settle in one tap.",
+  },
+  {
+    title: "SMS verification engine",
+    description:
+      "Incoming payment SMS messages are parsed and matched against pending payments automatically, so a send-money payment is confirmed without manual screenshots or phone calls.",
+  },
+  {
+    title: "Webhooks with HMAC signatures",
+    description:
+      "Get a signed server-to-server callback the moment a payment is verified. Every webhook carries an HMAC signature so you can prove it really came from MiraclePay.",
+  },
+  {
+    title: "REST API + API keys",
+    description:
+      "Create and check payments from any stack over a simple REST API, authenticated with scoped API keys you can issue, rotate, and revoke from the dashboard.",
+  },
+  {
+    title: "Settlements",
+    description:
+      "Track verified payments, balances, and payouts per gateway and per currency, with a clear record of what has been settled and what is still pending.",
+  },
+  {
+    title: "Self-hosted AGPL",
+    description:
+      "Run MiraclePay on your own server, under your own control. Your payment data, SMS data, and keys stay on infrastructure you own — no middleman holding your money flow.",
+  },
+];
+
+const steps = [
+  {
+    title: "Create a payment",
+    description:
+      "Create a payment from the dashboard, a payment link, an invoice, or the REST API. MiraclePay shows the customer exactly where and how much to pay.",
+  },
+  {
+    title: "Customer pays with send-money",
+    description:
+      "The customer pays with send-money from their own mobile banking app — bKash, Nagad, Rocket, and more — using the number and amount on the checkout page.",
+  },
+  {
+    title: "SMS verifies it automatically — webhook fires",
+    description:
+      "SMS verifies it automatically: the confirmation SMS is matched to the pending payment, the payment is marked paid, and a signed webhook fires to your system.",
+  },
+];
+---
+
+<BaseLayout
+  title="MiraclePay — Payments for Bangladesh and beyond"
+  description="Payments for Bangladesh and beyond — accept bKash, Nagad, Rocket, cards and more, verified automatically by SMS."
+>
+  <header class="site-header">
+    <nav class="nav" aria-label="Main">
+      <a class="logo" href="/" aria-label="MiraclePay home">MiraclePay</a>
+      <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#gateways">Gateways</a></li>
+        <li><a href="/login">Login</a></li>
+      </ul>
+      <a class="btn btn-primary nav-cta" href="/register">Get started</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">MiraclePay v0.0.1</p>
+      <h1>Payments for Bangladesh and beyond</h1>
+      <p class="hero-sub">
+        Payments for Bangladesh and beyond — accept bKash, Nagad, Rocket, cards
+        and more, verified automatically by SMS.
+      </p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" href="/register">Get started</a>
+        <a class="btn btn-secondary" href="#features">Explore features</a>
+      </div>
+      <p class="hero-note">Self-hosted, free, and open source under AGPL-3.0.</p>
+    </section>
+
+    <section id="gateways" class="gateways" aria-labelledby="gateways-heading">
+      <h2 id="gateways-heading">Gateways</h2>
+      <p class="section-sub">
+        Mobile banking, wallets, UPI, and cards — one checkout for all of them.
+      </p>
+      <ul class="chip-row">
+        {gateways.map((gateway) => <li class="chip">{gateway}</li>)}
+      </ul>
+    </section>
+
+    <section id="features" class="features" aria-labelledby="features-heading">
+      <h2 id="features-heading">Features</h2>
+      <p class="section-sub">
+        Everything you need to accept, verify, and reconcile payments — without
+        handing your payment flow to a third party.
+      </p>
+      <div class="features-grid">
+        {
+          features.map((feature) => (
+            <article class="feature-card">
+              <h3>{feature.title}</h3>
+              <p>{feature.description}</p>
+            </article>
+          ))
+        }
+      </div>
+    </section>
+
+    <section class="how-it-works" aria-labelledby="how-heading">
+      <h2 id="how-heading">How it works</h2>
+      <ol class="steps">
+        {
+          steps.map((step, index) => (
+            <li class="step">
+              <span class="step-number" aria-hidden="true">
+                {index + 1}
+              </span>
+              <h3>{step.title}</h3>
+              <p>{step.description}</p>
+            </li>
+          ))
+        }
+      </ol>
+    </section>
+
+    <section class="pricing" aria-labelledby="pricing-heading">
+      <h2 id="pricing-heading">Pricing</h2>
+      <p>
+        MiraclePay is self-hosted, free, AGPL-3.0 software. Download it, run it
+        on your own server, and keep it forever — no monthly fee, no per-transaction
+        cut, and no licence cost. You only pay your own hosting and whatever your
+        payment gateways charge you directly.
+      </p>
+      <a class="btn btn-primary" href="/register">Get started</a>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>MiraclePay v0.0.1</p>
+    <p>Self-hosted, free, AGPL-3.0.</p>
+    <nav aria-label="Footer">
+      <a href="#features">Features</a>
+      <a href="#gateways">Gateways</a>
+      <a href="/login">Login</a>
+      <a href="/register">Get started</a>
+    </nav>
+  </footer>
+</BaseLayout>
+
+<style>
+  .site-header {
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 1rem 1.25rem;
+  }
+
+  .logo {
+    font-size: 1.375rem;
+    font-weight: 800;
+    color: inherit;
+    text-decoration: none;
+    letter-spacing: -0.02em;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 1.25rem;
+    margin: 0 0 0 auto;
+    padding: 0;
+    list-style: none;
+  }
+
+  .nav-links a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .nav-links a:hover,
+  .site-footer a:hover {
+    text-decoration: underline;
+  }
+
+  .nav-cta {
+    margin-left: 0.5rem;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .btn-primary {
+    background: #6d28d9;
+    color: #fff;
+  }
+
+  .btn-secondary {
+    border: 1px solid #d1d5db;
+    color: inherit;
+  }
+
+  main {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 0 1.25rem;
+  }
+
+  .hero {
+    padding: 4.5rem 0 3rem;
+    text-align: center;
+  }
+
+  .eyebrow {
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #6d28d9;
+  }
+
+  .hero h1 {
+    font-size: clamp(2.25rem, 6vw, 3.75rem);
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    margin: 0.75rem 0 1rem;
+  }
+
+  .hero-sub {
+    max-width: 42rem;
+    margin: 0 auto;
+    font-size: 1.25rem;
+    line-height: 1.6;
+  }
+
+  .hero-ctas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+    margin-top: 2rem;
+  }
+
+  .hero-note {
+    margin-top: 1rem;
+    opacity: 0.75;
+  }
+
+  section {
+    padding: 2.5rem 0;
+  }
+
+  .section-sub {
+    max-width: 40rem;
+    line-height: 1.6;
+  }
+
+  .chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.625rem;
+    margin: 1.5rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .chip {
+    padding: 0.5rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 999px;
+    font-weight: 600;
+    background: #f9fafb;
+  }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 1rem;
+    margin-top: 1.5rem;
+  }
+
+  .feature-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+  }
+
+  .feature-card h3 {
+    margin-top: 0;
+  }
+
+  .feature-card p,
+  .step p,
+  .pricing p {
+    line-height: 1.6;
+  }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .step {
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+  }
+
+  .step-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    background: #6d28d9;
+    color: #fff;
+    font-weight: 700;
+  }
+
+  .pricing {
+    text-align: center;
+  }
+
+  .pricing p {
+    max-width: 42rem;
+    margin: 0 auto 1.5rem;
+  }
+
+  .site-footer {
+    border-top: 1px solid #e5e7eb;
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 3rem;
+    text-align: center;
+  }
+
+  .site-footer nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center;
+    margin-top: 0.75rem;
+  }
+
+  .site-footer a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  @media (max-width: 40rem) {
+    .nav {
+      flex-wrap: wrap;
+    }
+
+    .nav-links {
+      margin-left: 0;
+    }
+  }
+</style>

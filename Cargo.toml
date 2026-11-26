@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/domain",
+    "crates/gateways",
+    "crates/sms_verify",
+    "crates/api",
+    "crates/worker",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+license = "AGPL-3.0"

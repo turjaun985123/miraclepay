@@ -1,0 +1,724 @@
+---
+// MiraclePay v0.0.1 — Dashboard: Webhooks (clean-room, original).
+//
+// Manage the selected merchant's webhook endpoint and inspect the
+// webhook traffic MiraclePay has generated for it:
+//
+//   * Webhook URL editor — loads the merchant via `listMerchants`
+//     (selected by the merchant id kept in `localStorage`), shows its
+//     current `webhook_url`, and saves changes with
+//     `PATCH /api/v1/merchants/{id}`.
+//   * Events table — `GET /api/v1/webhooks/events?merchant_id=…`,
+//     with a per-event Redeliver button that calls
+//     `POST /api/v1/webhooks/events/{id}/redeliver`.
+//   * Deliveries table — `GET /api/v1/webhooks/deliveries`, showing
+//     the destination URL, a status badge, the attempt count and the
+//     last HTTP status code for every delivery.
+//   * "Test signature" mini-tool — posts a secret, a payload and a
+//     signature to `POST /api/v1/webhooks/test-signature` and reports
+//     whether the HMAC-SHA256 signature is valid.
+//
+// `src/lib/api.ts` exports no webhook-specific helpers, so every
+// webhook call below goes through the exported `apiFetch` directly.
+//
+// Everything happens client-side: the page is behind an auth guard
+// (no stored token → redirect to /login) and all data is fetched
+// from the Rust backend after mount.
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import DashboardNav from '../../components/DashboardNav.astro';
+---
+
+<BaseLayout title="Webhooks">
+  <DashboardNav active="webhooks" />
+
+  <main class="container stack">
+    <header class="row" style="justify-content: space-between;">
+      <div>
+        <h1>Webhooks</h1>
+        <p class="muted" style="margin: 0;">
+          Signed event notifications for
+          <strong id="merchant-name">your merchant</strong>
+          <span id="merchant-id" class="mono small"></span>
+        </p>
+      </div>
+      <button id="refresh-btn" class="btn btn-ghost" type="button">
+        Refresh
+      </button>
+    </header>
+
+    <p id="page-error" class="alert alert-error" role="alert" hidden></p>
+    <p id="page-success" class="alert alert-success" role="status" hidden></p>
+    <p id="loading" class="muted">Loading webhooks…</p>
+
+    <!-- ── Webhook URL editor ─────────────────────────────────── -->
+    <section class="card stack" aria-labelledby="webhook-url-heading">
+      <div>
+        <h2 id="webhook-url-heading">Webhook endpoint</h2>
+        <p class="muted small" style="margin: 0;">
+          MiraclePay POSTs every event for this merchant to this URL,
+          signed with an HMAC-SHA256 signature so you can verify it
+          really came from MiraclePay. Leave it empty to disable
+          webhook delivery.
+        </p>
+      </div>
+
+      <form id="webhook-url-form" novalidate>
+        <div class="field">
+          <label class="label" for="webhook-url">Webhook URL</label>
+          <input
+            id="webhook-url"
+            class="input mono"
+            name="webhook_url"
+            type="url"
+            inputmode="url"
+            autocomplete="url"
+            placeholder="https://example.com/webhooks/miraclepay"
+          />
+          <p class="field-hint">
+            Must start with <code>http://</code> or <code>https://</code>.
+          </p>
+        </div>
+        <div class="row">
+          <button id="webhook-url-save" class="btn" type="submit">
+            Save webhook URL
+          </button>
+          <span id="webhook-url-status" class="muted small" role="status"></span>
+        </div>
+      </form>
+    </section>
+
+    <!-- ── Events ─────────────────────────────────────────────── -->
+    <section class="card stack" aria-labelledby="events-heading">
+      <div class="row" style="justify-content: space-between;">
+        <h2 id="events-heading" style="margin: 0;">Events</h2>
+        <span id="events-count" class="badge"></span>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th scope="col">Time</th>
+              <th scope="col">Type</th>
+              <th scope="col">Merchant</th>
+              <th scope="col">Event ID</th>
+              <th scope="col"><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody id="events-body"></tbody>
+        </table>
+      </div>
+      <p id="events-empty" class="empty" hidden>
+        No webhook events for this merchant yet. Events appear here as
+        soon as something happens — for example a payment completing.
+      </p>
+    </section>
+
+    <!-- ── Deliveries ─────────────────────────────────────────── -->
+    <section class="card stack" aria-labelledby="deliveries-heading">
+      <div class="row" style="justify-content: space-between;">
+        <h2 id="deliveries-heading" style="margin: 0;">Deliveries</h2>
+        <span id="deliveries-count" class="badge"></span>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th scope="col">Event</th>
+              <th scope="col">URL</th>
+              <th scope="col">Status</th>
+              <th scope="col">Attempts</th>
+              <th scope="col">Last status code</th>
+            </tr>
+          </thead>
+          <tbody id="deliveries-body"></tbody>
+        </table>
+      </div>
+      <p id="deliveries-empty" class="empty" hidden>
+        No deliveries yet. A delivery is recorded each time MiraclePay
+        sends — or queues — an event for a merchant endpoint.
+      </p>
+    </section>
+
+    <!-- ── Test signature ─────────────────────────────────────── -->
+    <section class="card stack" aria-labelledby="test-signature-heading">
+      <div>
+        <h2 id="test-signature-heading">Test signature</h2>
+        <p class="muted small" style="margin: 0;">
+          Check an HMAC-SHA256 webhook signature without delivering
+          anything. Paste the signing secret, the exact raw payload
+          that was signed, and the hex signature you received.
+        </p>
+      </div>
+
+      <form id="test-signature-form" novalidate>
+        <div class="field">
+          <label class="label" for="sig-secret">Signing secret</label>
+          <input
+            id="sig-secret"
+            class="input mono"
+            name="secret"
+            type="text"
+            autocomplete="off"
+            placeholder="whsec_…"
+            required
+          />
+        </div>
+        <div class="field">
+          <label class="label" for="sig-payload">Payload</label>
+          <textarea
+            id="sig-payload"
+            class="input mono"
+            name="payload"
+            rows="4"
+            placeholder='{"id":"evt_…","type":"payment.completed"}'
+            required
+          ></textarea>
+          <p class="field-hint">
+            The payload must match byte for byte — whitespace and key
+            order change the signature.
+          </p>
+        </div>
+        <div class="field">
+          <label class="label" for="sig-signature">Signature (hex)</label>
+          <input
+            id="sig-signature"
+            class="input mono"
+            name="signature"
+            type="text"
+            autocomplete="off"
+            placeholder="64 hex characters"
+            required
+          />
+        </div>
+        <div class="row">
+          <button id="sig-submit" class="btn" type="submit">
+            Verify signature
+          </button>
+          <span
+            id="sig-result"
+            class="badge"
+            role="status"
+            aria-live="polite"
+            hidden
+          ></span>
+        </div>
+        <p id="sig-error" class="alert alert-error" role="alert" hidden></p>
+      </form>
+    </section>
+  </main>
+</BaseLayout>
+
+<style>
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  td.url-cell {
+    max-width: 22rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+</style>
+
+<script>
+  import { apiFetch, getToken, listMerchants } from '../../lib/api';
+  import type { Merchant } from '../../lib/api';
+
+  // ── Local shapes for the webhook endpoints ─────────────────────
+  // api.ts defines no webhook types, so the page declares the ones
+  // it consumes. Extra server fields are tolerated via index
+  // signatures, and the renderers below read a couple of alias field
+  // names defensively (`event_type` / `type`, `last_status_code` /
+  // `status_code`).
+
+  interface WebhookEvent {
+    id: string;
+    merchant_id?: string;
+    event_type?: string;
+    type?: string;
+    payload?: unknown;
+    created_at?: string;
+    [key: string]: unknown;
+  }
+
+  interface WebhookDelivery {
+    id?: string;
+    event_id?: string;
+    url?: string;
+    status?: string;
+    attempts?: number;
+    last_status_code?: number | null;
+    status_code?: number | null;
+    next_retry_at?: string | null;
+    created_at?: string;
+    [key: string]: unknown;
+  }
+
+  interface TestSignatureResponse {
+    valid: boolean;
+    [key: string]: unknown;
+  }
+
+  // ── Auth guard ─────────────────────────────────────────────────
+  if (!getToken()) {
+    window.location.href = '/login';
+  }
+
+  // ── Element handles ────────────────────────────────────────────
+  const $ = <T extends HTMLElement>(id: string) =>
+    document.getElementById(id) as T | null;
+
+  const merchantNameEl = $('merchant-name');
+  const merchantIdEl = $('merchant-id');
+  const loadingEl = $('loading');
+  const pageErrorEl = $('page-error');
+  const pageSuccessEl = $('page-success');
+  const refreshBtn = $<HTMLButtonElement>('refresh-btn');
+
+  const urlForm = $<HTMLFormElement>('webhook-url-form');
+  const urlInput = $<HTMLInputElement>('webhook-url');
+  const urlSaveBtn = $<HTMLButtonElement>('webhook-url-save');
+  const urlStatusEl = $('webhook-url-status');
+
+  const eventsBody = $<HTMLTableSectionElement>('events-body');
+  const eventsEmptyEl = $('events-empty');
+  const eventsCountEl = $('events-count');
+
+  const deliveriesBody = $<HTMLTableSectionElement>('deliveries-body');
+  const deliveriesEmptyEl = $('deliveries-empty');
+  const deliveriesCountEl = $('deliveries-count');
+
+  const sigForm = $<HTMLFormElement>('test-signature-form');
+  const sigSecretInput = $<HTMLInputElement>('sig-secret');
+  const sigPayloadInput = $<HTMLTextAreaElement>('sig-payload');
+  const sigSignatureInput = $<HTMLInputElement>('sig-signature');
+  const sigSubmitBtn = $<HTMLButtonElement>('sig-submit');
+  const sigResultEl = $('sig-result');
+  const sigErrorEl = $('sig-error');
+
+  // ── Merchant selection ─────────────────────────────────────────
+  // The dashboard keeps the active merchant in localStorage. A bare
+  // id may live under `mp_merchant_id` / `merchant_id`, or a JSON
+  // merchant snapshot under `mp_merchant` / `merchant`. Read all of
+  // them; when none is set, fall back to the first merchant the API
+  // returns and remember it under `mp_merchant_id`.
+
+  const MERCHANT_ID_KEYS = ['mp_merchant_id', 'merchant_id'];
+  const MERCHANT_JSON_KEYS = ['mp_merchant', 'merchant'];
+
+  function storedMerchantId(): string | null {
+    for (const key of MERCHANT_ID_KEYS) {
+      try {
+        const value = localStorage.getItem(key)?.trim();
+        if (value) return value;
+      } catch {
+        // Storage unavailable; try the next key.
+      }
+    }
+    for (const key of MERCHANT_JSON_KEYS) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const trimmed = raw.trim();
+        // The dashboard shell stores the bare id under `mp_merchant`;
+        // tolerate a JSON merchant snapshot under the same key too.
+        if (!trimmed.startsWith('{')) return trimmed;
+        const parsed = JSON.parse(trimmed) as { id?: unknown } | null;
+        if (parsed && typeof parsed.id === 'string' && parsed.id) {
+          return parsed.id;
+        }
+      } catch {
+        // Unreadable value under this key; try the next one.
+      }
+    }
+    return null;
+  }
+
+  function rememberMerchantId(id: string): void {
+    try {
+      localStorage.setItem('mp_merchant_id', id);
+      // The dashboard shell keeps the bare id under `mp_merchant`.
+      localStorage.setItem('mp_merchant', id);
+    } catch {
+      // Remembering the selection is best-effort only.
+    }
+  }
+
+  // ── Small helpers ──────────────────────────────────────────────
+
+  /** Accept a bare array or a `{ items | data | events | deliveries: [...] }` envelope. */
+  function asArray<T>(value: unknown): T[] {
+    if (Array.isArray(value)) return value as T[];
+    if (value && typeof value === 'object') {
+      const record = value as Record<string, unknown>;
+      for (const key of ['items', 'data', 'events', 'deliveries', 'results']) {
+        if (Array.isArray(record[key])) return record[key] as T[];
+      }
+    }
+    return [];
+  }
+
+  function formatTime(value?: string): string {
+    if (!value) return '—';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  }
+
+  function showPageError(message: string): void {
+    if (!pageErrorEl) return;
+    pageErrorEl.textContent = message;
+    pageErrorEl.hidden = false;
+  }
+
+  function hidePageError(): void {
+    if (pageErrorEl) pageErrorEl.hidden = true;
+  }
+
+  function showPageSuccess(message: string): void {
+    if (!pageSuccessEl) return;
+    pageSuccessEl.textContent = message;
+    pageSuccessEl.hidden = false;
+  }
+
+  function hidePageSuccess(): void {
+    if (pageSuccessEl) pageSuccessEl.hidden = true;
+  }
+
+  function errorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error && error.message ? error.message : fallback;
+  }
+
+  function cell(text: string, className?: string): HTMLTableCellElement {
+    const td = document.createElement('td');
+    td.textContent = text;
+    if (className) td.className = className;
+    return td;
+  }
+
+  function statusBadge(status: string): HTMLSpanElement {
+    const badge = document.createElement('span');
+    const normalised = status.toLowerCase();
+    let kind = '';
+    if (
+      normalised === 'delivered' ||
+      normalised === 'success' ||
+      normalised === 'succeeded' ||
+      normalised === 'completed'
+    ) {
+      kind = 'badge-success';
+    } else if (
+      normalised === 'pending' ||
+      normalised === 'queued' ||
+      normalised === 'retrying'
+    ) {
+      kind = 'badge-pending';
+    } else if (
+      normalised === 'failed' ||
+      normalised === 'dead_letter' ||
+      normalised === 'deadletter'
+    ) {
+      kind = 'badge-failed';
+    }
+    badge.className = kind ? `badge ${kind}` : 'badge';
+    badge.textContent =
+      normalised === 'dead_letter' || normalised === 'deadletter'
+        ? 'Dead letter'
+        : status;
+    return badge;
+  }
+
+  // ── State ──────────────────────────────────────────────────────
+  let merchantId: string | null = null;
+
+  // ── Webhook URL editor ─────────────────────────────────────────
+
+  function renderMerchant(merchant: Merchant): void {
+    if (merchantNameEl) merchantNameEl.textContent = merchant.name ?? 'your merchant';
+    if (merchantIdEl) merchantIdEl.textContent = merchant.id ? `(${merchant.id})` : '';
+    if (urlInput) {
+      const current = merchant.webhook_url;
+      urlInput.value = typeof current === 'string' ? current : '';
+    }
+  }
+
+  urlForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    hidePageError();
+    hidePageSuccess();
+    if (urlStatusEl) urlStatusEl.textContent = '';
+
+    if (!merchantId) {
+      showPageError('No merchant is selected, so there is nowhere to save the webhook URL.');
+      return;
+    }
+
+    const webhookUrl = urlInput?.value.trim() ?? '';
+    if (
+      webhookUrl &&
+      !webhookUrl.startsWith('http://') &&
+      !webhookUrl.startsWith('https://')
+    ) {
+      showPageError('The webhook URL must start with http:// or https://.');
+      return;
+    }
+
+    if (urlSaveBtn) urlSaveBtn.disabled = true;
+    if (urlStatusEl) urlStatusEl.textContent = 'Saving…';
+
+    try {
+      const updated = await apiFetch<Merchant>(
+        `/api/v1/merchants/${encodeURIComponent(merchantId)}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ webhook_url: webhookUrl || null }),
+        },
+      );
+      if (updated && typeof updated === 'object') renderMerchant(updated);
+      if (urlStatusEl) urlStatusEl.textContent = 'Saved.';
+      showPageSuccess(
+        webhookUrl
+          ? 'Webhook URL saved. New events will be delivered to the new endpoint.'
+          : 'Webhook URL cleared. Webhook delivery is now disabled for this merchant.',
+      );
+    } catch (error) {
+      if (urlStatusEl) urlStatusEl.textContent = '';
+      showPageError(errorMessage(error, 'Could not save the webhook URL.'));
+    } finally {
+      if (urlSaveBtn) urlSaveBtn.disabled = false;
+    }
+  });
+
+  // ── Events ─────────────────────────────────────────────────────
+
+  function renderEvents(events: WebhookEvent[]): void {
+    if (eventsCountEl) {
+      eventsCountEl.textContent = `${events.length} event${events.length === 1 ? '' : 's'}`;
+    }
+    if (eventsEmptyEl) eventsEmptyEl.hidden = events.length > 0;
+    if (!eventsBody) return;
+    eventsBody.replaceChildren();
+
+    for (const event of events) {
+      const row = document.createElement('tr');
+      row.appendChild(cell(formatTime(event.created_at), 'small'));
+      row.appendChild(cell(event.event_type ?? event.type ?? '—', 'mono small'));
+      row.appendChild(cell(event.merchant_id ?? '—', 'mono small'));
+      row.appendChild(cell(event.id, 'mono small'));
+
+      const actionCell = document.createElement('td');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn btn-ghost btn-sm';
+      button.textContent = 'Redeliver';
+      button.addEventListener('click', () => void redeliver(event.id, button));
+      actionCell.appendChild(button);
+      row.appendChild(actionCell);
+
+      eventsBody.appendChild(row);
+    }
+  }
+
+  async function redeliver(
+    eventId: string,
+    button: HTMLButtonElement,
+  ): Promise<void> {
+    hidePageError();
+    hidePageSuccess();
+    button.disabled = true;
+    const original = button.textContent;
+    button.textContent = 'Queuing…';
+
+    try {
+      await apiFetch<WebhookDelivery>(
+        `/api/v1/webhooks/events/${encodeURIComponent(eventId)}/redeliver`,
+        { method: 'POST', body: JSON.stringify({}) },
+      );
+      showPageSuccess(
+        `Redelivery queued for event ${eventId}. The new delivery appears in the deliveries table once recorded.`,
+      );
+      await loadDeliveries();
+    } catch (error) {
+      showPageError(errorMessage(error, `Could not redeliver event ${eventId}.`));
+    } finally {
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }
+
+  async function loadEvents(): Promise<void> {
+    if (!merchantId) {
+      renderEvents([]);
+      return;
+    }
+    const result = await apiFetch<unknown>(
+      `/api/v1/webhooks/events?merchant_id=${encodeURIComponent(merchantId)}`,
+    );
+    renderEvents(asArray<WebhookEvent>(result));
+  }
+
+  // ── Deliveries ─────────────────────────────────────────────────
+
+  function renderDeliveries(deliveries: WebhookDelivery[]): void {
+    if (deliveriesCountEl) {
+      deliveriesCountEl.textContent =
+        `${deliveries.length} deliver${deliveries.length === 1 ? 'y' : 'ies'}`;
+    }
+    if (deliveriesEmptyEl) deliveriesEmptyEl.hidden = deliveries.length > 0;
+    if (!deliveriesBody) return;
+    deliveriesBody.replaceChildren();
+
+    for (const delivery of deliveries) {
+      const row = document.createElement('tr');
+      row.appendChild(cell(delivery.event_id ?? '—', 'mono small'));
+      row.appendChild(cell(delivery.url ?? '—', 'mono small url-cell'));
+
+      const statusCell = document.createElement('td');
+      statusCell.appendChild(statusBadge(delivery.status ?? 'unknown'));
+      row.appendChild(statusCell);
+
+      row.appendChild(
+        cell(
+          typeof delivery.attempts === 'number'
+            ? String(delivery.attempts)
+            : '—',
+        ),
+      );
+
+      const lastCode = delivery.last_status_code ?? delivery.status_code;
+      row.appendChild(
+        cell(typeof lastCode === 'number' ? String(lastCode) : '—', 'mono'),
+      );
+
+      deliveriesBody.appendChild(row);
+    }
+  }
+
+  async function loadDeliveries(): Promise<void> {
+    const result = await apiFetch<unknown>('/api/v1/webhooks/deliveries');
+    renderDeliveries(asArray<WebhookDelivery>(result));
+  }
+
+  // ── Test signature ─────────────────────────────────────────────
+
+  sigForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (sigErrorEl) sigErrorEl.hidden = true;
+    if (sigResultEl) sigResultEl.hidden = true;
+
+    const secret = sigSecretInput?.value ?? '';
+    const payload = sigPayloadInput?.value ?? '';
+    const signature = sigSignatureInput?.value.trim() ?? '';
+
+    if (!secret || !payload || !signature) {
+      if (sigErrorEl) {
+        sigErrorEl.textContent =
+          'Enter the secret, the payload and the signature to test.';
+        sigErrorEl.hidden = false;
+      }
+      return;
+    }
+
+    if (sigSubmitBtn) sigSubmitBtn.disabled = true;
+
+    try {
+      const result = await apiFetch<TestSignatureResponse>(
+        '/api/v1/webhooks/test-signature',
+        {
+          method: 'POST',
+          body: JSON.stringify({ secret, payload, signature }),
+        },
+      );
+      if (sigResultEl) {
+        const valid = result?.valid === true;
+        sigResultEl.className = valid
+          ? 'badge badge-success'
+          : 'badge badge-failed';
+        sigResultEl.textContent = valid
+          ? 'Valid signature'
+          : 'Invalid signature';
+        sigResultEl.hidden = false;
+      }
+    } catch (error) {
+      if (sigErrorEl) {
+        sigErrorEl.textContent = errorMessage(
+          error,
+          'Could not test the signature.',
+        );
+        sigErrorEl.hidden = false;
+      }
+    } finally {
+      if (sigSubmitBtn) sigSubmitBtn.disabled = false;
+    }
+  });
+
+  // ── Page load ──────────────────────────────────────────────────
+
+  async function loadAll(): Promise<void> {
+    hidePageError();
+    hidePageSuccess();
+    if (loadingEl) loadingEl.hidden = false;
+
+    try {
+      const merchants = await listMerchants();
+      const wanted = storedMerchantId();
+      const merchant =
+        merchants.find((candidate) => candidate.id === wanted) ??
+        merchants[0] ??
+        null;
+
+      if (!merchant) {
+        merchantId = null;
+        if (merchantNameEl) merchantNameEl.textContent = 'no merchant yet';
+        showPageError(
+          'No merchant found for this account. Create a merchant first, then set its webhook URL here.',
+        );
+        renderEvents([]);
+        renderDeliveries([]);
+        return;
+      }
+
+      merchantId = merchant.id;
+      rememberMerchantId(merchant.id);
+      renderMerchant(merchant);
+
+      // Events and deliveries are independent: load both, and let a
+      // failure in one surface without hiding the other.
+      const [eventsResult, deliveriesResult] = await Promise.allSettled([
+        loadEvents(),
+        loadDeliveries(),
+      ]);
+      const failures = [eventsResult, deliveriesResult].filter(
+        (result): result is PromiseRejectedResult =>
+          result.status === 'rejected',
+      );
+      if (failures.length > 0) {
+        showPageError(
+          errorMessage(failures[0].reason, 'Some webhook data failed to load.'),
+        );
+      }
+    } catch (error) {
+      showPageError(errorMessage(error, 'Could not load webhooks.'));
+    } finally {
+      if (loadingEl) loadingEl.hidden = true;
+    }
+  }
+
+  refreshBtn?.addEventListener('click', () => void loadAll());
+
+  // Only fetch when the auth guard passed; without a token we are
+  // already on our way to /login.
+  if (getToken()) {
+    void loadAll();
+  }
+</script>

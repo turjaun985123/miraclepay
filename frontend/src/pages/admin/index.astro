@@ -1,0 +1,673 @@
+---
+// MiraclePay v0.0.1 — Admin panel (clean-room, original).
+//
+// Platform-wide overview and controls for administrators only:
+// headline statistics, the user and merchant lists, merchant status
+// management, platform settings, and the recent audit log.
+//
+// Everything is loaded client-side. The page first guards on a stored
+// auth token, then calls `adminStats()`; a 403 from the API means the
+// signed-in account is not an administrator, in which case an
+// "Admin access required" card replaces the panel. The remaining
+// sections are fetched with `apiFetch` directly because the API client
+// has no dedicated helpers for them yet.
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import DashboardNav from '../../components/DashboardNav.astro';
+---
+
+<BaseLayout title="Admin">
+  <DashboardNav active="admin" />
+
+  <main class="container stack">
+    <header>
+      <h1>Admin panel</h1>
+      <p class="muted">
+        Platform statistics, users, merchants, settings and the audit log for
+        MiraclePay v0.0.1.
+      </p>
+    </header>
+
+    <p id="admin-loading" class="muted">Loading admin panel…</p>
+
+    <section
+      id="admin-forbidden"
+      class="card empty"
+      aria-labelledby="admin-forbidden-heading"
+      hidden
+    >
+      <h2 id="admin-forbidden-heading">Admin access required</h2>
+      <p>
+        Your account does not have administrator access to MiraclePay. If you
+        believe this is a mistake, contact a platform administrator.
+      </p>
+      <p><a class="btn btn-ghost" href="/dashboard">Back to dashboard</a></p>
+    </section>
+
+    <p id="admin-error" class="alert alert-error" role="alert" hidden></p>
+
+    <div id="admin-content" class="stack" hidden>
+      <section aria-label="Platform statistics">
+        <div class="grid">
+          <article class="card stat">
+            <span class="stat-label">Total transactions</span>
+            <span class="stat-value" id="stat-total-transactions">—</span>
+          </article>
+          <article class="card stat">
+            <span class="stat-label">Completed</span>
+            <span class="stat-value" id="stat-completed">—</span>
+          </article>
+          <article class="card stat">
+            <span class="stat-label">Success rate</span>
+            <span class="stat-value" id="stat-success-rate">—</span>
+          </article>
+          <article class="card stat">
+            <span class="stat-label">Gross volume</span>
+            <span class="stat-value" id="stat-gross-volume">—</span>
+          </article>
+          <article class="card stat">
+            <span class="stat-label">Total users</span>
+            <span class="stat-value" id="stat-total-users">—</span>
+          </article>
+          <article class="card stat">
+            <span class="stat-label">Total merchants</span>
+            <span class="stat-value" id="stat-total-merchants">—</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="admin-users-heading">
+        <h2 id="admin-users-heading">Users</h2>
+        <p id="users-error" class="alert alert-error" role="alert" hidden></p>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Email</th>
+                <th scope="col">Role</th>
+                <th scope="col">Joined</th>
+              </tr>
+            </thead>
+            <tbody id="users-body"></tbody>
+          </table>
+        </div>
+        <p id="users-empty" class="empty" hidden>No users found.</p>
+      </section>
+
+      <section class="card" aria-labelledby="admin-merchants-heading">
+        <h2 id="admin-merchants-heading">Merchants</h2>
+        <p class="muted small">
+          Changing a merchant&rsquo;s status takes effect immediately.
+        </p>
+        <p id="merchants-error" class="alert alert-error" role="alert" hidden></p>
+        <p id="merchant-status-note" class="alert alert-success" role="status" hidden></p>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Email</th>
+                <th scope="col">Currency</th>
+                <th scope="col">Joined</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody id="merchants-body"></tbody>
+          </table>
+        </div>
+        <p id="merchants-empty" class="empty" hidden>No merchants found.</p>
+      </section>
+
+      <section class="card" aria-labelledby="admin-settings-heading">
+        <h2 id="admin-settings-heading">Platform settings</h2>
+        <form id="settings-form" novalidate>
+          <div class="field">
+            <label class="label" for="setting-platform-name">Platform name</label>
+            <input
+              class="input"
+              id="setting-platform-name"
+              name="platform_name"
+              type="text"
+              autocomplete="off"
+            />
+          </div>
+
+          <div class="field">
+            <label class="label" for="setting-default-fee-bps">
+              Default fee (basis points)
+            </label>
+            <input
+              class="input"
+              id="setting-default-fee-bps"
+              name="default_fee_bps"
+              type="number"
+              min="0"
+              step="1"
+              inputmode="numeric"
+            />
+            <p class="field-hint">100 bps = 1%. Applied to new transactions by default.</p>
+          </div>
+
+          <div class="field">
+            <label class="label" for="setting-checkout-session-minutes">
+              Checkout session (minutes)
+            </label>
+            <input
+              class="input"
+              id="setting-checkout-session-minutes"
+              name="checkout_session_minutes"
+              type="number"
+              min="1"
+              step="1"
+              inputmode="numeric"
+            />
+            <p class="field-hint">How long a checkout session stays payable.</p>
+          </div>
+
+          <div class="field">
+            <label class="label" for="setting-support-email">Support email</label>
+            <input
+              class="input"
+              id="setting-support-email"
+              name="support_email"
+              type="email"
+              autocomplete="email"
+            />
+          </div>
+
+          <div class="field row">
+            <input
+              id="setting-maintenance-mode"
+              name="maintenance_mode"
+              type="checkbox"
+            />
+            <label for="setting-maintenance-mode">
+              Maintenance mode (pause new checkouts)
+            </label>
+          </div>
+
+          <p id="settings-error" class="alert alert-error" role="alert" hidden></p>
+          <p id="settings-saved" class="alert alert-success" role="status" hidden>
+            Settings saved.
+          </p>
+
+          <button id="settings-submit" class="btn" type="submit">
+            Save settings
+          </button>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="admin-audit-heading">
+        <h2 id="admin-audit-heading">Audit log</h2>
+        <p class="muted small">The 50 most recent recorded actions.</p>
+        <p id="audit-error" class="alert alert-error" role="alert" hidden></p>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th scope="col">Time</th>
+                <th scope="col">Actor</th>
+                <th scope="col">Action</th>
+                <th scope="col">Entity</th>
+              </tr>
+            </thead>
+            <tbody id="audit-body"></tbody>
+          </table>
+        </div>
+        <p id="audit-empty" class="empty" hidden>No audit entries yet.</p>
+      </section>
+    </div>
+  </main>
+</BaseLayout>
+
+<style>
+  .stat-value {
+    overflow-wrap: anywhere;
+  }
+
+  select.input {
+    width: auto;
+    min-width: 9rem;
+    padding-block: 0.375rem;
+  }
+</style>
+
+<script>
+  import {
+    adminStats,
+    apiFetch,
+    formatMoney,
+    getToken,
+    type DashboardStats,
+    type Merchant,
+    type User,
+  } from '../../lib/api';
+
+  interface AuditEntry {
+    id?: string;
+    actor?: string;
+    actor_id?: string;
+    actor_name?: string;
+    actor_email?: string;
+    user_id?: string;
+    user_email?: string;
+    action?: string;
+    entity?: string;
+    entity_type?: string;
+    entity_id?: string;
+    target?: string;
+    created_at?: string;
+    timestamp?: string;
+    [key: string]: unknown;
+  }
+
+  interface AdminSettings {
+    platform_name?: string;
+    name?: string;
+    site_name?: string;
+    default_fee_bps?: number;
+    fee_bps?: number;
+    checkout_session_minutes?: number;
+    session_minutes?: number;
+    checkout_timeout_minutes?: number;
+    maintenance_mode?: boolean;
+    maintenance?: boolean;
+    support_email?: string;
+    [key: string]: unknown;
+  }
+
+  const loadingEl = document.getElementById('admin-loading');
+  const forbiddenEl = document.getElementById('admin-forbidden');
+  const errorEl = document.getElementById('admin-error');
+  const contentEl = document.getElementById('admin-content');
+
+  // Auth guard: the admin endpoints require a stored token, so send
+  // signed-out visitors to the login page before doing anything else.
+  if (!getToken()) {
+    window.location.href = '/login';
+  }
+
+  function esc(value: unknown): string {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function formatDate(value: unknown): string {
+    if (typeof value !== 'string' || !value) return '—';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  }
+
+  function num(value: unknown): number {
+    const n = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  /** Accept a bare array or a paginated `{ items | data | … }` envelope. */
+  function unwrapList<T>(payload: unknown, keys: string[]): T[] {
+    if (Array.isArray(payload)) return payload as T[];
+    if (payload && typeof payload === 'object') {
+      for (const key of keys) {
+        const value = (payload as Record<string, unknown>)[key];
+        if (Array.isArray(value)) return value as T[];
+      }
+    }
+    return [];
+  }
+
+  function showError(el: HTMLElement | null, message: string): void {
+    if (!el) return;
+    el.textContent = message;
+    el.hidden = false;
+  }
+
+  function errMessage(error: unknown, fallback: string): string {
+    return error instanceof Error && error.message ? error.message : fallback;
+  }
+
+  /** `apiFetch` surfaces the HTTP status inside its error message. */
+  function isForbidden(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    return /\b403\b/.test(message) || /forbidden|admin/i.test(message);
+  }
+
+  function setText(id: string, text: string): void {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  function renderStats(stats: DashboardStats): void {
+    const total = num(stats.total_transactions);
+    const completed = num(
+      stats.successful_transactions ?? stats.completed_transactions,
+    );
+    const currency =
+      typeof stats.currency === 'string' && stats.currency
+        ? stats.currency
+        : 'BDT';
+    const grossMinor = num(stats.total_volume_minor ?? stats.gross_volume_minor);
+
+    let successRate: number | null = null;
+    if (typeof stats.success_rate === 'number') {
+      // Tolerate either a 0–1 fraction or an already-scaled percentage.
+      successRate =
+        stats.success_rate > 1 ? stats.success_rate : stats.success_rate * 100;
+    } else if (total > 0) {
+      successRate = (completed / total) * 100;
+    }
+
+    setText('stat-total-transactions', total.toLocaleString('en-US'));
+    setText('stat-completed', completed.toLocaleString('en-US'));
+    setText(
+      'stat-success-rate',
+      successRate === null ? '—' : `${successRate.toFixed(1)}%`,
+    );
+    setText('stat-gross-volume', formatMoney(grossMinor, currency));
+    setText('stat-total-users', num(stats.total_users).toLocaleString('en-US'));
+    setText(
+      'stat-total-merchants',
+      num(stats.total_merchants).toLocaleString('en-US'),
+    );
+  }
+
+  function renderUsers(users: User[]): void {
+    const body = document.getElementById('users-body');
+    const empty = document.getElementById('users-empty');
+    if (!body) return;
+    if (empty) empty.hidden = users.length > 0;
+    body.innerHTML = users
+      .map((user) => {
+        const role =
+          user.role ?? (user.is_admin ? 'admin' : 'user');
+        const badgeClass =
+          role === 'admin' ? 'badge badge-success' : 'badge';
+        return `<tr>
+          <td>${esc(user.name ?? '—')}</td>
+          <td>${esc(user.email ?? '—')}</td>
+          <td><span class="${badgeClass}">${esc(role)}</span></td>
+          <td>${esc(formatDate(user.created_at))}</td>
+        </tr>`;
+      })
+      .join('');
+  }
+
+  const MERCHANT_STATUSES = [
+    'pending',
+    'active',
+    'suspended',
+    'rejected',
+    'disabled',
+  ];
+
+  function renderMerchants(merchants: Merchant[]): void {
+    const body = document.getElementById('merchants-body');
+    const empty = document.getElementById('merchants-empty');
+    if (!body) return;
+    if (empty) empty.hidden = merchants.length > 0;
+    body.innerHTML = merchants
+      .map((merchant) => {
+        const current = String(merchant.status ?? 'pending').toLowerCase();
+        const options = MERCHANT_STATUSES.includes(current)
+          ? MERCHANT_STATUSES
+          : [current, ...MERCHANT_STATUSES];
+        const selectOptions = options
+          .map(
+            (status) =>
+              `<option value="${esc(status)}"${status === current ? ' selected' : ''}>${esc(status)}</option>`,
+          )
+          .join('');
+        return `<tr>
+          <td>${esc(merchant.name ?? '—')}</td>
+          <td>${esc(merchant.email ?? '—')}</td>
+          <td>${esc(merchant.currency ?? '—')}</td>
+          <td>${esc(formatDate(merchant.created_at))}</td>
+          <td>
+            <select
+              class="input merchant-status"
+              data-merchant-id="${esc(merchant.id)}"
+              data-merchant-name="${esc(merchant.name ?? '')}"
+              data-current-status="${esc(current)}"
+              aria-label="Status for ${esc(merchant.name ?? 'merchant')}"
+            >${selectOptions}</select>
+          </td>
+        </tr>`;
+      })
+      .join('');
+
+    body
+      .querySelectorAll<HTMLSelectElement>('select.merchant-status')
+      .forEach((select) => {
+        select.addEventListener('change', () => {
+          void changeMerchantStatus(select);
+        });
+      });
+  }
+
+  async function changeMerchantStatus(select: HTMLSelectElement): Promise<void> {
+    const merchantId = select.dataset.merchantId ?? '';
+    const previous = select.dataset.currentStatus ?? '';
+    const status = select.value;
+    const note = document.getElementById('merchant-status-note');
+    const errorBox = document.getElementById('merchants-error');
+    if (errorBox) errorBox.hidden = true;
+    if (note) note.hidden = true;
+    select.disabled = true;
+    try {
+      await apiFetch<Merchant>(
+        `/api/v1/admin/merchants/${encodeURIComponent(merchantId)}/status`,
+        { method: 'POST', body: JSON.stringify({ status }) },
+      );
+      select.dataset.currentStatus = status;
+      if (note) {
+        const name = select.dataset.merchantName;
+        note.textContent = `Merchant${name ? ` “${name}”` : ''} status changed to ${status}.`;
+        note.hidden = false;
+      }
+    } catch (error) {
+      select.value = previous;
+      showError(
+        errorBox,
+        errMessage(error, 'Could not update the merchant status.'),
+      );
+    } finally {
+      select.disabled = false;
+    }
+  }
+
+  function renderAudit(entries: AuditEntry[]): void {
+    const body = document.getElementById('audit-body');
+    const empty = document.getElementById('audit-empty');
+    if (!body) return;
+    if (empty) empty.hidden = entries.length > 0;
+    body.innerHTML = entries
+      .map((entry) => {
+        const actor =
+          entry.actor_name ??
+          entry.actor_email ??
+          entry.actor ??
+          entry.user_email ??
+          entry.actor_id ??
+          entry.user_id ??
+          '—';
+        const entityParts = [entry.entity_type ?? entry.entity, entry.entity_id ?? entry.target]
+          .filter((part) => typeof part === 'string' && part.length > 0);
+        return `<tr>
+          <td>${esc(formatDate(entry.created_at ?? entry.timestamp))}</td>
+          <td>${esc(actor)}</td>
+          <td>${esc(entry.action ?? '—')}</td>
+          <td>${esc(entityParts.length > 0 ? entityParts.join(' · ') : '—')}</td>
+        </tr>`;
+      })
+      .join('');
+  }
+
+  function fillSettings(settings: AdminSettings): void {
+    const setValue = (id: string, value: unknown) => {
+      const input = document.getElementById(id) as HTMLInputElement | null;
+      if (input && value !== undefined && value !== null) {
+        input.value = String(value);
+      }
+    };
+    setValue(
+      'setting-platform-name',
+      settings.platform_name ?? settings.name ?? settings.site_name,
+    );
+    setValue(
+      'setting-default-fee-bps',
+      settings.default_fee_bps ?? settings.fee_bps,
+    );
+    setValue(
+      'setting-checkout-session-minutes',
+      settings.checkout_session_minutes ??
+        settings.session_minutes ??
+        settings.checkout_timeout_minutes,
+    );
+    setValue('setting-support-email', settings.support_email);
+    const maintenance = document.getElementById(
+      'setting-maintenance-mode',
+    ) as HTMLInputElement | null;
+    if (maintenance) {
+      maintenance.checked = Boolean(
+        settings.maintenance_mode ?? settings.maintenance,
+      );
+    }
+  }
+
+  async function loadUsers(): Promise<void> {
+    try {
+      const payload = await apiFetch<unknown>('/api/v1/admin/users');
+      renderUsers(unwrapList<User>(payload, ['users', 'items', 'data', 'results']));
+    } catch (error) {
+      showError(
+        document.getElementById('users-error'),
+        errMessage(error, 'Could not load users.'),
+      );
+    }
+  }
+
+  async function loadMerchants(): Promise<void> {
+    try {
+      const payload = await apiFetch<unknown>('/api/v1/admin/merchants');
+      renderMerchants(
+        unwrapList<Merchant>(payload, ['merchants', 'items', 'data', 'results']),
+      );
+    } catch (error) {
+      showError(
+        document.getElementById('merchants-error'),
+        errMessage(error, 'Could not load merchants.'),
+      );
+    }
+  }
+
+  async function loadAudit(): Promise<void> {
+    try {
+      const payload = await apiFetch<unknown>('/api/v1/admin/audit?limit=50');
+      renderAudit(
+        unwrapList<AuditEntry>(payload, ['audit', 'entries', 'items', 'data', 'results']),
+      );
+    } catch (error) {
+      showError(
+        document.getElementById('audit-error'),
+        errMessage(error, 'Could not load the audit log.'),
+      );
+    }
+  }
+
+  async function loadSettings(): Promise<void> {
+    try {
+      const payload = await apiFetch<unknown>('/api/v1/admin/settings');
+      const settings =
+        payload &&
+        typeof payload === 'object' &&
+        'settings' in (payload as Record<string, unknown>) &&
+        typeof (payload as Record<string, unknown>).settings === 'object'
+          ? ((payload as Record<string, unknown>).settings as AdminSettings)
+          : (payload as AdminSettings);
+      fillSettings(settings ?? {});
+    } catch (error) {
+      showError(
+        document.getElementById('settings-error'),
+        errMessage(error, 'Could not load settings.'),
+      );
+    }
+  }
+
+  const settingsForm = document.getElementById(
+    'settings-form',
+  ) as HTMLFormElement | null;
+  settingsForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const errorBox = document.getElementById('settings-error');
+    const saved = document.getElementById('settings-saved');
+    const submit = document.getElementById(
+      'settings-submit',
+    ) as HTMLButtonElement | null;
+    if (errorBox) errorBox.hidden = true;
+    if (saved) saved.hidden = true;
+
+    const value = (id: string) =>
+      (document.getElementById(id) as HTMLInputElement | null)?.value.trim() ?? '';
+    const maintenance = document.getElementById(
+      'setting-maintenance-mode',
+    ) as HTMLInputElement | null;
+
+    const feeBps = Number(value('setting-default-fee-bps'));
+    const sessionMinutes = Number(value('setting-checkout-session-minutes'));
+
+    const payload: Record<string, unknown> = {
+      platform_name: value('setting-platform-name'),
+      maintenance_mode: Boolean(maintenance?.checked),
+      support_email: value('setting-support-email'),
+    };
+    if (Number.isFinite(feeBps)) payload.default_fee_bps = feeBps;
+    if (Number.isFinite(sessionMinutes)) {
+      payload.checkout_session_minutes = sessionMinutes;
+    }
+
+    if (submit) submit.disabled = true;
+    try {
+      await apiFetch<unknown>('/api/v1/admin/settings', {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      if (saved) saved.hidden = false;
+    } catch (error) {
+      showError(errorBox, errMessage(error, 'Could not save settings.'));
+    } finally {
+      if (submit) submit.disabled = false;
+    }
+  });
+
+  async function init(): Promise<void> {
+    // A token-less visitor is already on the way to /login.
+    if (!getToken()) return;
+
+    let stats: DashboardStats;
+    try {
+      stats = await adminStats();
+    } catch (error) {
+      if (loadingEl) loadingEl.hidden = true;
+      if (isForbidden(error)) {
+        if (forbiddenEl) forbiddenEl.hidden = false;
+      } else {
+        showError(
+          errorEl,
+          errMessage(error, 'Could not load the admin panel. Please try again.'),
+        );
+      }
+      return;
+    }
+
+    renderStats(stats);
+    if (loadingEl) loadingEl.hidden = true;
+    if (contentEl) contentEl.hidden = false;
+
+    await Promise.all([loadUsers(), loadMerchants(), loadAudit(), loadSettings()]);
+  }
+
+  void init();
+</script>

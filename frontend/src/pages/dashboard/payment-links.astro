@@ -1,0 +1,619 @@
+---
+// MiraclePay v0.0.1 — Dashboard: payment links (clean-room, original).
+//
+// Create shareable payment links for the current merchant and list
+// the links already created. A link either fixes the amount the
+// customer pays, or leaves it open so the customer chooses the
+// amount on the public pay page at /pay/<slug>.
+//
+// Everything runs client-side through the API client: an auth guard
+// bounces visitors without a stored token to /login, the merchant is
+// read from localStorage ('mp_merchant') and falls back to the first
+// merchant returned by `listMerchants`, and the list is reloaded
+// after every successful create.
+//
+// Note on deactivation: src/lib/api.ts exposes listLinks /
+// createLink / publicLink / payLink for payment links, but no
+// deactivate (or delete / update) call — so this page deliberately
+// offers no deactivation button.
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import DashboardNav from '../../components/DashboardNav.astro';
+---
+
+<BaseLayout title="Payment links">
+  <DashboardNav />
+
+  <main class="container stack">
+    <header>
+      <h1>Payment links</h1>
+      <p class="muted">
+        Create a link, share it anywhere, and customers pay from the
+        public pay page — no checkout integration needed.
+      </p>
+      <p id="merchant-line" class="small muted" hidden>
+        Merchant: <span id="merchant-name"></span>
+      </p>
+    </header>
+
+    <p id="page-error" class="alert alert-error" role="alert" hidden></p>
+    <p id="page-success" class="alert alert-success" role="status" hidden></p>
+
+    <section class="card" aria-labelledby="create-heading">
+      <h2 id="create-heading">Create a payment link</h2>
+
+      <form id="create-form" novalidate>
+        <div class="field">
+          <label class="label" for="link-title">Title</label>
+          <input
+            id="link-title"
+            name="title"
+            class="input"
+            type="text"
+            placeholder="e.g. Consulting — one session"
+            autocomplete="off"
+            required
+          />
+        </div>
+
+        <div class="field">
+          <label class="label" for="link-description">Description</label>
+          <textarea
+            id="link-description"
+            name="description"
+            class="input"
+            rows="3"
+            placeholder="Optional — shown to the customer on the pay page"
+          ></textarea>
+        </div>
+
+        <div class="form-grid">
+          <div class="field">
+            <label class="label" for="link-amount">Amount (optional)</label>
+            <input
+              id="link-amount"
+              name="amount"
+              class="input"
+              type="number"
+              inputmode="decimal"
+              min="0"
+              step="0.01"
+              placeholder="Leave empty for an open amount"
+            />
+            <p class="field-hint">
+              Fixed amount in major units (e.g. 500.00). Leave empty and
+              the customer chooses how much to pay.
+            </p>
+          </div>
+
+          <div class="field">
+            <label class="label" for="link-currency">Currency</label>
+            <select id="link-currency" name="currency" class="input">
+              <option value="BDT" selected>BDT</option>
+              <option value="INR">INR</option>
+              <option value="PKR">PKR</option>
+              <option value="USD">USD</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label class="label" for="link-max-uses">Max uses (optional)</label>
+            <input
+              id="link-max-uses"
+              name="max_uses"
+              class="input"
+              type="number"
+              inputmode="numeric"
+              min="1"
+              step="1"
+              placeholder="Unlimited"
+            />
+            <p class="field-hint">
+              Stop accepting payments after this many successful uses.
+            </p>
+          </div>
+        </div>
+
+        <fieldset class="field collect-fieldset">
+          <legend class="label">Collect from the customer</legend>
+          <label class="check-row">
+            <input id="link-collect-phone" name="collect_phone" type="checkbox" />
+            Phone number
+          </label>
+          <label class="check-row">
+            <input id="link-collect-email" name="collect_email" type="checkbox" />
+            Email address
+          </label>
+        </fieldset>
+
+        <p id="form-error" class="alert alert-error" role="alert" hidden></p>
+
+        <button id="create-submit" type="submit" class="btn">
+          Create link
+        </button>
+      </form>
+    </section>
+
+    <section class="card" aria-labelledby="list-heading">
+      <div class="row list-header">
+        <h2 id="list-heading">Your payment links</h2>
+        <button id="refresh-button" type="button" class="btn btn-ghost btn-sm">
+          Refresh
+        </button>
+      </div>
+
+      <p id="list-loading" class="muted">Loading payment links…</p>
+      <p id="list-error" class="alert alert-error" role="alert" hidden></p>
+      <p id="list-empty" class="empty" hidden>
+        No payment links yet. Create your first link above and share it
+        with a customer.
+      </p>
+
+      <div id="list-wrap" class="table-wrap" hidden>
+        <table class="table">
+          <thead>
+            <tr>
+              <th scope="col">Title</th>
+              <th scope="col">Pay link</th>
+              <th scope="col">Amount</th>
+              <th scope="col">Uses</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody id="links-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</BaseLayout>
+
+<style>
+  .form-grid {
+    display: grid;
+    gap: 0 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+
+  .collect-fieldset {
+    border: 0;
+    margin: 0 0 1rem;
+    padding: 0;
+  }
+
+  .collect-fieldset legend {
+    padding: 0;
+  }
+
+  .check-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0;
+    font-size: 0.9375rem;
+    cursor: pointer;
+  }
+
+  .check-row input {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--brand);
+  }
+
+  .list-header {
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+  }
+
+  .list-header h2 {
+    margin: 0;
+  }
+
+  .pay-url {
+    display: inline-block;
+    max-width: 320px;
+    overflow-wrap: anywhere;
+  }
+
+  .link-title {
+    font-weight: 600;
+  }
+
+  .link-description {
+    display: block;
+    margin-top: 0.125rem;
+  }
+</style>
+
+<script>
+  import {
+    createLink,
+    formatMoney,
+    getToken,
+    listLinks,
+    listMerchants,
+    type CreateLinkData,
+    type Merchant,
+    type PaymentLink,
+  } from '../../lib/api';
+
+  // ---------------------------------------------------------------------
+  // Auth guard — no stored token, no dashboard.
+  // ---------------------------------------------------------------------
+  if (!getToken()) {
+    window.location.href = '/login';
+  }
+
+  const pageError = document.getElementById('page-error');
+  const pageSuccess = document.getElementById('page-success');
+  const merchantLine = document.getElementById('merchant-line');
+  const merchantName = document.getElementById('merchant-name');
+
+  const form = document.getElementById('create-form') as HTMLFormElement | null;
+  const titleInput = document.getElementById('link-title') as HTMLInputElement | null;
+  const descriptionInput = document.getElementById(
+    'link-description',
+  ) as HTMLTextAreaElement | null;
+  const amountInput = document.getElementById('link-amount') as HTMLInputElement | null;
+  const currencySelect = document.getElementById(
+    'link-currency',
+  ) as HTMLSelectElement | null;
+  const maxUsesInput = document.getElementById('link-max-uses') as HTMLInputElement | null;
+  const collectPhoneInput = document.getElementById(
+    'link-collect-phone',
+  ) as HTMLInputElement | null;
+  const collectEmailInput = document.getElementById(
+    'link-collect-email',
+  ) as HTMLInputElement | null;
+  const formError = document.getElementById('form-error');
+  const submitButton = document.getElementById(
+    'create-submit',
+  ) as HTMLButtonElement | null;
+
+  const refreshButton = document.getElementById(
+    'refresh-button',
+  ) as HTMLButtonElement | null;
+  const listLoading = document.getElementById('list-loading');
+  const listError = document.getElementById('list-error');
+  const listEmpty = document.getElementById('list-empty');
+  const listWrap = document.getElementById('list-wrap');
+  const linksBody = document.getElementById('links-body');
+
+  let merchantId: string | null = null;
+
+  function show(el: HTMLElement | null): void {
+    if (el) el.hidden = false;
+  }
+
+  function hide(el: HTMLElement | null): void {
+    if (el) el.hidden = true;
+  }
+
+  function setText(el: HTMLElement | null, message: string): void {
+    if (el) el.textContent = message;
+  }
+
+  function showPageError(message: string): void {
+    setText(pageError, message);
+    show(pageError);
+  }
+
+  function showPageSuccess(message: string): void {
+    setText(pageSuccess, message);
+    show(pageSuccess);
+  }
+
+  function showFormError(message: string): void {
+    setText(formError, message);
+    show(formError);
+  }
+
+  /** Tolerate a bare array or a `{ data | items | links: [...] }` envelope. */
+  function asArray<T>(result: unknown): T[] {
+    if (Array.isArray(result)) return result as T[];
+    if (result && typeof result === 'object') {
+      const record = result as Record<string, unknown>;
+      for (const key of ['data', 'items', 'links', 'merchants', 'results']) {
+        if (Array.isArray(record[key])) return record[key] as T[];
+      }
+    }
+    return [];
+  }
+
+  /**
+   * Merchant id from localStorage 'mp_merchant'. The stored value may
+   * be a raw id string or a JSON-encoded merchant / `{ id }` object;
+   * anything else counts as "not set".
+   */
+  function storedMerchantId(): string | null {
+    try {
+      const raw = localStorage.getItem('mp_merchant');
+      if (!raw) return null;
+      const trimmed = raw.trim();
+      if (!trimmed) return null;
+      if (trimmed.startsWith('{')) {
+        const parsed = JSON.parse(trimmed) as { id?: unknown };
+        return typeof parsed.id === 'string' && parsed.id ? parsed.id : null;
+      }
+      return trimmed;
+    } catch {
+      return null;
+    }
+  }
+
+  async function resolveMerchant(): Promise<Merchant | null> {
+    const merchants = asArray<Merchant>(await listMerchants());
+    const storedId = storedMerchantId();
+    if (storedId) {
+      return (
+        merchants.find((merchant) => merchant.id === storedId) ??
+        ({ id: storedId, name: '' } as Merchant)
+      );
+    }
+    const first = merchants[0] ?? null;
+    if (first) {
+      try {
+        localStorage.setItem('mp_merchant', first.id);
+      } catch {
+        // Storage unavailable; the in-memory id is enough for this page.
+      }
+    }
+    return first;
+  }
+
+  function payUrl(slug: string): string {
+    return `${window.location.origin}/pay/${encodeURIComponent(slug)}`;
+  }
+
+  function numberField(link: PaymentLink, keys: string[]): number | null {
+    for (const key of keys) {
+      const value = link[key];
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+      if (typeof value === 'string' && value.trim() !== '') {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) return parsed;
+      }
+    }
+    return null;
+  }
+
+  async function copyText(text: string, button: HTMLButtonElement): Promise<void> {
+    const original = button.textContent;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand('copy');
+        area.remove();
+      }
+      button.textContent = 'Copied';
+    } catch {
+      button.textContent = 'Copy failed';
+    }
+    window.setTimeout(() => {
+      button.textContent = original;
+    }, 1600);
+  }
+
+  function renderLinks(links: PaymentLink[]): void {
+    hide(listLoading);
+    hide(listError);
+    if (!linksBody) return;
+    linksBody.replaceChildren();
+
+    if (links.length === 0) {
+      hide(listWrap);
+      show(listEmpty);
+      return;
+    }
+    hide(listEmpty);
+    show(listWrap);
+
+    for (const link of links) {
+      const row = document.createElement('tr');
+
+      // Title (+ optional description)
+      const titleCell = document.createElement('td');
+      const titleSpan = document.createElement('span');
+      titleSpan.className = 'link-title';
+      titleSpan.textContent = link.title || link.slug;
+      titleCell.appendChild(titleSpan);
+      if (link.description) {
+        const descriptionSpan = document.createElement('span');
+        descriptionSpan.className = 'link-description small muted';
+        descriptionSpan.textContent = link.description;
+        titleCell.appendChild(descriptionSpan);
+      }
+      row.appendChild(titleCell);
+
+      // Full pay URL for the slug + Copy button
+      const urlCell = document.createElement('td');
+      const url = payUrl(link.slug);
+      const anchor = document.createElement('a');
+      anchor.className = 'pay-url mono small';
+      anchor.href = url;
+      anchor.target = '_blank';
+      anchor.rel = 'noopener';
+      anchor.textContent = url;
+      const copyButton = document.createElement('button');
+      copyButton.type = 'button';
+      copyButton.className = 'btn btn-ghost btn-sm';
+      copyButton.textContent = 'Copy';
+      copyButton.addEventListener('click', () => {
+        void copyText(url, copyButton);
+      });
+      const urlRow = document.createElement('div');
+      urlRow.className = 'row';
+      urlRow.append(anchor, copyButton);
+      urlCell.appendChild(urlRow);
+      row.appendChild(urlCell);
+
+      // Fixed amount, or open amount
+      const amountCell = document.createElement('td');
+      amountCell.textContent =
+        link.amount_minor != null
+          ? formatMoney(link.amount_minor, link.currency || 'BDT')
+          : 'Open amount';
+      row.appendChild(amountCell);
+
+      // Uses so far / max uses
+      const usesCell = document.createElement('td');
+      const uses = numberField(link, ['uses', 'use_count', 'used_count', 'payments_count']);
+      const maxUses = numberField(link, ['max_uses', 'maxUses', 'usage_limit']);
+      usesCell.textContent =
+        maxUses != null ? `${uses ?? 0} / ${maxUses}` : `${uses ?? 0} / Unlimited`;
+      row.appendChild(usesCell);
+
+      // Active / inactive badge from the link status
+      const statusCell = document.createElement('td');
+      const status = (link.status ?? 'active').toString().toLowerCase();
+      const badge = document.createElement('span');
+      if (status === 'active') {
+        badge.className = 'badge badge-success';
+        badge.textContent = 'Active';
+      } else if (['inactive', 'disabled', 'deactivated', 'expired', 'closed'].includes(status)) {
+        badge.className = 'badge badge-failed';
+        badge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+      } else {
+        badge.className = 'badge badge-pending';
+        badge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+      }
+      statusCell.appendChild(badge);
+      row.appendChild(statusCell);
+
+      linksBody.appendChild(row);
+    }
+  }
+
+  async function loadLinks(): Promise<void> {
+    if (!merchantId) return;
+    show(listLoading);
+    hide(listError);
+    hide(listEmpty);
+    try {
+      const links = asArray<PaymentLink>(await listLinks(merchantId));
+      renderLinks(links);
+    } catch (error) {
+      hide(listLoading);
+      hide(listWrap);
+      setText(
+        listError,
+        error instanceof Error
+          ? error.message
+          : 'Could not load your payment links. Please try again.',
+      );
+      show(listError);
+    }
+  }
+
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    hide(formError);
+    hide(pageSuccess);
+
+    if (!merchantId) {
+      showFormError('No merchant is available yet — create a merchant first.');
+      return;
+    }
+
+    const title = titleInput?.value.trim() ?? '';
+    if (!title) {
+      showFormError('Please give the link a title.');
+      titleInput?.focus();
+      return;
+    }
+
+    const data: CreateLinkData = {
+      merchant_id: merchantId,
+      title,
+      currency: currencySelect?.value || 'BDT',
+      collect_phone: collectPhoneInput?.checked ?? false,
+      collect_email: collectEmailInput?.checked ?? false,
+    };
+
+    const description = descriptionInput?.value.trim() ?? '';
+    if (description) data.description = description;
+
+    // Fixed amount: the form collects major units, the API minor units.
+    // An empty field means an open-amount link (amount_minor: null).
+    const amountRaw = amountInput?.value.trim() ?? '';
+    if (amountRaw) {
+      const amountMajor = Number(amountRaw);
+      if (!Number.isFinite(amountMajor) || amountMajor <= 0) {
+        showFormError('Amount must be a positive number, or left empty for an open amount.');
+        amountInput?.focus();
+        return;
+      }
+      data.amount_minor = Math.round(amountMajor * 100);
+    } else {
+      data.amount_minor = null;
+    }
+
+    const maxUsesRaw = maxUsesInput?.value.trim() ?? '';
+    if (maxUsesRaw) {
+      const maxUses = Number(maxUsesRaw);
+      if (!Number.isInteger(maxUses) || maxUses < 1) {
+        showFormError('Max uses must be a whole number of 1 or more, or left empty.');
+        maxUsesInput?.focus();
+        return;
+      }
+      data.max_uses = maxUses;
+    }
+
+    if (submitButton) submitButton.disabled = true;
+    try {
+      await createLink(data);
+      form.reset();
+      if (currencySelect) currencySelect.value = 'BDT';
+      showPageSuccess(`Payment link “${title}” created.`);
+      await loadLinks();
+    } catch (error) {
+      showFormError(
+        error instanceof Error
+          ? error.message
+          : 'Could not create the payment link. Please try again.',
+      );
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
+  });
+
+  refreshButton?.addEventListener('click', () => {
+    void loadLinks();
+  });
+
+  // ---------------------------------------------------------------------
+  // Boot: resolve the merchant, then load its links.
+  // ---------------------------------------------------------------------
+  (async () => {
+    if (!getToken()) return; // Auth guard above is already redirecting.
+    try {
+      const merchant = await resolveMerchant();
+      if (!merchant) {
+        hide(listLoading);
+        if (submitButton) submitButton.disabled = true;
+        showPageError(
+          'No merchant found for this account. Create a merchant before creating payment links.',
+        );
+        return;
+      }
+      merchantId = merchant.id;
+      if (merchant.name) {
+        setText(merchantName, merchant.name);
+        show(merchantLine);
+      }
+      await loadLinks();
+    } catch (error) {
+      hide(listLoading);
+      showPageError(
+        error instanceof Error
+          ? error.message
+          : 'Could not load your merchant. Please refresh and try again.',
+      );
+    }
+  })();
+</script>

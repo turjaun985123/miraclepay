@@ -1,0 +1,782 @@
+---
+// MiraclePay v0.0.1 — Dashboard: Invoices (clean-room, original).
+//
+// Create an invoice for a customer — line items, tax in basis points,
+// a flat discount and a due period in days — and track the invoices
+// already issued for the current merchant. Draft invoices can be sent
+// from the list; totals in the list are recomputed client-side from
+// the stored line items so they always mirror the create form's math:
+//
+//   subtotal = Σ quantity × unit_amount_minor
+//   taxable  = max(subtotal − discount_minor, 0)
+//   tax      = round(taxable × tax_bps / 10_000)
+//   total    = taxable + tax
+//
+// In v0.0.1 there is no hosted invoice pay page: customers settle an
+// invoice through the public pay API only, which the note on this page
+// states plainly.
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import DashboardNav from '../../components/DashboardNav.astro';
+
+const currencies = ['BDT', 'USD', 'EUR', 'GBP', 'INR', 'PKR'];
+---
+
+<BaseLayout title="Invoices">
+  <DashboardNav />
+  <main class="container stack">
+    <header>
+      <h1>Invoices</h1>
+      <p class="muted">
+        Bill a customer with itemised invoices for
+        <strong id="merchant-name">your merchant</strong>. Amounts are entered
+        in major units (e.g. taka / dollars) and stored in minor units.
+      </p>
+    </header>
+
+    <p id="page-error" class="alert alert-error" role="alert" hidden></p>
+    <p id="page-success" class="alert alert-success" role="status" hidden></p>
+    <p id="no-merchant" class="alert" hidden>
+      No merchant found for this account yet. Create a merchant first, then
+      come back to issue invoices.
+    </p>
+
+    <section class="card" aria-labelledby="create-heading">
+      <h2 id="create-heading">Create invoice</h2>
+
+      <form id="invoice-form" novalidate>
+        <div class="form-grid">
+          <div class="field">
+            <label class="label" for="customer-name">Customer name</label>
+            <input
+              class="input"
+              id="customer-name"
+              name="customer_name"
+              type="text"
+              autocomplete="name"
+              placeholder="e.g. Rahim Uddin"
+              required
+            />
+          </div>
+
+          <div class="field">
+            <label class="label" for="customer-email">Customer email</label>
+            <input
+              class="input"
+              id="customer-email"
+              name="customer_email"
+              type="email"
+              autocomplete="email"
+              placeholder="customer@example.com"
+            />
+          </div>
+
+          <div class="field">
+            <label class="label" for="currency">Currency</label>
+            <select class="input" id="currency" name="currency">
+              {currencies.map((code) => <option value={code}>{code}</option>)}
+            </select>
+          </div>
+
+          <div class="field">
+            <label class="label" for="due-days">Due days</label>
+            <input
+              class="input"
+              id="due-days"
+              name="due_days"
+              type="number"
+              min="0"
+              step="1"
+              value="7"
+            />
+            <p class="field-hint">Days after issue before payment is due.</p>
+          </div>
+
+          <div class="field">
+            <label class="label" for="tax-bps">Tax (basis points)</label>
+            <input
+              class="input"
+              id="tax-bps"
+              name="tax_bps"
+              type="number"
+              min="0"
+              max="10000"
+              step="1"
+              value="0"
+            />
+            <p class="field-hint">500 bps = 5%. Applied after the discount.</p>
+          </div>
+
+          <div class="field">
+            <label class="label" for="discount">Discount (major units)</label>
+            <input
+              class="input"
+              id="discount"
+              name="discount"
+              type="number"
+              min="0"
+              step="0.01"
+              value="0"
+            />
+            <p class="field-hint">Flat amount taken off the subtotal, before tax.</p>
+          </div>
+        </div>
+
+        <fieldset class="items-fieldset">
+          <legend class="label">Line items</legend>
+          <div id="items" class="stack items-list"></div>
+          <button type="button" id="add-item" class="btn btn-ghost btn-sm">
+            + Add item
+          </button>
+        </fieldset>
+
+        <dl class="totals" aria-live="polite">
+          <div><dt>Subtotal</dt><dd id="total-subtotal">—</dd></div>
+          <div><dt>Discount</dt><dd id="total-discount">—</dd></div>
+          <div><dt>Tax</dt><dd id="total-tax">—</dd></div>
+          <div class="totals-grand"><dt>Total</dt><dd id="total-grand">—</dd></div>
+        </dl>
+
+        <p id="form-error" class="alert alert-error" role="alert" hidden></p>
+
+        <button type="submit" id="create-submit" class="btn">
+          Create invoice
+        </button>
+      </form>
+    </section>
+
+    <section class="card" aria-labelledby="list-heading">
+      <div class="row list-header">
+        <h2 id="list-heading">Your invoices</h2>
+        <button type="button" id="refresh" class="btn btn-ghost btn-sm">
+          Refresh
+        </button>
+      </div>
+
+      <p class="alert pay-note">
+        Pay page: in v0.0.1 invoices have no hosted pay page — a customer pays
+        a sent invoice through the public pay API only. Send a draft invoice to
+        mark it as issued, then share the payment details with your customer.
+      </p>
+
+      <p id="list-loading" class="muted">Loading invoices…</p>
+      <p id="list-empty" class="empty" hidden>
+        No invoices yet. Create your first invoice above.
+      </p>
+
+      <div class="table-wrap">
+        <table class="table" id="invoices-table" hidden>
+          <thead>
+            <tr>
+              <th scope="col">Number</th>
+              <th scope="col">Customer</th>
+              <th scope="col">Total</th>
+              <th scope="col">Status</th>
+              <th scope="col">Created</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="invoices-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</BaseLayout>
+
+<style>
+  .form-grid {
+    display: grid;
+    gap: 0 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+
+  .items-fieldset {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+    margin: 0 0 1rem;
+  }
+
+  .items-list {
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .item-row {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: 1fr 90px 140px auto;
+    align-items: end;
+  }
+
+  .item-row .field {
+    margin-bottom: 0;
+  }
+
+  .totals {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0 0 1rem;
+    max-width: 360px;
+  }
+
+  .totals div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .totals dt {
+    color: var(--muted);
+  }
+
+  .totals dd {
+    margin: 0;
+    font-family: var(--font-mono);
+  }
+
+  .totals-grand {
+    border-top: 1px solid var(--border);
+    padding-top: 0.375rem;
+    font-weight: 700;
+  }
+
+  .totals-grand dt {
+    color: var(--ink);
+  }
+
+  .list-header {
+    justify-content: space-between;
+  }
+
+  .list-header h2 {
+    margin: 0;
+  }
+
+  .pay-note {
+    margin-bottom: 1rem;
+  }
+
+  @media (max-width: 640px) {
+    .item-row {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+</style>
+
+<script>
+  import {
+    createInvoice,
+    formatMoney,
+    getToken,
+    listInvoices,
+    listMerchants,
+    sendInvoice,
+    type Invoice,
+    type Merchant,
+  } from '../../lib/api';
+
+  // ------------------------------------------------------------------
+  // Auth guard
+  // ------------------------------------------------------------------
+  if (!getToken()) {
+    window.location.href = '/login';
+  }
+
+  // ------------------------------------------------------------------
+  // Element handles
+  // ------------------------------------------------------------------
+  const merchantNameEl = document.getElementById('merchant-name');
+  const pageErrorEl = document.getElementById('page-error') as HTMLParagraphElement | null;
+  const pageSuccessEl = document.getElementById('page-success') as HTMLParagraphElement | null;
+  const noMerchantEl = document.getElementById('no-merchant');
+  const form = document.getElementById('invoice-form') as HTMLFormElement | null;
+  const customerNameInput = document.getElementById('customer-name') as HTMLInputElement | null;
+  const customerEmailInput = document.getElementById('customer-email') as HTMLInputElement | null;
+  const currencySelect = document.getElementById('currency') as HTMLSelectElement | null;
+  const dueDaysInput = document.getElementById('due-days') as HTMLInputElement | null;
+  const taxBpsInput = document.getElementById('tax-bps') as HTMLInputElement | null;
+  const discountInput = document.getElementById('discount') as HTMLInputElement | null;
+  const itemsEl = document.getElementById('items');
+  const addItemButton = document.getElementById('add-item') as HTMLButtonElement | null;
+  const formErrorEl = document.getElementById('form-error') as HTMLParagraphElement | null;
+  const submitButton = document.getElementById('create-submit') as HTMLButtonElement | null;
+  const subtotalEl = document.getElementById('total-subtotal');
+  const discountEl = document.getElementById('total-discount');
+  const taxEl = document.getElementById('total-tax');
+  const grandEl = document.getElementById('total-grand');
+  const refreshButton = document.getElementById('refresh') as HTMLButtonElement | null;
+  const loadingEl = document.getElementById('list-loading');
+  const emptyEl = document.getElementById('list-empty');
+  const tableEl = document.getElementById('invoices-table') as HTMLTableElement | null;
+  const tbodyEl = document.getElementById('invoices-body');
+
+  let merchant: Merchant | null = null;
+
+  // ------------------------------------------------------------------
+  // Feedback helpers
+  // ------------------------------------------------------------------
+  function showPageError(message: string): void {
+    if (!pageErrorEl) return;
+    pageErrorEl.textContent = message;
+    pageErrorEl.hidden = false;
+  }
+
+  function showPageSuccess(message: string): void {
+    if (!pageSuccessEl) return;
+    pageSuccessEl.textContent = message;
+    pageSuccessEl.hidden = false;
+  }
+
+  function hidePageMessages(): void {
+    if (pageErrorEl) pageErrorEl.hidden = true;
+    if (pageSuccessEl) pageSuccessEl.hidden = true;
+  }
+
+  function showFormError(message: string): void {
+    if (!formErrorEl) return;
+    formErrorEl.textContent = message;
+    formErrorEl.hidden = false;
+  }
+
+  function hideFormError(): void {
+    if (!formErrorEl) return;
+    formErrorEl.textContent = '';
+    formErrorEl.hidden = true;
+  }
+
+  function errorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error && error.message ? error.message : fallback;
+  }
+
+  // ------------------------------------------------------------------
+  // Merchant resolution: localStorage first, fallback to first merchant
+  // ------------------------------------------------------------------
+  function storedMerchantId(): string | null {
+    const keys = ['mp_merchant_id', 'merchant_id', 'mp_merchant', 'merchant'];
+    for (const key of keys) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const trimmed = raw.trim();
+        if (!trimmed) continue;
+        if (trimmed.startsWith('{')) {
+          const parsed = JSON.parse(trimmed) as { id?: unknown };
+          if (typeof parsed?.id === 'string' && parsed.id) return parsed.id;
+          continue;
+        }
+        return trimmed;
+      } catch {
+        // Unavailable / unparsable storage: try the next key.
+      }
+    }
+    return null;
+  }
+
+  async function resolveMerchant(): Promise<Merchant | null> {
+    const merchants = await listMerchants();
+    if (!Array.isArray(merchants) || merchants.length === 0) return null;
+
+    const storedId = storedMerchantId();
+    const match = storedId
+      ? merchants.find((entry) => entry.id === storedId)
+      : undefined;
+    const resolved = match ?? merchants[0];
+
+    try {
+      localStorage.setItem('mp_merchant_id', resolved.id);
+    } catch {
+      // Storage may be unavailable; the in-memory merchant still works.
+    }
+    return resolved;
+  }
+
+  // ------------------------------------------------------------------
+  // Money math (mirrors the totals shown in the invoices list)
+  // ------------------------------------------------------------------
+  function toMinor(majorValue: string): number {
+    const value = Number.parseFloat(majorValue);
+    if (!Number.isFinite(value) || value < 0) return 0;
+    return Math.round(value * 100);
+  }
+
+  function computeTotals(
+    items: { quantity: number; unit_amount_minor: number }[],
+    taxBps: number,
+    discountMinor: number,
+  ): { subtotal: number; discount: number; tax: number; total: number } {
+    const subtotal = items.reduce(
+      (sum, item) => sum + Math.max(0, item.quantity) * Math.max(0, item.unit_amount_minor),
+      0,
+    );
+    const discount = Math.min(Math.max(0, discountMinor), subtotal);
+    const taxable = Math.max(subtotal - discount, 0);
+    const tax = Math.round((taxable * Math.max(0, taxBps)) / 10_000);
+    return { subtotal, discount, tax, total: taxable + tax };
+  }
+
+  function invoiceTotal(invoice: Invoice): number {
+    const items = Array.isArray(invoice.items) ? invoice.items : [];
+    if (items.length > 0) {
+      const record = invoice as Record<string, unknown>;
+      const taxBps = typeof record.tax_bps === 'number' ? record.tax_bps : 0;
+      const discountMinor =
+        typeof record.discount_minor === 'number' ? record.discount_minor : 0;
+      return computeTotals(
+        items.map((item) => ({
+          quantity: typeof item.quantity === 'number' ? item.quantity : 1,
+          unit_amount_minor: item.unit_amount_minor ?? 0,
+        })),
+        taxBps,
+        discountMinor,
+      ).total;
+    }
+    if (typeof invoice.amount_minor === 'number') return invoice.amount_minor;
+    return 0;
+  }
+
+  // ------------------------------------------------------------------
+  // Dynamic line items
+  // ------------------------------------------------------------------
+  function makeField(labelText: string, input: HTMLInputElement): HTMLDivElement {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'field';
+    const label = document.createElement('label');
+    label.className = 'label';
+    label.textContent = labelText;
+    label.htmlFor = input.id;
+    wrapper.append(label, input);
+    return wrapper;
+  }
+
+  function addItemRow(description = '', quantity = '1', unitAmount = ''): void {
+    if (!itemsEl) return;
+    const index = itemsEl.children.length;
+
+    const row = document.createElement('div');
+    row.className = 'item-row';
+
+    const descInput = document.createElement('input');
+    descInput.className = 'input item-description';
+    descInput.id = `item-description-${index}`;
+    descInput.type = 'text';
+    descInput.placeholder = 'Description';
+    descInput.value = description;
+
+    const qtyInput = document.createElement('input');
+    qtyInput.className = 'input item-quantity';
+    qtyInput.id = `item-quantity-${index}`;
+    qtyInput.type = 'number';
+    qtyInput.min = '0';
+    qtyInput.step = '1';
+    qtyInput.value = quantity;
+
+    const unitInput = document.createElement('input');
+    unitInput.className = 'input item-unit-amount';
+    unitInput.id = `item-unit-amount-${index}`;
+    unitInput.type = 'number';
+    unitInput.min = '0';
+    unitInput.step = '0.01';
+    unitInput.placeholder = '0.00';
+    unitInput.value = unitAmount;
+
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = 'btn btn-ghost btn-sm item-remove';
+    removeButton.textContent = 'Remove';
+    removeButton.addEventListener('click', () => {
+      row.remove();
+      updateTotalsPreview();
+    });
+
+    row.append(
+      makeField('Description', descInput),
+      makeField('Qty', qtyInput),
+      makeField('Unit amount', unitInput),
+      removeButton,
+    );
+    itemsEl.append(row);
+  }
+
+  function readItems(): { description: string; quantity: number; unit_amount_minor: number }[] {
+    if (!itemsEl) return [];
+    const items: { description: string; quantity: number; unit_amount_minor: number }[] = [];
+    itemsEl.querySelectorAll('.item-row').forEach((row) => {
+      const description =
+        (row.querySelector('.item-description') as HTMLInputElement | null)?.value.trim() ?? '';
+      const quantityRaw = Number.parseFloat(
+        (row.querySelector('.item-quantity') as HTMLInputElement | null)?.value ?? '',
+      );
+      const unitAmountMinor = toMinor(
+        (row.querySelector('.item-unit-amount') as HTMLInputElement | null)?.value ?? '',
+      );
+      if (!description && unitAmountMinor === 0) return;
+      items.push({
+        description,
+        quantity: Number.isFinite(quantityRaw) && quantityRaw > 0 ? quantityRaw : 1,
+        unit_amount_minor: unitAmountMinor,
+      });
+    });
+    return items;
+  }
+
+  function currentCurrency(): string {
+    return currencySelect?.value || merchant?.currency || 'BDT';
+  }
+
+  function updateTotalsPreview(): void {
+    const currency = currentCurrency();
+    const taxBps = Math.max(0, Math.trunc(Number.parseFloat(taxBpsInput?.value ?? '0') || 0));
+    const totals = computeTotals(readItems(), taxBps, toMinor(discountInput?.value ?? ''));
+    if (subtotalEl) subtotalEl.textContent = formatMoney(totals.subtotal, currency);
+    if (discountEl) discountEl.textContent = formatMoney(totals.discount, currency);
+    if (taxEl) taxEl.textContent = formatMoney(totals.tax, currency);
+    if (grandEl) grandEl.textContent = formatMoney(totals.total, currency);
+  }
+
+  addItemButton?.addEventListener('click', () => {
+    addItemRow();
+    updateTotalsPreview();
+  });
+  itemsEl?.addEventListener('input', updateTotalsPreview);
+  taxBpsInput?.addEventListener('input', updateTotalsPreview);
+  discountInput?.addEventListener('input', updateTotalsPreview);
+  currencySelect?.addEventListener('change', updateTotalsPreview);
+
+  // ------------------------------------------------------------------
+  // Invoices list
+  // ------------------------------------------------------------------
+  function badgeClass(status: string): string {
+    switch (status.toLowerCase()) {
+      case 'paid':
+      case 'sent':
+        return 'badge badge-success';
+      case 'pending':
+      case 'issued':
+      case 'overdue':
+        return 'badge badge-pending';
+      case 'failed':
+      case 'cancelled':
+      case 'canceled':
+      case 'void':
+      case 'voided':
+        return 'badge badge-failed';
+      default:
+        return 'badge';
+    }
+  }
+
+  function formatDate(value?: string): string {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  }
+
+  function renderInvoices(invoices: Invoice[]): void {
+    if (loadingEl) loadingEl.hidden = true;
+    if (!tbodyEl || !tableEl || !emptyEl) return;
+    tbodyEl.replaceChildren();
+
+    if (invoices.length === 0) {
+      tableEl.hidden = true;
+      emptyEl.hidden = false;
+      return;
+    }
+    emptyEl.hidden = true;
+    tableEl.hidden = false;
+
+    for (const invoice of invoices) {
+      const row = document.createElement('tr');
+
+      const numberCell = document.createElement('td');
+      numberCell.className = 'mono';
+      numberCell.textContent = invoice.number ?? invoice.id;
+
+      const customerCell = document.createElement('td');
+      const customerName = invoice.customer_name ?? '';
+      const customerEmail = invoice.customer_email ?? '';
+      customerCell.textContent =
+        customerName && customerEmail
+          ? `${customerName} (${customerEmail})`
+          : customerName || customerEmail || '—';
+
+      const totalCell = document.createElement('td');
+      totalCell.textContent = formatMoney(
+        invoiceTotal(invoice),
+        invoice.currency || currentCurrency(),
+      );
+
+      const statusCell = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.className = badgeClass(invoice.status ?? '');
+      badge.textContent = invoice.status ?? 'unknown';
+      statusCell.append(badge);
+
+      const createdCell = document.createElement('td');
+      createdCell.textContent = formatDate(invoice.created_at);
+
+      const actionsCell = document.createElement('td');
+      if ((invoice.status ?? '').toLowerCase() === 'draft') {
+        const sendButton = document.createElement('button');
+        sendButton.type = 'button';
+        sendButton.className = 'btn btn-sm';
+        sendButton.textContent = 'Send';
+        sendButton.addEventListener('click', async () => {
+          hidePageMessages();
+          sendButton.disabled = true;
+          sendButton.textContent = 'Sending…';
+          try {
+            await sendInvoice(invoice.id);
+            showPageSuccess(
+              `Invoice ${invoice.number ?? invoice.id} sent. Customers pay it through the public pay API in v0.0.1.`,
+            );
+            await loadInvoices();
+          } catch (error) {
+            showPageError(errorMessage(error, 'Could not send the invoice.'));
+            sendButton.disabled = false;
+            sendButton.textContent = 'Send';
+          }
+        });
+        actionsCell.append(sendButton);
+      } else {
+        actionsCell.textContent = '—';
+      }
+
+      row.append(numberCell, customerCell, totalCell, statusCell, createdCell, actionsCell);
+      tbodyEl.append(row);
+    }
+  }
+
+  async function loadInvoices(): Promise<void> {
+    if (!merchant) return;
+    if (loadingEl) loadingEl.hidden = false;
+    try {
+      const invoices = await listInvoices(merchant.id);
+      renderInvoices(Array.isArray(invoices) ? invoices : []);
+    } catch (error) {
+      if (loadingEl) loadingEl.hidden = true;
+      showPageError(errorMessage(error, 'Could not load invoices.'));
+    }
+  }
+
+  refreshButton?.addEventListener('click', () => {
+    hidePageMessages();
+    void loadInvoices();
+  });
+
+  // ------------------------------------------------------------------
+  // Create invoice
+  // ------------------------------------------------------------------
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    hideFormError();
+    hidePageMessages();
+
+    if (!merchant) {
+      showFormError('No merchant is available for this account yet.');
+      return;
+    }
+
+    const customerName = customerNameInput?.value.trim() ?? '';
+    const customerEmail = customerEmailInput?.value.trim() ?? '';
+    if (!customerName) {
+      showFormError('Please enter the customer name.');
+      return;
+    }
+
+    const items = readItems();
+    if (items.length === 0) {
+      showFormError('Add at least one line item with a description or an amount.');
+      return;
+    }
+    if (items.some((item) => !item.description)) {
+      showFormError('Every line item needs a description.');
+      return;
+    }
+
+    const taxBps = Math.max(
+      0,
+      Math.min(10000, Math.trunc(Number.parseFloat(taxBpsInput?.value ?? '0') || 0)),
+    );
+    const discountMinor = toMinor(discountInput?.value ?? '');
+    const dueDaysRaw = Number.parseInt(dueDaysInput?.value ?? '', 10);
+    const dueDays = Number.isFinite(dueDaysRaw) && dueDaysRaw >= 0 ? dueDaysRaw : 7;
+
+    if (submitButton) submitButton.disabled = true;
+    try {
+      const created = await createInvoice({
+        merchant_id: merchant.id,
+        customer_name: customerName,
+        customer_email: customerEmail || undefined,
+        items: items.map((item) => ({
+          description: item.description,
+          quantity: item.quantity,
+          unit_amount_minor: item.unit_amount_minor,
+        })),
+        tax_bps: taxBps,
+        discount_minor: discountMinor,
+        currency: currentCurrency(),
+        due_days: dueDays,
+      });
+      showPageSuccess(
+        `Invoice ${created.number ?? created.id} created as a draft. Use Send in the list below when you are ready to issue it.`,
+      );
+      form.reset();
+      if (dueDaysInput) dueDaysInput.value = '7';
+      if (taxBpsInput) taxBpsInput.value = '0';
+      if (discountInput) discountInput.value = '0';
+      if (currencySelect && merchant.currency) currencySelect.value = merchant.currency;
+      if (itemsEl) itemsEl.replaceChildren();
+      addItemRow();
+      updateTotalsPreview();
+      await loadInvoices();
+    } catch (error) {
+      showFormError(errorMessage(error, 'Could not create the invoice.'));
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
+  });
+
+  // ------------------------------------------------------------------
+  // Boot
+  // ------------------------------------------------------------------
+  addItemRow();
+  updateTotalsPreview();
+
+  (async () => {
+    try {
+      merchant = await resolveMerchant();
+    } catch (error) {
+      showPageError(errorMessage(error, 'Could not load your merchants.'));
+      return;
+    }
+
+    if (!merchant) {
+      if (noMerchantEl) noMerchantEl.hidden = false;
+      if (submitButton) submitButton.disabled = true;
+      if (loadingEl) loadingEl.hidden = true;
+      if (emptyEl) emptyEl.hidden = true;
+      return;
+    }
+
+    if (merchantNameEl) merchantNameEl.textContent = merchant.name;
+    if (currencySelect && merchant.currency) {
+      const hasOption = Array.from(currencySelect.options).some(
+        (option) => option.value === merchant.currency,
+      );
+      if (!hasOption) {
+        const option = document.createElement('option');
+        option.value = merchant.currency;
+        option.textContent = merchant.currency;
+        currencySelect.append(option);
+      }
+      currencySelect.value = merchant.currency;
+    }
+    updateTotalsPreview();
+    await loadInvoices();
+  })();
+</script>

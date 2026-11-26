@@ -1,0 +1,414 @@
+---
+// MiraclePay v0.0.1 — Public payment-link page (clean-room, original).
+//
+// Served from the static build, so the link slug is not known at
+// build time: the page reads it client-side from the last segment of
+// `window.location.pathname` (e.g. `/pay/coaching-session-a1b2c3`).
+// It then loads the public link view with `publicLink` from the API
+// client and, on submit, starts a payment with `payLink`.
+//
+// The single placeholder path below exists only so the static build
+// emits this page; the host serves it for every `/pay/<slug>` URL and
+// the real slug is picked up in the browser.
+export function getStaticPaths() {
+  return [{ params: { slug: 'pay' } }];
+}
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Pay">
+  <main class="container pay-page">
+    <p class="brand-line">MiraclePay</p>
+
+    <p id="pay-loading" class="card muted">Loading payment link…</p>
+
+    <section id="pay-error-card" class="card pay-error-card" hidden>
+      <h1>This payment link can&rsquo;t be used</h1>
+      <p id="pay-error-message" class="alert alert-error" role="alert"></p>
+      <p class="muted small">
+        The link may be inactive, expired, or fully used. Please ask the
+        merchant for a fresh link.
+      </p>
+    </section>
+
+    <section id="pay-card" class="card pay-card" hidden>
+      <p id="pay-merchant" class="pay-merchant muted" hidden></p>
+      <h1 id="pay-title">Payment</h1>
+      <p id="pay-description" class="muted" hidden></p>
+
+      <p id="pay-fixed-amount" class="pay-amount" hidden></p>
+
+      <form id="pay-form" novalidate>
+        <div class="field" id="amount-field" hidden>
+          <label class="label" for="amount">Amount</label>
+          <input
+            class="input"
+            id="amount"
+            name="amount"
+            type="number"
+            inputmode="decimal"
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+          />
+          <p class="field-hint" id="amount-hint"></p>
+        </div>
+
+        <div class="field" id="phone-field" hidden>
+          <label class="label" for="customer-phone">Phone number</label>
+          <input
+            class="input"
+            id="customer-phone"
+            name="customer_phone"
+            type="tel"
+            autocomplete="tel"
+            placeholder="01XXXXXXXXX"
+          />
+        </div>
+
+        <div class="field" id="email-field" hidden>
+          <label class="label" for="customer-email">Email address</label>
+          <input
+            class="input"
+            id="customer-email"
+            name="customer_email"
+            type="email"
+            autocomplete="email"
+            placeholder="you@example.com"
+          />
+        </div>
+
+        <div class="field">
+          <label class="label" for="gateway">Pay with</label>
+          <select class="input" id="gateway" name="gateway">
+            <option value="bkash">bKash</option>
+            <option value="nagad">Nagad</option>
+            <option value="rocket">Rocket</option>
+            <option value="upay">Upay</option>
+            <option value="surecash">SureCash</option>
+            <option value="manual">Manual transfer</option>
+          </select>
+        </div>
+
+        <p id="pay-form-error" class="alert alert-error" role="alert" hidden></p>
+
+        <button id="pay-submit" class="btn pay-submit" type="submit">
+          Pay now
+        </button>
+      </form>
+    </section>
+
+    <section id="pay-success" class="card pay-success" hidden>
+      <h1>Payment started</h1>
+      <p class="alert alert-success">
+        Your payment has been created and is waiting for the money to arrive.
+      </p>
+      <dl class="pay-details">
+        <div>
+          <dt>Transaction ID</dt>
+          <dd class="mono" id="success-transaction-id">—</dd>
+        </div>
+        <div>
+          <dt>Reference</dt>
+          <dd class="mono" id="success-reference">—</dd>
+        </div>
+        <div>
+          <dt>Amount</dt>
+          <dd id="success-amount">—</dd>
+        </div>
+      </dl>
+      <p>
+        To finish, send the money with your chosen payment app and use the
+        reference above exactly as shown. Once the payment SMS reaches the
+        merchant, MiraclePay verifies it automatically — you don&rsquo;t need
+        to upload a screenshot or do anything else on this page.
+      </p>
+      <p class="muted small">
+        Keep your transaction ID and reference until the payment is confirmed.
+      </p>
+    </section>
+  </main>
+</BaseLayout>
+
+<style>
+  .pay-page {
+    max-width: 560px;
+  }
+
+  .brand-line {
+    margin: 0.5rem 0 1rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--brand-dark);
+  }
+
+  .pay-merchant {
+    margin: 0 0 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .pay-amount {
+    margin: 0 0 1.25rem;
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1.15;
+  }
+
+  .pay-submit {
+    width: 100%;
+    padding: 0.75rem 1rem;
+  }
+
+  .pay-details {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0 0 1rem;
+  }
+
+  .pay-details dt {
+    color: var(--muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .pay-details dd {
+    margin: 0.125rem 0 0;
+    overflow-wrap: anywhere;
+  }
+</style>
+
+<script>
+  import { formatMoney, payLink, publicLink } from '../../lib/api';
+
+  // The public endpoint returns the fields this page needs, but the
+  // exact serialisation can carry the fixed amount either flat
+  // (`amount_minor` + `currency`, as typed in the API client) or as a
+  // nested money object (`amount: { amount_minor, currency }`).
+  // Normalise both shapes here.
+  interface PublicLinkShape {
+    title?: string;
+    description?: string | null;
+    merchant_name?: string;
+    collect_phone?: boolean;
+    collect_email?: boolean;
+    amount_minor?: number | null;
+    currency?: string;
+    amount?: { amount_minor?: number; currency?: string } | null;
+    [key: string]: unknown;
+  }
+
+  interface PayLinkResultShape {
+    transaction_id?: string;
+    id?: string;
+    reference?: string;
+    status?: string;
+    [key: string]: unknown;
+  }
+
+  const loadingEl = document.getElementById('pay-loading');
+  const errorCardEl = document.getElementById('pay-error-card');
+  const errorMessageEl = document.getElementById('pay-error-message');
+  const cardEl = document.getElementById('pay-card');
+  const merchantEl = document.getElementById('pay-merchant');
+  const titleEl = document.getElementById('pay-title');
+  const descriptionEl = document.getElementById('pay-description');
+  const fixedAmountEl = document.getElementById('pay-fixed-amount');
+  const form = document.getElementById('pay-form') as HTMLFormElement | null;
+  const amountFieldEl = document.getElementById('amount-field');
+  const amountInput = document.getElementById('amount') as HTMLInputElement | null;
+  const amountHintEl = document.getElementById('amount-hint');
+  const phoneFieldEl = document.getElementById('phone-field');
+  const phoneInput = document.getElementById(
+    'customer-phone',
+  ) as HTMLInputElement | null;
+  const emailFieldEl = document.getElementById('email-field');
+  const emailInput = document.getElementById(
+    'customer-email',
+  ) as HTMLInputElement | null;
+  const gatewaySelect = document.getElementById(
+    'gateway',
+  ) as HTMLSelectElement | null;
+  const formErrorEl = document.getElementById('pay-form-error');
+  const submitButton = document.getElementById(
+    'pay-submit',
+  ) as HTMLButtonElement | null;
+  const successEl = document.getElementById('pay-success');
+  const successTxEl = document.getElementById('success-transaction-id');
+  const successRefEl = document.getElementById('success-reference');
+  const successAmountEl = document.getElementById('success-amount');
+
+  // Static output: the slug is the last non-empty path segment.
+  const segments = window.location.pathname.split('/').filter(Boolean);
+  const slug = decodeURIComponent(segments[segments.length - 1] ?? '');
+
+  let fixedAmountMinor: number | null = null;
+  let currency = 'BDT';
+  let collectPhone = false;
+  let collectEmail = false;
+
+  function showLoadError(message: string): void {
+    if (loadingEl) loadingEl.hidden = true;
+    if (cardEl) cardEl.hidden = true;
+    if (errorMessageEl) errorMessageEl.textContent = message;
+    if (errorCardEl) errorCardEl.hidden = false;
+  }
+
+  function showFormError(message: string): void {
+    if (!formErrorEl) return;
+    formErrorEl.textContent = message;
+    formErrorEl.hidden = false;
+  }
+
+  function hideFormError(): void {
+    if (!formErrorEl) return;
+    formErrorEl.textContent = '';
+    formErrorEl.hidden = true;
+  }
+
+  async function loadLink(): Promise<void> {
+    if (!slug) {
+      showLoadError('No payment link was specified in this URL.');
+      return;
+    }
+
+    try {
+      const link = (await publicLink(slug)) as unknown as PublicLinkShape;
+
+      const nestedMinor = link.amount?.amount_minor;
+      fixedAmountMinor =
+        typeof link.amount_minor === 'number'
+          ? link.amount_minor
+          : typeof nestedMinor === 'number'
+            ? nestedMinor
+            : null;
+      currency = (link.currency ?? link.amount?.currency ?? 'BDT').toUpperCase();
+      collectPhone = link.collect_phone === true;
+      collectEmail = link.collect_email === true;
+
+      if (titleEl) titleEl.textContent = link.title ?? 'Payment';
+      document.title = `MiraclePay — Pay — ${link.title ?? 'Payment'}`;
+
+      if (merchantEl && link.merchant_name) {
+        merchantEl.textContent = link.merchant_name;
+        merchantEl.hidden = false;
+      }
+
+      if (descriptionEl && link.description) {
+        descriptionEl.textContent = link.description;
+        descriptionEl.hidden = false;
+      }
+
+      if (fixedAmountMinor !== null) {
+        // Fixed-amount link: show the amount, no amount input.
+        if (fixedAmountEl) {
+          fixedAmountEl.textContent = formatMoney(fixedAmountMinor, currency);
+          fixedAmountEl.hidden = false;
+        }
+        if (submitButton) {
+          submitButton.textContent = `Pay ${formatMoney(fixedAmountMinor, currency)}`;
+        }
+      } else {
+        // Open-amount link: the customer types the amount in major
+        // units (e.g. taka); it is converted to minor units on submit.
+        if (amountFieldEl) amountFieldEl.hidden = false;
+        if (amountInput) amountInput.required = true;
+        if (amountHintEl) {
+          amountHintEl.textContent = `Enter the amount in ${currency}.`;
+        }
+      }
+
+      if (collectPhone) {
+        if (phoneFieldEl) phoneFieldEl.hidden = false;
+        if (phoneInput) phoneInput.required = true;
+      }
+
+      if (collectEmail) {
+        if (emailFieldEl) emailFieldEl.hidden = false;
+        if (emailInput) emailInput.required = true;
+      }
+
+      if (loadingEl) loadingEl.hidden = true;
+      if (cardEl) cardEl.hidden = false;
+    } catch (error) {
+      // Inactive, expired, exhausted or unknown links surface here as
+      // the API's error message (e.g. "link not available").
+      showLoadError(
+        error instanceof Error
+          ? error.message
+          : 'This payment link could not be loaded.',
+      );
+    }
+  }
+
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    hideFormError();
+
+    let amountMinor = fixedAmountMinor;
+    if (amountMinor === null) {
+      const major = Number(amountInput?.value ?? '');
+      if (!Number.isFinite(major) || major <= 0) {
+        showFormError('Please enter an amount greater than zero.');
+        return;
+      }
+      amountMinor = Math.round(major * 100);
+    }
+
+    const customerPhone = phoneInput?.value.trim() ?? '';
+    if (collectPhone && !customerPhone) {
+      showFormError('Please enter your phone number.');
+      return;
+    }
+
+    const customerEmail = emailInput?.value.trim() ?? '';
+    if (collectEmail && !customerEmail) {
+      showFormError('Please enter your email address.');
+      return;
+    }
+
+    const gateway = gatewaySelect?.value ?? '';
+    if (!gateway) {
+      showFormError('Please choose how you want to pay.');
+      return;
+    }
+
+    if (submitButton) submitButton.disabled = true;
+
+    try {
+      const result = (await payLink(slug, {
+        amount_minor: amountMinor,
+        customer_phone: customerPhone || undefined,
+        customer_email: customerEmail || undefined,
+        gateway,
+      })) as unknown as PayLinkResultShape;
+
+      const transactionId = result.transaction_id ?? result.id ?? '';
+      const reference = result.reference ?? slug;
+
+      if (successTxEl) successTxEl.textContent = transactionId || '—';
+      if (successRefEl) successRefEl.textContent = reference;
+      if (successAmountEl) {
+        successAmountEl.textContent = formatMoney(amountMinor, currency);
+      }
+
+      if (cardEl) cardEl.hidden = true;
+      if (successEl) successEl.hidden = false;
+      successEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (error) {
+      showFormError(
+        error instanceof Error
+          ? error.message
+          : 'The payment could not be started. Please try again.',
+      );
+      if (submitButton) submitButton.disabled = false;
+    }
+  });
+
+  void loadLink();
+</script>

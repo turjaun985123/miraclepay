@@ -1,0 +1,647 @@
+---
+// MiraclePay v0.0.1 — Dashboard: API keys (clean-room, original).
+//
+// Issue, list and revoke scoped API keys for the current merchant.
+// Keys authenticate server-to-server REST API calls, and the very same
+// key doubles as the device key (sent in the `x-device-key` header) for
+// the MiraclePay Android SMS-forwarder app.
+//
+// The full secret is returned by the backend exactly once, at creation
+// time; this page shows it in a prominent copy-able box and never
+// stores or re-displays it afterwards.
+//
+// NOTE on revoke: the backend revokes via
+//   POST /api/v1/api-keys/{id}/revoke
+// while `revokeApiKey` in src/lib/api.ts still issues a DELETE against
+// /api/v1/api-keys/{id}. This page therefore calls `apiFetch` directly
+// with the POST path instead of using that helper.
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import DashboardNav from '../../components/DashboardNav.astro';
+
+const scopes = [
+  {
+    value: 'payments_read',
+    label: 'Payments — read',
+    hint: 'List and inspect payments and transactions.',
+  },
+  {
+    value: 'payments_write',
+    label: 'Payments — write',
+    hint: 'Create payments and hosted checkout sessions.',
+  },
+  {
+    value: 'invoices_write',
+    label: 'Invoices — write',
+    hint: 'Create and send invoices.',
+  },
+  {
+    value: 'webhooks_manage',
+    label: 'Webhooks — manage',
+    hint: 'Register, update and remove webhook endpoints.',
+  },
+  {
+    value: 'refunds_write',
+    label: 'Refunds — write',
+    hint: 'Issue refunds against settled payments.',
+  },
+  {
+    value: 'full_access',
+    label: 'Full access',
+    hint: 'Every scope, present and future. Use sparingly.',
+  },
+];
+---
+
+<BaseLayout title="API keys">
+  <DashboardNav active="api-keys" />
+
+  <main class="container stack">
+    <header>
+      <h1>API keys</h1>
+      <p class="muted">
+        Keys authenticate your server&rsquo;s calls to the MiraclePay REST API.
+        Give each integration its own key with only the scopes it needs, and
+        revoke a key the moment it is no longer used.
+      </p>
+    </header>
+
+    <p id="page-error" class="alert alert-error" role="alert" hidden></p>
+    <p id="page-status" class="muted" role="status">Loading your API keys&hellip;</p>
+
+    <!-- One-time reveal of a freshly created key. -->
+    <section
+      id="new-key-box"
+      class="card new-key-box"
+      aria-labelledby="new-key-heading"
+      hidden
+    >
+      <h2 id="new-key-heading">Your new API key</h2>
+      <p class="alert alert-error new-key-warning" role="alert">
+        <strong>You won&rsquo;t see this again</strong> — copy it now and store
+        it somewhere safe. Use it in the Android app / your server. If you lose
+        it, you will have to revoke this key and create a new one.
+      </p>
+      <div class="row new-key-row">
+        <code id="new-key-value" class="new-key-value"></code>
+        <button id="new-key-copy" type="button" class="btn">Copy key</button>
+        <button id="new-key-dismiss" type="button" class="btn btn-ghost">
+          I&rsquo;ve saved it
+        </button>
+      </div>
+      <p id="new-key-copied" class="small muted" role="status" hidden>
+        Copied to clipboard.
+      </p>
+    </section>
+
+    <!-- Create a key -->
+    <section class="card" aria-labelledby="create-heading">
+      <h2 id="create-heading">Create a new key</h2>
+      <form id="create-form" novalidate>
+        <div class="field">
+          <label class="label" for="key-name">Key name</label>
+          <input
+            id="key-name"
+            class="input"
+            name="name"
+            type="text"
+            placeholder="e.g. Production server, Android phone"
+            autocomplete="off"
+            required
+          />
+          <p class="field-hint">
+            A label so you can recognise where this key is used.
+          </p>
+        </div>
+
+        <fieldset class="field scope-fieldset">
+          <legend class="label">Scopes</legend>
+          <div class="scope-grid">
+            {
+              scopes.map((scope) => (
+                <label class="scope-option">
+                  <input type="checkbox" name="scopes" value={scope.value} />
+                  <span>
+                    <span class="scope-label">{scope.label}</span>
+                    <span class="scope-hint">{scope.hint}</span>
+                  </span>
+                </label>
+              ))
+            }
+          </div>
+          <p class="field-hint">
+            Pick at least one scope. A key can only do what its scopes allow.
+          </p>
+        </fieldset>
+
+        <p id="create-error" class="alert alert-error" role="alert" hidden></p>
+
+        <button id="create-submit" type="submit" class="btn">
+          Create API key
+        </button>
+      </form>
+    </section>
+
+    <!-- Existing keys -->
+    <section class="card" aria-labelledby="keys-heading">
+      <h2 id="keys-heading">Your keys</h2>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Key prefix</th>
+              <th scope="col">Scopes</th>
+              <th scope="col">Status</th>
+              <th scope="col">Last used</th>
+              <th scope="col">Created</th>
+              <th scope="col"><span class="visually-hidden">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody id="keys-body"></tbody>
+        </table>
+      </div>
+      <p id="keys-empty" class="empty" hidden>
+        No API keys yet. Create your first key above to start integrating.
+      </p>
+    </section>
+
+    <!-- Android app / device key -->
+    <section class="card" aria-labelledby="android-heading">
+      <h2 id="android-heading">Using a key in the Android app</h2>
+      <p>
+        The MiraclePay Android app is an SMS forwarder: it runs on a phone that
+        receives your gateways&rsquo; payment-confirmation SMS messages
+        (bKash, Nagad, Rocket and more) and forwards them to your MiraclePay
+        server, which matches each message against a pending payment and marks
+        it verified automatically.
+      </p>
+      <p>
+        There is no separate device credential to manage — <strong>the same API
+        key you create here is used as the device key</strong> by the app. When
+        the app forwards an SMS to your server it authenticates with that key in
+        the <code>x-device-key</code> header:
+      </p>
+      <pre class="code-block"><code>POST /api/v1/sms
+x-device-key: mp_live_&hellip;your key&hellip;</code></pre>
+      <p class="muted">
+        Create a dedicated key for each phone (for example named
+        &ldquo;Android phone&rdquo;), paste it into the app&rsquo;s settings
+        once, and revoke it here if the phone is lost or replaced — revoking
+        stops that device from forwarding immediately.
+      </p>
+    </section>
+  </main>
+</BaseLayout>
+
+<style>
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .new-key-box {
+    border-color: var(--warning);
+    background: var(--warning-soft);
+  }
+
+  .new-key-warning {
+    margin-bottom: 1rem;
+  }
+
+  .new-key-row {
+    align-items: stretch;
+  }
+
+  .new-key-value {
+    flex: 1 1 16rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    font-size: 1rem;
+    word-break: break-all;
+    user-select: all;
+  }
+
+  .scope-fieldset {
+    border: none;
+    margin: 0 0 1rem;
+    padding: 0;
+  }
+
+  .scope-fieldset legend {
+    padding: 0;
+  }
+
+  .scope-grid {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+
+  .scope-option {
+    display: flex;
+    gap: 0.625rem;
+    align-items: flex-start;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    cursor: pointer;
+  }
+
+  .scope-option input {
+    margin-top: 0.25rem;
+  }
+
+  .scope-label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.9375rem;
+  }
+
+  .scope-hint {
+    display: block;
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+
+  .scope-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .code-block {
+    margin: 0 0 1rem;
+    padding: 0.875rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+  }
+</style>
+
+<script>
+  import {
+    apiFetch,
+    createApiKey,
+    getToken,
+    listApiKeys,
+    listMerchants,
+    type ApiKey,
+    type Merchant,
+  } from '../../lib/api';
+
+  interface ApiKeyRow extends ApiKey {
+    scopes?: string[];
+  }
+
+  // ------------------------------------------------------------------
+  // Auth guard: dashboard pages require a stored token.
+  // ------------------------------------------------------------------
+  if (!getToken()) {
+    window.location.href = '/login';
+  }
+
+  const pageError = document.getElementById('page-error');
+  const pageStatus = document.getElementById('page-status');
+  const keysBody = document.getElementById('keys-body');
+  const keysEmpty = document.getElementById('keys-empty');
+  const createForm = document.getElementById('create-form') as HTMLFormElement | null;
+  const nameInput = document.getElementById('key-name') as HTMLInputElement | null;
+  const createError = document.getElementById('create-error');
+  const createSubmit = document.getElementById('create-submit') as HTMLButtonElement | null;
+  const newKeyBox = document.getElementById('new-key-box');
+  const newKeyValue = document.getElementById('new-key-value');
+  const newKeyCopy = document.getElementById('new-key-copy') as HTMLButtonElement | null;
+  const newKeyDismiss = document.getElementById('new-key-dismiss') as HTMLButtonElement | null;
+  const newKeyCopied = document.getElementById('new-key-copied');
+
+  let merchantId: string | null = null;
+
+  function showPageError(message: string): void {
+    if (!pageError) return;
+    pageError.textContent = message;
+    pageError.hidden = false;
+  }
+
+  function hidePageError(): void {
+    if (!pageError) return;
+    pageError.textContent = '';
+    pageError.hidden = true;
+  }
+
+  function showCreateError(message: string): void {
+    if (!createError) return;
+    createError.textContent = message;
+    createError.hidden = false;
+  }
+
+  function hideCreateError(): void {
+    if (!createError) return;
+    createError.textContent = '';
+    createError.hidden = true;
+  }
+
+  function formatDate(value?: string | null): string {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  function isRevoked(key: ApiKeyRow): boolean {
+    return Boolean(key.revoked_at) || key.status === 'revoked';
+  }
+
+  function keyScopes(key: ApiKeyRow): string[] {
+    if (Array.isArray(key.scopes)) return key.scopes.map(String);
+    if (typeof key.scopes === 'string') {
+      return (key.scopes as string).split(',').map((s) => s.trim()).filter(Boolean);
+    }
+    return [];
+  }
+
+  /**
+   * Resolve the current merchant: the id (or stored merchant record)
+   * kept in localStorage by the dashboard shell, falling back to the
+   * account's first merchant from the API.
+   */
+  async function resolveMerchantId(): Promise<string | null> {
+    try {
+      const storedId = localStorage.getItem('mp_merchant_id');
+      if (storedId) return storedId;
+      const storedRaw = localStorage.getItem('mp_merchant');
+      if (storedRaw) {
+        try {
+          const stored = JSON.parse(storedRaw) as Merchant | string;
+          if (typeof stored === 'string' && stored) return stored;
+          if (stored && typeof stored.id === 'string' && stored.id) {
+            return stored.id;
+          }
+        } catch {
+          if (storedRaw) return storedRaw;
+        }
+      }
+    } catch {
+      // Storage unavailable; fall through to the API lookup.
+    }
+
+    const merchants = await listMerchants();
+    const first = Array.isArray(merchants) ? merchants[0] : undefined;
+    return first?.id ?? null;
+  }
+
+  function renderKeys(keys: ApiKeyRow[]): void {
+    if (!keysBody) return;
+    keysBody.replaceChildren();
+
+    if (keysEmpty) keysEmpty.hidden = keys.length > 0;
+
+    for (const key of keys) {
+      const row = document.createElement('tr');
+
+      const nameCell = document.createElement('td');
+      nameCell.textContent = key.name ?? 'Unnamed key';
+      row.appendChild(nameCell);
+
+      const prefixCell = document.createElement('td');
+      const prefixCode = document.createElement('code');
+      prefixCode.textContent = key.prefix ? `${key.prefix}…` : '—';
+      prefixCell.appendChild(prefixCode);
+      row.appendChild(prefixCell);
+
+      const scopesCell = document.createElement('td');
+      const scopeList = keyScopes(key);
+      if (scopeList.length === 0) {
+        scopesCell.textContent = '—';
+      } else {
+        const wrap = document.createElement('span');
+        wrap.className = 'scope-badges';
+        for (const scope of scopeList) {
+          const badge = document.createElement('span');
+          badge.className = 'badge';
+          badge.textContent = scope;
+          wrap.appendChild(badge);
+        }
+        scopesCell.appendChild(wrap);
+      }
+      row.appendChild(scopesCell);
+
+      const statusCell = document.createElement('td');
+      const statusBadge = document.createElement('span');
+      if (isRevoked(key)) {
+        statusBadge.className = 'badge badge-failed';
+        statusBadge.textContent = 'Revoked';
+      } else {
+        statusBadge.className = 'badge badge-success';
+        statusBadge.textContent = 'Active';
+      }
+      statusCell.appendChild(statusBadge);
+      row.appendChild(statusCell);
+
+      const lastUsedCell = document.createElement('td');
+      lastUsedCell.textContent = key.last_used_at
+        ? formatDate(key.last_used_at)
+        : 'Never';
+      row.appendChild(lastUsedCell);
+
+      const createdCell = document.createElement('td');
+      createdCell.textContent = formatDate(key.created_at);
+      row.appendChild(createdCell);
+
+      const actionCell = document.createElement('td');
+      if (!isRevoked(key)) {
+        const revokeButton = document.createElement('button');
+        revokeButton.type = 'button';
+        revokeButton.className = 'btn btn-danger btn-sm';
+        revokeButton.textContent = 'Revoke';
+        revokeButton.addEventListener('click', () => {
+          void revokeKey(key, revokeButton);
+        });
+        actionCell.appendChild(revokeButton);
+      }
+      row.appendChild(actionCell);
+
+      keysBody.appendChild(row);
+    }
+  }
+
+  async function loadKeys(): Promise<void> {
+    if (!merchantId) return;
+    hidePageError();
+    try {
+      const keys = (await listApiKeys(merchantId)) as ApiKeyRow[];
+      renderKeys(Array.isArray(keys) ? keys : []);
+      if (pageStatus) pageStatus.hidden = true;
+    } catch (error) {
+      if (pageStatus) pageStatus.hidden = true;
+      showPageError(
+        error instanceof Error
+          ? error.message
+          : 'Could not load your API keys. Please try again.',
+      );
+    }
+  }
+
+  async function revokeKey(key: ApiKeyRow, button: HTMLButtonElement): Promise<void> {
+    const label = key.name ?? 'this key';
+    if (
+      !window.confirm(
+        `Revoke "${label}"? Anything using this key — servers and the Android app included — will stop working immediately. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+
+    button.disabled = true;
+    try {
+      // Backend contract: POST /api/v1/api-keys/{id}/revoke.
+      // (`revokeApiKey` in lib/api.ts uses DELETE, so call apiFetch directly.)
+      await apiFetch<void>(
+        `/api/v1/api-keys/${encodeURIComponent(key.id)}/revoke`,
+        { method: 'POST', body: JSON.stringify({}) },
+      );
+      await loadKeys();
+    } catch (error) {
+      button.disabled = false;
+      showPageError(
+        error instanceof Error
+          ? error.message
+          : 'Could not revoke that key. Please try again.',
+      );
+    }
+  }
+
+  function showNewKey(rawKey: string): void {
+    if (!newKeyBox || !newKeyValue) return;
+    newKeyValue.textContent = rawKey;
+    if (newKeyCopied) newKeyCopied.hidden = true;
+    newKeyBox.hidden = false;
+    newKeyBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  newKeyCopy?.addEventListener('click', async () => {
+    const rawKey = newKeyValue?.textContent ?? '';
+    if (!rawKey) return;
+    try {
+      await navigator.clipboard.writeText(rawKey);
+      if (newKeyCopied) newKeyCopied.hidden = false;
+    } catch {
+      // Clipboard unavailable: the key is selectable in the box itself.
+      const selection = window.getSelection();
+      const range = document.createRange();
+      if (newKeyValue) {
+        range.selectNodeContents(newKeyValue);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }
+    }
+  });
+
+  newKeyDismiss?.addEventListener('click', () => {
+    if (newKeyBox) newKeyBox.hidden = true;
+    if (newKeyValue) newKeyValue.textContent = '';
+  });
+
+  createForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    hideCreateError();
+
+    if (!merchantId) {
+      showCreateError('No merchant is available for this account yet.');
+      return;
+    }
+
+    const name = nameInput?.value.trim() ?? '';
+    if (!name) {
+      showCreateError('Give the key a name so you can recognise it later.');
+      return;
+    }
+
+    const selectedScopes = Array.from(
+      createForm.querySelectorAll<HTMLInputElement>(
+        'input[name="scopes"]:checked',
+      ),
+    ).map((input) => input.value);
+    if (selectedScopes.length === 0) {
+      showCreateError('Select at least one scope for this key.');
+      return;
+    }
+
+    if (createSubmit) createSubmit.disabled = true;
+    try {
+      const created = await createApiKey({
+        merchant_id: merchantId,
+        name,
+        scopes: selectedScopes,
+      });
+
+      const rawKey =
+        typeof created?.key === 'string' && created.key
+          ? created.key
+          : typeof created?.secret === 'string'
+            ? created.secret
+            : '';
+      if (rawKey) {
+        showNewKey(rawKey);
+      } else {
+        showPageError(
+          'The key was created, but the server did not return its secret. Revoke it and create a new one.',
+        );
+      }
+
+      createForm.reset();
+      await loadKeys();
+    } catch (error) {
+      showCreateError(
+        error instanceof Error
+          ? error.message
+          : 'Could not create the API key. Please try again.',
+      );
+    } finally {
+      if (createSubmit) createSubmit.disabled = false;
+    }
+  });
+
+  // ------------------------------------------------------------------
+  // Boot
+  // ------------------------------------------------------------------
+  (async () => {
+    try {
+      merchantId = await resolveMerchantId();
+    } catch (error) {
+      if (pageStatus) pageStatus.hidden = true;
+      showPageError(
+        error instanceof Error
+          ? error.message
+          : 'Could not load your merchant. Please try again.',
+      );
+      return;
+    }
+
+    if (!merchantId) {
+      if (pageStatus) pageStatus.hidden = true;
+      showPageError(
+        'No merchant found for this account. Create a merchant first, then come back to issue API keys.',
+      );
+      if (createSubmit) createSubmit.disabled = true;
+      return;
+    }
+
+    await loadKeys();
+  })();
+</script>

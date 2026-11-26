@@ -1,0 +1,134 @@
+---
+// MiraclePay v0.0.1 — DashboardNav
+// Original clean-room component: dashboard sub-navigation bar.
+// Pure markup + scoped styles; no client script.
+//
+// `active` is optional: some pages render <DashboardNav /> with no
+// props, others pass e.g. active="transactions". When it is omitted,
+// the current section is derived from the request path so the bar
+// still highlights correctly.
+
+interface Props {
+  active?: string;
+}
+
+const { active } = Astro.props;
+
+interface NavLink {
+  key: string;
+  label: string;
+  href: string;
+}
+
+const links: NavLink[] = [
+  { key: "overview", label: "Overview", href: "/dashboard" },
+  { key: "transactions", label: "Transactions", href: "/dashboard/transactions" },
+  { key: "payment-links", label: "Payment Links", href: "/dashboard/payment-links" },
+  { key: "invoices", label: "Invoices", href: "/dashboard/invoices" },
+  { key: "gateways", label: "Gateways", href: "/dashboard/gateways" },
+  { key: "webhooks", label: "Webhooks", href: "/dashboard/webhooks" },
+  { key: "api-keys", label: "API Keys", href: "/dashboard/api-keys" },
+  { key: "admin", label: "Admin", href: "/admin" },
+];
+
+// Fallback used only when no `active` prop was supplied.
+const pathname = Astro.url.pathname.replace(/\/+$/, "") || "/";
+const derivedActive =
+  pathname === "/dashboard"
+    ? "overview"
+    : (links.find(
+        (link) => link.key !== "overview" && pathname.startsWith(link.href),
+      )?.key ?? undefined);
+
+const current = active ?? derivedActive;
+---
+
+<nav class="dashboard-nav" aria-label="Dashboard">
+  <ul class="dashboard-nav-list">
+    {
+      links.map((link) => {
+        const isActive = link.key === current;
+        return (
+          <li class="dashboard-nav-item">
+            <a
+              class:list={["dashboard-nav-link", { "is-active": isActive }]}
+              href={link.href}
+              aria-current={isActive ? "page" : undefined}
+            >
+              {link.label}
+            </a>
+          </li>
+        );
+      })
+    }
+  </ul>
+</nav>
+
+<style>
+  .dashboard-nav {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 0.5rem;
+    margin-bottom: 1rem;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .dashboard-nav::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .dashboard-nav::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 999px;
+  }
+
+  .dashboard-nav-list {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    min-width: max-content;
+  }
+
+  .dashboard-nav-item {
+    display: flex;
+  }
+
+  .dashboard-nav-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.375rem 0.75rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+    transition:
+      background 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .dashboard-nav-link:hover {
+    background: var(--bg);
+    color: var(--ink);
+    text-decoration: none;
+  }
+
+  .dashboard-nav-link.is-active {
+    background: var(--brand-soft);
+    color: var(--brand-dark);
+  }
+
+  .dashboard-nav-link.is-active:hover {
+    background: var(--brand-soft);
+    color: var(--brand-dark);
+  }
+</style>

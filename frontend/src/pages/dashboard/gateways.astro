@@ -1,0 +1,615 @@
+---
+// MiraclePay v0.0.1 — Dashboard: Gateways (clean-room, original).
+//
+// Lists every gateway the platform supports (all fourteen) as a grid
+// of cards showing the display name, a country badge and whether the
+// current merchant has configured that gateway. Clicking a card opens
+// the configuration form below the grid: merchant number (or UPI VPA),
+// API key, API secret, sandbox and enabled toggles, plus an extra
+// instructions field for the manual gateway.
+//
+// All data is client-side via the API client. The merchant comes from
+// localStorage key `mp_merchant` (an id, or a JSON object with an
+// `id`), falling back to the account's first merchant. Stored API
+// secrets are write-only: the API returns them masked, so the secret
+// field is never prefilled — it only shows a "••••••" placeholder when
+// a secret is already on file.
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import DashboardNav from "../../components/DashboardNav.astro";
+---
+
+<BaseLayout title="Gateways">
+  <DashboardNav />
+  <main class="container stack">
+    <header>
+      <h1>Gateways</h1>
+      <p class="muted">
+        Connect payment gateways for
+        <strong id="merchant-name">your merchant</strong>. Click a gateway to
+        configure it — changes apply to checkout immediately.
+      </p>
+    </header>
+
+    <p id="page-error" class="alert alert-error" role="alert" hidden></p>
+    <p id="page-status" class="muted" role="status">Loading gateways…</p>
+
+    <section id="no-merchant" class="card empty" hidden>
+      <p>
+        You do not have a merchant yet. Create a merchant first, then come
+        back here to connect its payment gateways.
+      </p>
+    </section>
+
+    <section
+      id="gateway-grid"
+      class="grid gateway-grid"
+      aria-label="Available gateways"
+      hidden
+    >
+    </section>
+
+    <section id="config-panel" class="card" hidden>
+      <h2 id="config-title">Configure gateway</h2>
+      <p id="config-subtitle" class="muted small"></p>
+
+      <form id="config-form" novalidate>
+        <div class="field">
+          <label class="label" id="number-label" for="gw-number">
+            Merchant number
+          </label>
+          <input
+            class="input"
+            id="gw-number"
+            name="merchant_number"
+            type="text"
+            autocomplete="off"
+            placeholder="01XXXXXXXXX"
+          />
+          <p class="field-hint" id="number-hint">
+            The merchant / agent number that receives payments at this
+            provider.
+          </p>
+        </div>
+
+        <div class="field">
+          <label class="label" for="gw-api-key">API key</label>
+          <input
+            class="input"
+            id="gw-api-key"
+            name="api_key"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Public key / client id issued by the provider"
+          />
+        </div>
+
+        <div class="field">
+          <label class="label" for="gw-api-secret">API secret</label>
+          <input
+            class="input"
+            id="gw-api-secret"
+            name="api_secret"
+            type="password"
+            autocomplete="new-password"
+            spellcheck="false"
+            placeholder="Secret key issued by the provider"
+          />
+          <p class="field-hint">
+            Stored secrets are never shown back. Enter the secret to set or
+            replace it; leave blank only when this gateway needs none.
+          </p>
+        </div>
+
+        <div class="field" id="extra-field" hidden>
+          <label class="label" for="gw-extra">
+            Instructions for payers
+          </label>
+          <textarea
+            class="input"
+            id="gw-extra"
+            name="extra"
+            rows="4"
+            placeholder="e.g. Send money to the number above, then enter your transaction ID at checkout."></textarea>
+          <p class="field-hint">
+            Shown to customers who choose manual payment at checkout.
+          </p>
+        </div>
+
+        <div class="field check-row">
+          <label class="check">
+            <input id="gw-sandbox" name="sandbox" type="checkbox" />
+            Sandbox mode (test credentials, no real money moves)
+          </label>
+          <label class="check">
+            <input id="gw-enabled" name="enabled" type="checkbox" />
+            Enabled (offer this gateway at checkout)
+          </label>
+        </div>
+
+        <p id="form-error" class="alert alert-error" role="alert" hidden></p>
+        <p id="form-saved" class="alert alert-success" role="status" hidden>
+        </p>
+
+        <div class="row">
+          <button class="btn" id="gw-save" type="submit">
+            Save configuration
+          </button>
+          <button class="btn btn-ghost" id="gw-cancel" type="button">
+            Close
+          </button>
+        </div>
+      </form>
+    </section>
+  </main>
+</BaseLayout>
+
+<style>
+  .gateway-grid {
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  }
+
+  .gateway-card {
+    display: grid;
+    gap: 0.625rem;
+    align-content: start;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1.25rem;
+    cursor: pointer;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .gateway-card:hover {
+    border-color: var(--brand);
+  }
+
+  .gateway-card.selected {
+    border-color: var(--brand);
+    box-shadow:
+      0 0 0 2px var(--brand-soft),
+      var(--shadow);
+  }
+
+  .gateway-card .gateway-name {
+    font-size: 1.125rem;
+    font-weight: 650;
+    line-height: 1.25;
+  }
+
+  .gateway-card .gateway-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .check-row {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9375rem;
+    cursor: pointer;
+  }
+
+  .check input {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--brand);
+  }
+</style>
+
+<script>
+  import {
+    getToken,
+    listGateways,
+    listMerchants,
+    merchantGateways,
+    upsertGateway,
+  } from "../../lib/api";
+
+  // The catalogue endpoint returns display_name / country; the
+  // per-merchant endpoint returns stored config views with the API
+  // secret masked ("***" when one is on file, null otherwise).
+  interface GatewaySummary {
+    id: string;
+    display_name?: string;
+    name?: string;
+    country?: string;
+    [key: string]: unknown;
+  }
+
+  interface MerchantGatewayView {
+    gateway: string;
+    merchant_number?: string | null;
+    api_key?: string | null;
+    api_secret?: string | null;
+    extra?: unknown;
+    sandbox?: boolean;
+    enabled?: boolean;
+    configured?: boolean;
+    [key: string]: unknown;
+  }
+
+  const MERCHANT_KEY = "mp_merchant";
+  const SECRET_PLACEHOLDER = "••••••";
+
+  const COUNTRY_LABELS: Record<string, string> = {
+    BD: "Bangladesh",
+    IN: "India",
+    PK: "Pakistan",
+    GLOBAL: "Global",
+  };
+
+  // Auth guard: the dashboard is useless without a token.
+  if (!getToken()) {
+    window.location.replace("/login");
+  }
+
+  const merchantNameEl = document.getElementById("merchant-name");
+  const pageErrorEl = document.getElementById("page-error");
+  const pageStatusEl = document.getElementById("page-status");
+  const noMerchantEl = document.getElementById("no-merchant");
+  const gridEl = document.getElementById("gateway-grid");
+  const panelEl = document.getElementById("config-panel");
+  const configTitleEl = document.getElementById("config-title");
+  const configSubtitleEl = document.getElementById("config-subtitle");
+  const formEl = document.getElementById(
+    "config-form",
+  ) as HTMLFormElement | null;
+  const numberLabelEl = document.getElementById("number-label");
+  const numberHintEl = document.getElementById("number-hint");
+  const numberInput = document.getElementById(
+    "gw-number",
+  ) as HTMLInputElement | null;
+  const apiKeyInput = document.getElementById(
+    "gw-api-key",
+  ) as HTMLInputElement | null;
+  const apiSecretInput = document.getElementById(
+    "gw-api-secret",
+  ) as HTMLInputElement | null;
+  const extraFieldEl = document.getElementById("extra-field");
+  const extraInput = document.getElementById(
+    "gw-extra",
+  ) as HTMLTextAreaElement | null;
+  const sandboxInput = document.getElementById(
+    "gw-sandbox",
+  ) as HTMLInputElement | null;
+  const enabledInput = document.getElementById(
+    "gw-enabled",
+  ) as HTMLInputElement | null;
+  const formErrorEl = document.getElementById("form-error");
+  const formSavedEl = document.getElementById("form-saved");
+  const saveButton = document.getElementById(
+    "gw-save",
+  ) as HTMLButtonElement | null;
+  const cancelButton = document.getElementById("gw-cancel");
+
+  let merchantId: string | null = null;
+  let catalog: GatewaySummary[] = [];
+  let viewsByGateway = new Map<string, MerchantGatewayView>();
+  let selectedGateway: string | null = null;
+
+  function showPageError(message: string): void {
+    if (!pageErrorEl) return;
+    pageErrorEl.textContent = message;
+    pageErrorEl.hidden = false;
+  }
+
+  function setStatus(message: string): void {
+    if (!pageStatusEl) return;
+    pageStatusEl.textContent = message;
+    pageStatusEl.hidden = message.length === 0;
+  }
+
+  function showFormError(message: string): void {
+    if (!formErrorEl) return;
+    formErrorEl.textContent = message;
+    formErrorEl.hidden = false;
+    if (formSavedEl) formSavedEl.hidden = true;
+  }
+
+  function showSaved(message: string): void {
+    if (!formSavedEl) return;
+    formSavedEl.textContent = message;
+    formSavedEl.hidden = false;
+    if (formErrorEl) formErrorEl.hidden = true;
+  }
+
+  function countryLabel(country: string | undefined): string {
+    if (!country) return "Global";
+    const code = country.toUpperCase();
+    const label = COUNTRY_LABELS[code];
+    return label ? `${label} · ${code}` : code;
+  }
+
+  function displayNameOf(info: GatewaySummary): string {
+    return info.display_name ?? info.name ?? info.id;
+  }
+
+  /** Read the stored merchant reference: a raw id or JSON with an id. */
+  function storedMerchantId(): string | null {
+    try {
+      const raw = localStorage.getItem(MERCHANT_KEY);
+      if (!raw) return null;
+      const trimmed = raw.trim();
+      if (!trimmed) return null;
+      if (trimmed.startsWith("{")) {
+        const parsed = JSON.parse(trimmed) as { id?: unknown };
+        return typeof parsed.id === "string" && parsed.id
+          ? parsed.id
+          : null;
+      }
+      return trimmed;
+    } catch {
+      return null;
+    }
+  }
+
+  function rememberMerchant(id: string): void {
+    try {
+      localStorage.setItem(MERCHANT_KEY, id);
+    } catch {
+      // Storage unavailable; the page still works for this session.
+    }
+  }
+
+  /** Extract payer instructions from a stored `extra` JSON value. */
+  function extraInstructions(extra: unknown): string {
+    if (typeof extra === "string") return extra;
+    if (extra && typeof extra === "object") {
+      const record = extra as Record<string, unknown>;
+      if (typeof record.instructions === "string") {
+        return record.instructions;
+      }
+    }
+    return "";
+  }
+
+  function renderGrid(): void {
+    if (!gridEl) return;
+    gridEl.replaceChildren();
+
+    for (const info of catalog) {
+      const view = viewsByGateway.get(info.id);
+      const configured = Boolean(view);
+
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className =
+        "gateway-card" + (selectedGateway === info.id ? " selected" : "");
+      card.dataset.gateway = info.id;
+      card.setAttribute(
+        "aria-pressed",
+        selectedGateway === info.id ? "true" : "false",
+      );
+
+      const name = document.createElement("span");
+      name.className = "gateway-name";
+      name.textContent = displayNameOf(info);
+      card.appendChild(name);
+
+      const badges = document.createElement("span");
+      badges.className = "gateway-badges";
+
+      const country = document.createElement("span");
+      country.className = "badge";
+      country.textContent = countryLabel(info.country);
+      badges.appendChild(country);
+
+      const state = document.createElement("span");
+      state.className = configured ? "badge badge-success" : "badge";
+      state.textContent = configured ? "Configured" : "Not configured";
+      badges.appendChild(state);
+
+      if (view && view.enabled === false) {
+        const disabled = document.createElement("span");
+        disabled.className = "badge badge-pending";
+        disabled.textContent = "Disabled";
+        badges.appendChild(disabled);
+      }
+
+      if (view?.sandbox) {
+        const sandbox = document.createElement("span");
+        sandbox.className = "badge badge-pending";
+        sandbox.textContent = "Sandbox";
+        badges.appendChild(sandbox);
+      }
+
+      card.appendChild(badges);
+
+      const hint = document.createElement("span");
+      hint.className = "muted small";
+      hint.textContent = configured
+        ? "Click to edit configuration"
+        : "Click to set up";
+      card.appendChild(hint);
+
+      card.addEventListener("click", () => selectGateway(info.id));
+      gridEl.appendChild(card);
+    }
+
+    gridEl.hidden = catalog.length === 0;
+  }
+
+  function selectGateway(gatewayId: string): void {
+    const info = catalog.find((entry) => entry.id === gatewayId);
+    if (!info || !panelEl) return;
+    selectedGateway = gatewayId;
+    const view = viewsByGateway.get(gatewayId);
+    const name = displayNameOf(info);
+
+    if (configTitleEl) {
+      configTitleEl.textContent = `Configure ${name}`;
+    }
+    if (configSubtitleEl) {
+      configSubtitleEl.textContent = view
+        ? `${name} is configured for this merchant. Update the values below and save to replace them.`
+        : `${name} is not configured yet. Fill in your ${name} merchant credentials to start accepting payments.`;
+    }
+
+    // The number field is a UPI VPA for the UPI gateway.
+    const isUpi = gatewayId === "upi";
+    if (numberLabelEl) {
+      numberLabelEl.textContent = isUpi
+        ? "UPI VPA"
+        : gatewayId === "manual"
+          ? "Receiving number / account"
+          : "Merchant number";
+    }
+    if (numberInput) {
+      numberInput.placeholder = isUpi ? "yourname@okbank" : "01XXXXXXXXX";
+      numberInput.value = view?.merchant_number ?? "";
+    }
+    if (numberHintEl) {
+      numberHintEl.textContent = isUpi
+        ? "The Virtual Payment Address that receives UPI payments."
+        : "The merchant / agent number that receives payments at this provider.";
+    }
+
+    if (apiKeyInput) apiKeyInput.value = view?.api_key ?? "";
+
+    // Secrets are write-only: never prefill. A bullet placeholder
+    // signals that a secret is already stored.
+    if (apiSecretInput) {
+      apiSecretInput.value = "";
+      apiSecretInput.placeholder = view?.api_secret
+        ? SECRET_PLACEHOLDER
+        : "Secret key issued by the provider";
+    }
+
+    // Extra instructions only apply to the manual gateway.
+    const isManual = gatewayId === "manual";
+    if (extraFieldEl) extraFieldEl.hidden = !isManual;
+    if (extraInput) {
+      extraInput.value = isManual ? extraInstructions(view?.extra) : "";
+    }
+
+    if (sandboxInput) sandboxInput.checked = view?.sandbox ?? false;
+    if (enabledInput) enabledInput.checked = view?.enabled ?? true;
+
+    if (formErrorEl) formErrorEl.hidden = true;
+    if (formSavedEl) formSavedEl.hidden = true;
+
+    renderGrid();
+    panelEl.hidden = false;
+    panelEl.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function load(): Promise<void> {
+    if (!merchantId) return;
+    setStatus("Loading gateways…");
+    const [gatewayList, merchantViews] = await Promise.all([
+      listGateways() as Promise<GatewaySummary[]>,
+      merchantGateways(merchantId) as Promise<MerchantGatewayView[]>,
+    ]);
+    catalog = Array.isArray(gatewayList) ? gatewayList : [];
+    viewsByGateway = new Map(
+      (Array.isArray(merchantViews) ? merchantViews : []).map((view) => [
+        view.gateway,
+        view,
+      ]),
+    );
+    setStatus(
+      catalog.length === 0
+        ? "No gateways are available on this server."
+        : "",
+    );
+    renderGrid();
+    // Keep an open form in sync with the freshly loaded values.
+    if (selectedGateway && catalog.some((g) => g.id === selectedGateway)) {
+      const keepSelected = selectedGateway;
+      selectedGateway = null;
+      selectGateway(keepSelected);
+    }
+  }
+
+  async function init(): Promise<void> {
+    try {
+      const merchants = await listMerchants();
+      const list = Array.isArray(merchants) ? merchants : [];
+      if (list.length === 0) {
+        setStatus("");
+        if (noMerchantEl) noMerchantEl.hidden = false;
+        return;
+      }
+
+      const stored = storedMerchantId();
+      const chosen =
+        list.find((merchant) => merchant.id === stored) ?? list[0];
+      merchantId = chosen.id;
+      rememberMerchant(chosen.id);
+      if (merchantNameEl) {
+        merchantNameEl.textContent = chosen.name ?? "your merchant";
+      }
+
+      await load();
+    } catch (error) {
+      setStatus("");
+      showPageError(
+        error instanceof Error
+          ? error.message
+          : "Could not load gateways. Please try again.",
+      );
+    }
+  }
+
+  formEl?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!merchantId || !selectedGateway) return;
+    const info = catalog.find((entry) => entry.id === selectedGateway);
+    const name = info ? displayNameOf(info) : selectedGateway;
+    const existing = viewsByGateway.get(selectedGateway);
+
+    const secretValue = apiSecretInput?.value ?? "";
+    const payload = {
+      gateway: selectedGateway,
+      merchant_number: numberInput?.value.trim() || null,
+      api_key: apiKeyInput?.value.trim() || null,
+      // Never send the masked placeholder: an untouched secret field
+      // submits as null rather than a literal "••••••" / "***".
+      api_secret: secretValue ? secretValue : null,
+      sandbox: sandboxInput?.checked ?? false,
+      enabled: enabledInput?.checked ?? false,
+      extra:
+        selectedGateway === "manual"
+          ? extraInput?.value.trim() || null
+          : (existing?.extra ?? null),
+    };
+
+    if (saveButton) saveButton.disabled = true;
+    try {
+      await upsertGateway(merchantId, payload);
+      await load();
+      showSaved(`${name} configuration saved.`);
+    } catch (error) {
+      showFormError(
+        error instanceof Error
+          ? error.message
+          : `Could not save the ${name} configuration.`,
+      );
+    } finally {
+      if (saveButton) saveButton.disabled = false;
+    }
+  });
+
+  cancelButton?.addEventListener("click", () => {
+    selectedGateway = null;
+    if (panelEl) panelEl.hidden = true;
+    renderGrid();
+  });
+
+  void init();
+</script>

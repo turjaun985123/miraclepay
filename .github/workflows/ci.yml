@@ -1,0 +1,86 @@
+# CI — MiraclePay v0.0.1
+#
+# Clean-room reimplementation. This workflow verifies all three parts of
+# the project on every push and pull request:
+#   1. rust     — the Axum backend workspace (tests + build)
+#   2. frontend — the Astro frontend (install + production build)
+#   3. android  — the Java Android SMS-forwarder app (debug APK)
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust (test + build)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Install the stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo dependencies and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run the workspace test suite
+        run: cargo test --workspace
+
+      - name: Build the workspace
+        run: cargo build --workspace
+
+  frontend:
+    name: Frontend (Astro build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # No lockfile is committed yet, so use `npm install` rather than
+      # `npm ci` (which requires a package-lock.json). Switch this step
+      # to `npm ci` once a lockfile is committed.
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build the frontend
+        run: npm run build
+
+  android:
+    name: Android (assembleDebug)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # No Gradle wrapper (gradlew / gradle-wrapper.properties) is
+      # committed yet, so Gradle is provisioned by setup-gradle instead.
+      # Once the wrapper is committed, this step can be dropped and the
+      # build step below can call `./gradlew assembleDebug` directly.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build the debug APK
+        run: gradle assembleDebug

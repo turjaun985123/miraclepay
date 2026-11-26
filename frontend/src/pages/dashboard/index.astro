@@ -1,0 +1,534 @@
+---
+// MiraclePay v0.0.1 — Merchant dashboard home
+// Original clean-room page: merchant switcher, balance stat cards,
+// recent transactions, and a create-payment mini-form.
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import DashboardNav from '../../components/DashboardNav.astro';
+---
+
+<BaseLayout title="Dashboard">
+  <DashboardNav />
+
+  <main class="container stack">
+    <div class="row" style="justify-content: space-between;">
+      <div>
+        <h1>Dashboard</h1>
+        <p class="muted" style="margin: 0;">Overview of your merchant account.</p>
+      </div>
+      <div id="merchant-switcher" class="row" hidden>
+        <label class="label" for="merchant-select" style="margin: 0;">Merchant</label>
+        <select id="merchant-select" class="input" style="width: auto; min-width: 220px;"></select>
+      </div>
+    </div>
+
+    <div id="page-error" class="alert alert-error" role="alert" hidden></div>
+    <p id="page-loading" class="muted">Loading your dashboard…</p>
+
+    <!-- Shown when the account has no merchants yet -->
+    <section id="create-merchant-section" class="card" hidden>
+      <h2>Create your first merchant</h2>
+      <p class="muted">
+        You don't have a merchant account yet. Create one to start accepting
+        payments through MiraclePay.
+      </p>
+      <form id="create-merchant-form" novalidate>
+        <div class="field">
+          <label class="label" for="cm-name">Business name</label>
+          <input id="cm-name" name="name" class="input" type="text" required
+            autocomplete="organization" placeholder="e.g. Dhaka Crafts Ltd." />
+        </div>
+        <div class="field">
+          <label class="label" for="cm-email">Business email</label>
+          <input id="cm-email" name="email" class="input" type="email"
+            autocomplete="email" placeholder="billing@example.com" />
+        </div>
+        <div class="field">
+          <label class="label" for="cm-country">Country</label>
+          <select id="cm-country" name="country" class="input">
+            <option value="BD">Bangladesh (BD)</option>
+            <option value="IN">India (IN)</option>
+            <option value="PK">Pakistan (PK)</option>
+            <option value="US">United States (US)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="label" for="cm-phone">Phone</label>
+          <input id="cm-phone" name="phone" class="input" type="tel"
+            autocomplete="tel" placeholder="+8801XXXXXXXXX" />
+        </div>
+        <div class="field">
+          <label class="label" for="cm-webhook">Webhook URL</label>
+          <input id="cm-webhook" name="webhook_url" class="input" type="url"
+            placeholder="https://example.com/webhooks/miraclepay" />
+          <p class="field-hint">We POST payment events to this URL.</p>
+        </div>
+        <div id="cm-error" class="alert alert-error" role="alert" hidden style="margin-bottom: 1rem;"></div>
+        <button id="cm-submit" class="btn" type="submit">Create merchant</button>
+      </form>
+    </section>
+
+    <!-- Main dashboard, shown once a merchant is selected -->
+    <div id="dashboard-content" class="stack" hidden>
+      <section class="grid" aria-label="Balance summary">
+        <div class="card stat">
+          <span class="stat-label">Available balance</span>
+          <span class="stat-value" id="stat-available">—</span>
+          <span class="stat-hint">Ready to withdraw</span>
+        </div>
+        <div class="card stat">
+          <span class="stat-label">Pending balance</span>
+          <span class="stat-value" id="stat-pending">—</span>
+          <span class="stat-hint">Awaiting settlement</span>
+        </div>
+        <div class="card stat">
+          <span class="stat-label">Total balance</span>
+          <span class="stat-value" id="stat-total">—</span>
+          <span class="stat-hint">Available + pending</span>
+        </div>
+        <div class="card stat">
+          <span class="stat-label">Recent transactions</span>
+          <span class="stat-value" id="stat-tx-count">—</span>
+          <span class="stat-hint">Shown below</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Create payment</h2>
+        <form id="create-payment-form" novalidate>
+          <div class="grid">
+            <div class="field" style="margin-bottom: 0;">
+              <label class="label" for="cp-gateway">Gateway</label>
+              <select id="cp-gateway" name="gateway" class="input" required></select>
+            </div>
+            <div class="field" style="margin-bottom: 0;">
+              <label class="label" for="cp-amount">Amount</label>
+              <input id="cp-amount" name="amount" class="input" type="number"
+                min="0.01" step="0.01" inputmode="decimal" required placeholder="500.00" />
+            </div>
+            <div class="field" style="margin-bottom: 0;">
+              <label class="label" for="cp-currency">Currency</label>
+              <select id="cp-currency" name="currency" class="input">
+                <option value="BDT">BDT</option>
+                <option value="INR">INR</option>
+                <option value="PKR">PKR</option>
+                <option value="USD">USD</option>
+              </select>
+            </div>
+            <div class="field" style="margin-bottom: 0;">
+              <label class="label" for="cp-reference">Reference</label>
+              <input id="cp-reference" name="reference" class="input" type="text"
+                placeholder="ORDER-1001" />
+            </div>
+          </div>
+          <div id="cp-error" class="alert alert-error" role="alert" hidden style="margin-top: 1rem;"></div>
+          <div class="row" style="margin-top: 1rem;">
+            <button id="cp-submit" class="btn" type="submit">Create payment</button>
+          </div>
+        </form>
+
+        <div id="payment-result" class="stack" hidden style="margin-top: 1.25rem;">
+          <div class="alert alert-success" role="status">Payment created successfully.</div>
+          <dl class="result-grid">
+            <div>
+              <dt class="muted small">Payment ID</dt>
+              <dd class="mono" id="pr-id">—</dd>
+            </div>
+            <div>
+              <dt class="muted small">Status</dt>
+              <dd id="pr-status">—</dd>
+            </div>
+            <div>
+              <dt class="muted small">Amount</dt>
+              <dd id="pr-amount">—</dd>
+            </div>
+            <div>
+              <dt class="muted small">Reference</dt>
+              <dd class="mono" id="pr-reference">—</dd>
+            </div>
+          </dl>
+          <div id="pr-instructions-wrap" hidden>
+            <h3>Payment instructions</h3>
+            <p id="pr-instructions" style="white-space: pre-wrap;"></p>
+          </div>
+          <div class="row">
+            <a id="pr-checkout-link" class="btn" href="#" target="_blank" rel="noopener" hidden>
+              Open checkout
+            </a>
+            <a id="pr-redirect-link" class="btn btn-ghost" href="#" target="_blank" rel="noopener" hidden>
+              Open gateway redirect
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Recent transactions</h2>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th scope="col">Date</th>
+                <th scope="col">Reference</th>
+                <th scope="col">Gateway</th>
+                <th scope="col">Amount</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody id="tx-body"></tbody>
+          </table>
+        </div>
+        <p id="tx-empty" class="empty" hidden>No transactions yet for this merchant.</p>
+        <p id="tx-error" class="alert alert-error" role="alert" hidden></p>
+      </section>
+    </div>
+  </main>
+
+  <style>
+    .result-grid {
+      display: grid;
+      gap: 0.75rem 1.5rem;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin: 0;
+    }
+    .result-grid dd {
+      margin: 0.125rem 0 0;
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
+  </style>
+
+  <script>
+    import {
+      getToken,
+      listMerchants,
+      createMerchant,
+      merchantBalance,
+      listTransactions,
+      listGateways,
+      createPayment,
+      formatMoney,
+    } from '../../lib/api';
+
+    const MERCHANT_KEY = 'mp_merchant';
+    const COUNTRY_CURRENCY = { BD: 'BDT', IN: 'INR', PK: 'PKR', US: 'USD' };
+
+    const $ = (id) => document.getElementById(id);
+    const els = {
+      loading: $('page-loading'),
+      pageError: $('page-error'),
+      switcher: $('merchant-switcher'),
+      merchantSelect: $('merchant-select'),
+      createSection: $('create-merchant-section'),
+      createForm: $('create-merchant-form'),
+      createError: $('cm-error'),
+      createSubmit: $('cm-submit'),
+      content: $('dashboard-content'),
+      available: $('stat-available'),
+      pending: $('stat-pending'),
+      total: $('stat-total'),
+      txCount: $('stat-tx-count'),
+      gatewaySelect: $('cp-gateway'),
+      paymentForm: $('create-payment-form'),
+      paymentError: $('cp-error'),
+      paymentSubmit: $('cp-submit'),
+      paymentResult: $('payment-result'),
+      txBody: $('tx-body'),
+      txEmpty: $('tx-empty'),
+      txError: $('tx-error'),
+    };
+
+    let merchants = [];
+    let currentMerchantId = null;
+
+    function showError(el, err) {
+      el.textContent = err instanceof Error ? err.message : 'Something went wrong.';
+      el.hidden = false;
+    }
+
+    function statusBadge(status) {
+      const s = String(status ?? '').toLowerCase();
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      if (['success', 'successful', 'completed', 'paid', 'approved', 'settled'].includes(s)) {
+        badge.classList.add('badge-success');
+      } else if (
+        ['pending', 'processing', 'awaiting', 'awaiting_payment', 'initiated', 'created'].includes(s)
+      ) {
+        badge.classList.add('badge-pending');
+      } else if (
+        ['failed', 'failure', 'cancelled', 'canceled', 'rejected', 'expired', 'refunded'].includes(s)
+      ) {
+        badge.classList.add('badge-failed');
+      }
+      badge.textContent = status ? String(status) : 'unknown';
+      return badge;
+    }
+
+    function formatDate(value) {
+      if (!value) return '—';
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString();
+    }
+
+    async function loadGateways() {
+      els.gatewaySelect.replaceChildren();
+      try {
+        const gateways = await listGateways();
+        const list = Array.isArray(gateways) ? gateways : gateways?.gateways ?? [];
+        if (!list.length) throw new Error('No gateways available.');
+        for (const g of list) {
+          const opt = document.createElement('option');
+          opt.value = g.id ?? g.gateway ?? g.name;
+          opt.textContent = g.name ?? g.id ?? g.gateway;
+          els.gatewaySelect.append(opt);
+        }
+      } catch (err) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'Could not load gateways';
+        els.gatewaySelect.append(opt);
+        showError(els.paymentError, err);
+      }
+    }
+
+    async function loadBalance(merchantId) {
+      els.available.textContent = '—';
+      els.pending.textContent = '—';
+      els.total.textContent = '—';
+      try {
+        const bal = await merchantBalance(merchantId);
+        const currency = bal.currency ?? 'BDT';
+        const available = bal.available_minor ?? bal.available ?? 0;
+        const pending = bal.pending_minor ?? bal.pending ?? 0;
+        const total = bal.total_minor ?? Number(available) + Number(pending);
+        els.available.textContent = formatMoney(available, currency);
+        els.pending.textContent = formatMoney(pending, currency);
+        els.total.textContent = formatMoney(total, currency);
+      } catch (err) {
+        showError(els.pageError, err);
+      }
+    }
+
+    async function loadTransactions(merchantId) {
+      els.txBody.replaceChildren();
+      els.txEmpty.hidden = true;
+      els.txError.hidden = true;
+      try {
+        const res = await listTransactions({ merchant_id: merchantId });
+        // Tolerate either a bare array or a { transactions: [...] } envelope.
+        const txs = Array.isArray(res) ? res : res?.transactions ?? res?.items ?? [];
+        els.txCount.textContent = String(txs.length);
+        if (!txs.length) {
+          els.txEmpty.hidden = false;
+          return;
+        }
+        for (const tx of txs) {
+          const tr = document.createElement('tr');
+
+          const dateTd = document.createElement('td');
+          dateTd.textContent = formatDate(tx.created_at);
+          tr.append(dateTd);
+
+          const refTd = document.createElement('td');
+          refTd.className = 'mono';
+          refTd.textContent = tx.reference ?? tx.id ?? '—';
+          tr.append(refTd);
+
+          const gwTd = document.createElement('td');
+          gwTd.textContent = tx.gateway ?? tx.method ?? '—';
+          tr.append(gwTd);
+
+          const amtTd = document.createElement('td');
+          amtTd.textContent = formatMoney(tx.amount_minor ?? 0, tx.currency ?? 'BDT');
+          tr.append(amtTd);
+
+          const statusTd = document.createElement('td');
+          statusTd.append(statusBadge(tx.status));
+          tr.append(statusTd);
+
+          els.txBody.append(tr);
+        }
+      } catch (err) {
+        els.txCount.textContent = '—';
+        showError(els.txError, err);
+      }
+    }
+
+    async function loadDashboard() {
+      if (!currentMerchantId) return;
+      els.pageError.hidden = true;
+      await Promise.all([loadBalance(currentMerchantId), loadTransactions(currentMerchantId)]);
+    }
+
+    function populateMerchantSelect() {
+      els.merchantSelect.replaceChildren();
+      for (const m of merchants) {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.name ?? m.id;
+        els.merchantSelect.append(opt);
+      }
+      if (currentMerchantId) els.merchantSelect.value = currentMerchantId;
+      els.switcher.hidden = merchants.length === 0;
+    }
+
+    async function init() {
+      if (!getToken()) {
+        window.location.href = '/login';
+        return;
+      }
+
+      try {
+        const res = await listMerchants();
+        merchants = Array.isArray(res) ? res : res?.merchants ?? [];
+      } catch (err) {
+        els.loading.hidden = true;
+        showError(els.pageError, err);
+        return;
+      }
+
+      els.loading.hidden = true;
+
+      if (!merchants.length) {
+        els.createSection.hidden = false;
+        els.content.hidden = true;
+        return;
+      }
+
+      const saved = localStorage.getItem(MERCHANT_KEY);
+      currentMerchantId =
+        saved && merchants.some((m) => m.id === saved) ? saved : merchants[0].id;
+      localStorage.setItem(MERCHANT_KEY, currentMerchantId);
+
+      populateMerchantSelect();
+      els.createSection.hidden = true;
+      els.content.hidden = false;
+      await Promise.all([loadGateways(), loadDashboard()]);
+    }
+
+    els.merchantSelect.addEventListener('change', () => {
+      currentMerchantId = els.merchantSelect.value;
+      localStorage.setItem(MERCHANT_KEY, currentMerchantId);
+      els.paymentResult.hidden = true;
+      loadDashboard();
+    });
+
+    els.createForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      els.createError.hidden = true;
+
+      const form = new FormData(els.createForm);
+      const name = String(form.get('name') ?? '').trim();
+      const email = String(form.get('email') ?? '').trim();
+      const country = String(form.get('country') ?? 'BD');
+      const phone = String(form.get('phone') ?? '').trim();
+      const webhookUrl = String(form.get('webhook_url') ?? '').trim();
+
+      if (!name) {
+        showError(els.createError, new Error('Business name is required.'));
+        return;
+      }
+
+      els.createSubmit.disabled = true;
+      try {
+        await createMerchant({
+          name,
+          ...(email ? { email } : {}),
+          ...(phone ? { phone } : {}),
+          country,
+          currency: COUNTRY_CURRENCY[country] ?? 'BDT',
+          ...(webhookUrl ? { webhook_url: webhookUrl } : {}),
+        });
+        window.location.reload();
+      } catch (err) {
+        showError(els.createError, err);
+        els.createSubmit.disabled = false;
+      }
+    });
+
+    els.paymentForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      els.paymentError.hidden = true;
+      els.paymentResult.hidden = true;
+
+      if (!currentMerchantId) {
+        showError(els.paymentError, new Error('Select a merchant first.'));
+        return;
+      }
+
+      const form = new FormData(els.paymentForm);
+      const gateway = String(form.get('gateway') ?? '');
+      const amountMajor = Number(form.get('amount'));
+      const currency = String(form.get('currency') ?? 'BDT');
+      const reference = String(form.get('reference') ?? '').trim();
+
+      if (!gateway) {
+        showError(els.paymentError, new Error('Choose a gateway.'));
+        return;
+      }
+      if (!Number.isFinite(amountMajor) || amountMajor <= 0) {
+        showError(els.paymentError, new Error('Enter an amount greater than zero.'));
+        return;
+      }
+
+      els.paymentSubmit.disabled = true;
+      try {
+        const result = await createPayment({
+          merchant_id: currentMerchantId,
+          gateway,
+          amount_minor: Math.round(amountMajor * 100),
+          currency,
+          ...(reference ? { reference } : {}),
+        });
+
+        $('pr-id').textContent = result?.id ?? '—';
+        const statusSlot = $('pr-status');
+        statusSlot.replaceChildren(statusBadge(result?.status ?? 'pending'));
+        $('pr-amount').textContent = formatMoney(
+          result?.amount_minor ?? Math.round(amountMajor * 100),
+          result?.currency ?? currency,
+        );
+        $('pr-reference').textContent = result?.reference ?? (reference || '—');
+
+        const instructions =
+          result?.instructions ?? result?.payment_instructions ?? result?.message;
+        if (instructions) {
+          $('pr-instructions').textContent =
+            typeof instructions === 'string' ? instructions : JSON.stringify(instructions);
+          $('pr-instructions-wrap').hidden = false;
+        } else {
+          $('pr-instructions-wrap').hidden = true;
+        }
+
+        const checkoutUrl =
+          result?.checkout_url ?? result?.payment_url ?? result?.url;
+        const checkoutLink = $('pr-checkout-link');
+        if (checkoutUrl) {
+          checkoutLink.href = checkoutUrl;
+          checkoutLink.hidden = false;
+        } else {
+          checkoutLink.hidden = true;
+        }
+
+        const redirectUrl = result?.redirect_url ?? result?.gateway_redirect_url;
+        const redirectLink = $('pr-redirect-link');
+        if (redirectUrl && redirectUrl !== checkoutUrl) {
+          redirectLink.href = redirectUrl;
+          redirectLink.hidden = false;
+        } else {
+          redirectLink.hidden = true;
+        }
+
+        els.paymentResult.hidden = false;
+        // Refresh balance + transactions so the new payment shows up.
+        loadDashboard();
+      } catch (err) {
+        showError(els.paymentError, err);
+      } finally {
+        els.paymentSubmit.disabled = false;
+      }
+    });
+
+    init();
+  </script>
+</BaseLayout>

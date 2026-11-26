@@ -1,0 +1,466 @@
+---
+// MiraclePay v0.0.1 — Dashboard transactions page (clean-room, original).
+//
+// Lists the active merchant's transactions with status / gateway
+// filters and a per-row refund action. All data is loaded client-side
+// through the API client in `../../lib/api`: visitors without a stored
+// token are sent to /login, and the merchant is taken from the
+// `mp_merchant` localStorage entry (falling back to the account's first
+// merchant when that entry is absent).
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import DashboardNav from '../../components/DashboardNav.astro';
+---
+
+<BaseLayout title="Transactions">
+  <DashboardNav />
+
+  <main class="container stack">
+    <header>
+      <h1>Transactions</h1>
+      <p class="muted">
+        Every payment for the active merchant — filter by status or gateway,
+        and refund completed payments.
+      </p>
+    </header>
+
+    <p id="tx-message" class="alert" role="status" hidden></p>
+
+    <section id="no-merchant" class="card empty" hidden>
+      <p><strong>No merchant yet.</strong></p>
+      <p>
+        Transactions live under a merchant, and this account does not have one
+        yet. <a href="/dashboard">Go to the dashboard</a> to create your first
+        merchant.
+      </p>
+    </section>
+
+    <section id="tx-panel" class="stack" hidden>
+      <form id="tx-filters" class="card" novalidate>
+        <div class="row tx-filter-row">
+          <div class="tx-filter-field">
+            <label class="label" for="filter-status">Status</label>
+            <select id="filter-status" class="input" name="status">
+              <option value="all" selected>All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="processing">Processing</option>
+              <option value="completed">Completed</option>
+              <option value="failed">Failed</option>
+              <option value="refunded">Refunded</option>
+            </select>
+          </div>
+
+          <div class="tx-filter-field">
+            <label class="label" for="filter-gateway">Gateway</label>
+            <input
+              id="filter-gateway"
+              class="input"
+              name="gateway"
+              type="text"
+              placeholder="e.g. bkash"
+              autocomplete="off"
+            />
+          </div>
+
+          <div class="tx-filter-actions row">
+            <button type="submit" class="btn">Filter</button>
+            <button type="button" id="filter-reset" class="btn btn-ghost">
+              Reset
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <section class="card">
+        <p id="tx-loading" class="muted" hidden>Loading transactions…</p>
+        <p id="tx-empty" class="empty" hidden>
+          No transactions match these filters yet.
+        </p>
+
+        <div class="table-wrap">
+          <table class="table" id="tx-table" hidden>
+            <thead>
+              <tr>
+                <th scope="col">Date</th>
+                <th scope="col">ID</th>
+                <th scope="col">Gateway</th>
+                <th scope="col">Amount</th>
+                <th scope="col">Customer</th>
+                <th scope="col">Provider Trx</th>
+                <th scope="col">Status</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tx-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </main>
+</BaseLayout>
+
+<style>
+  .tx-filter-row {
+    align-items: flex-end;
+  }
+
+  .tx-filter-field {
+    flex: 1 1 200px;
+    min-width: 160px;
+  }
+
+  .tx-filter-actions {
+    flex: 0 0 auto;
+  }
+</style>
+
+<script>
+  import {
+    formatMoney,
+    getToken,
+    listMerchants,
+    listTransactions,
+    refund,
+  } from '../../lib/api';
+
+  // Loose record shape: the API client types a transaction with flat
+  // `amount_minor` / `currency` fields, while the backend serialises a
+  // nested `amount: { amount_minor, currency }` money object. Tolerate
+  // both (and a few naming variants) instead of trusting one shape.
+  type TxRecord = {
+    id?: string;
+    status?: string;
+    gateway?: string;
+    method?: string;
+    amount?: number | { amount_minor?: number; currency?: unknown } | null;
+    amount_minor?: number;
+    currency?: unknown;
+    customer_name?: string;
+    customer_email?: string;
+    customer_phone?: string;
+    provider_trx_id?: string;
+    provider_transaction_id?: string;
+    trx_id?: string;
+    created_at?: string;
+    [key: string]: unknown;
+  };
+
+  const messageEl = document.getElementById('tx-message');
+  const noMerchantEl = document.getElementById('no-merchant');
+  const panelEl = document.getElementById('tx-panel');
+  const filtersForm = document.getElementById(
+    'tx-filters',
+  ) as HTMLFormElement | null;
+  const statusSelect = document.getElementById(
+    'filter-status',
+  ) as HTMLSelectElement | null;
+  const gatewayInput = document.getElementById(
+    'filter-gateway',
+  ) as HTMLInputElement | null;
+  const resetButton = document.getElementById('filter-reset');
+  const loadingEl = document.getElementById('tx-loading');
+  const emptyEl = document.getElementById('tx-empty');
+  const tableEl = document.getElementById('tx-table');
+  const bodyEl = document.getElementById('tx-body');
+
+  let merchantId: string | null = null;
+
+  function showMessage(message: string, kind: 'success' | 'error'): void {
+    if (!messageEl) return;
+    messageEl.textContent = message;
+    messageEl.className =
+      kind === 'success' ? 'alert alert-success' : 'alert alert-error';
+    messageEl.hidden = false;
+  }
+
+  function hideMessage(): void {
+    if (!messageEl) return;
+    messageEl.textContent = '';
+    messageEl.hidden = true;
+  }
+
+  /** Currency code from a string ('BDT') or an object carrying one. */
+  function currencyCode(tx: TxRecord): string {
+    const raw =
+      (tx.amount && typeof tx.amount === 'object'
+        ? tx.amount.currency
+        : undefined) ?? tx.currency;
+    if (typeof raw === 'string' && raw.trim()) return raw;
+    if (raw && typeof raw === 'object') {
+      const obj = raw as { code?: unknown; currency?: unknown };
+      if (typeof obj.code === 'string' && obj.code.trim()) return obj.code;
+      if (typeof obj.currency === 'string' && obj.currency.trim()) {
+        return obj.currency;
+      }
+    }
+    return 'BDT';
+  }
+
+  function amountMinor(tx: TxRecord): number {
+    if (tx.amount && typeof tx.amount === 'object') {
+      return Number(tx.amount.amount_minor) || 0;
+    }
+    if (typeof tx.amount === 'number') return tx.amount;
+    return Number(tx.amount_minor) || 0;
+  }
+
+  function shortId(id: string): string {
+    return id.length > 12 ? `${id.slice(0, 8)}…` : id;
+  }
+
+  function formatDate(value: string | undefined): string {
+    if (!value) return '—';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  }
+
+  function badgeClass(status: string): string {
+    switch (status) {
+      case 'completed':
+        return 'badge badge-success';
+      case 'pending':
+      case 'processing':
+        return 'badge badge-pending';
+      case 'failed':
+      case 'expired':
+        return 'badge badge-failed';
+      default:
+        return 'badge';
+    }
+  }
+
+  function textCell(text: string, className?: string): HTMLTableCellElement {
+    const cell = document.createElement('td');
+    cell.textContent = text;
+    if (className) cell.className = className;
+    return cell;
+  }
+
+  async function handleRefund(
+    tx: TxRecord,
+    button: HTMLButtonElement,
+  ): Promise<void> {
+    const code = currencyCode(tx);
+    const answer = window.prompt(
+      `Refund amount in ${code} (leave blank for a full refund):`,
+      '',
+    );
+    if (answer === null) return; // Cancelled.
+
+    const data: { amount_minor?: number } = {};
+    const trimmed = answer.trim();
+    if (trimmed) {
+      const major = Number(trimmed);
+      if (!Number.isFinite(major) || major <= 0) {
+        showMessage('Please enter a refund amount greater than zero.', 'error');
+        return;
+      }
+      data.amount_minor = Math.round(major * 100);
+    }
+
+    if (!tx.id) return;
+    button.disabled = true;
+    try {
+      await refund(tx.id, data);
+      showMessage(
+        trimmed
+          ? `Refund of ${formatMoney(data.amount_minor ?? 0, code)} requested for transaction ${shortId(tx.id)}.`
+          : `Full refund requested for transaction ${shortId(tx.id)}.`,
+        'success',
+      );
+      await loadTransactions();
+    } catch (error) {
+      showMessage(
+        error instanceof Error ? error.message : 'The refund request failed.',
+        'error',
+      );
+      button.disabled = false;
+    }
+  }
+
+  function renderTransactions(transactions: TxRecord[]): void {
+    if (!bodyEl || !tableEl || !emptyEl) return;
+    bodyEl.replaceChildren();
+
+    if (transactions.length === 0) {
+      tableEl.hidden = true;
+      emptyEl.hidden = false;
+      return;
+    }
+    emptyEl.hidden = true;
+    tableEl.hidden = false;
+
+    for (const tx of transactions) {
+      const row = document.createElement('tr');
+      const status = String(tx.status ?? '').toLowerCase();
+
+      row.append(textCell(formatDate(tx.created_at)));
+
+      const idCell = textCell(tx.id ? shortId(tx.id) : '—', 'mono');
+      if (tx.id) idCell.title = tx.id;
+      row.append(idCell);
+
+      row.append(textCell(tx.gateway ?? tx.method ?? '—'));
+      row.append(textCell(formatMoney(amountMinor(tx), currencyCode(tx))));
+
+      const customer =
+        [tx.customer_name, tx.customer_email, tx.customer_phone]
+          .filter((part): part is string => Boolean(part && part.trim()))
+          .join(' · ') || '—';
+      row.append(textCell(customer));
+
+      row.append(
+        textCell(
+          tx.provider_trx_id ?? tx.provider_transaction_id ?? tx.trx_id ?? '—',
+          'mono',
+        ),
+      );
+
+      const statusCell = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.className = badgeClass(status);
+      badge.textContent = status ? status.replace(/_/g, ' ') : '—';
+      statusCell.append(badge);
+      row.append(statusCell);
+
+      const actionsCell = document.createElement('td');
+      if (status === 'completed' || status === 'partially_refunded') {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-ghost btn-sm';
+        button.textContent = 'Refund';
+        button.addEventListener('click', () => {
+          void handleRefund(tx, button);
+        });
+        actionsCell.append(button);
+      } else {
+        actionsCell.textContent = '—';
+      }
+      row.append(actionsCell);
+
+      bodyEl.append(row);
+    }
+  }
+
+  async function loadTransactions(): Promise<void> {
+    if (!merchantId) return;
+    hideMessage();
+    if (loadingEl) loadingEl.hidden = false;
+    if (emptyEl) emptyEl.hidden = true;
+
+    const status = statusSelect?.value ?? 'all';
+    const gateway = gatewayInput?.value.trim() ?? '';
+
+    try {
+      const result: unknown = await listTransactions({
+        merchant_id: merchantId,
+        status: status && status !== 'all' ? status : undefined,
+        gateway: gateway || undefined,
+      });
+      // Tolerate a bare array or an envelope such as { transactions: [...] }.
+      const rows: TxRecord[] = Array.isArray(result)
+        ? (result as TxRecord[])
+        : ((result as { transactions?: TxRecord[]; items?: TxRecord[] })
+            ?.transactions ??
+          (result as { items?: TxRecord[] })?.items ??
+          []);
+      renderTransactions(rows);
+    } catch (error) {
+      if (tableEl) tableEl.hidden = true;
+      if (emptyEl) emptyEl.hidden = true;
+      showMessage(
+        error instanceof Error
+          ? error.message
+          : 'Transactions could not be loaded.',
+        'error',
+      );
+    } finally {
+      if (loadingEl) loadingEl.hidden = true;
+    }
+  }
+
+  /** Merchant id stored under `mp_merchant` (plain id or JSON object). */
+  function storedMerchantId(): string | null {
+    try {
+      const raw = localStorage.getItem('mp_merchant');
+      if (!raw) return null;
+      try {
+        const parsed: unknown = JSON.parse(raw);
+        if (typeof parsed === 'string') return parsed || null;
+        if (parsed && typeof parsed === 'object') {
+          const obj = parsed as { id?: unknown; merchant_id?: unknown };
+          const id = obj.id ?? obj.merchant_id;
+          return typeof id === 'string' && id ? id : null;
+        }
+        return null;
+      } catch {
+        return raw; // Stored as a plain id string.
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  async function resolveMerchant(): Promise<string | null> {
+    const stored = storedMerchantId();
+    if (stored) return stored;
+
+    const result: unknown = await listMerchants();
+    const merchants = Array.isArray(result)
+      ? result
+      : ((result as { merchants?: unknown[] })?.merchants ?? []);
+    const first = merchants[0] as { id?: unknown } | undefined;
+    if (!first || typeof first.id !== 'string' || !first.id) return null;
+
+    try {
+      localStorage.setItem('mp_merchant', first.id);
+    } catch {
+      // Storage unavailable; the fetched id is still usable for this page.
+    }
+    return first.id;
+  }
+
+  async function init(): Promise<void> {
+    // Auth guard: no stored token, no dashboard.
+    if (!getToken()) {
+      window.location.href = '/login';
+      return;
+    }
+
+    try {
+      merchantId = await resolveMerchant();
+    } catch (error) {
+      showMessage(
+        error instanceof Error
+          ? error.message
+          : 'Your merchants could not be loaded.',
+        'error',
+      );
+      return;
+    }
+
+    if (!merchantId) {
+      if (noMerchantEl) noMerchantEl.hidden = false;
+      return;
+    }
+
+    if (panelEl) panelEl.hidden = false;
+    await loadTransactions();
+  }
+
+  filtersForm?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    void loadTransactions();
+  });
+
+  statusSelect?.addEventListener('change', () => {
+    void loadTransactions();
+  });
+
+  resetButton?.addEventListener('click', () => {
+    if (statusSelect) statusSelect.value = 'all';
+    if (gatewayInput) gatewayInput.value = '';
+    void loadTransactions();
+  });
+
+  void init();
+</script>

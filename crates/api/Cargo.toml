@@ -1,0 +1,21 @@
+[package]
+name = "miraclepay-api"
+version = "0.0.1"
+edition = "2021"
+license = "AGPL-3.0"
+
+[dependencies]
+miraclepay-domain = { path = "../domain" }
+miraclepay-gateways = { path = "../gateways" }
+miraclepay-sms-verify = { path = "../sms_verify" }
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2"
+hmac = "0.12"
+sha2 = "0.10"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
