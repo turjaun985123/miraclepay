@@ -1080,3 +1080,58 @@ binary serves the full product.
   `GET /api/v1/definitely-not-a-route` → 404 application/json
   `{"error":"not_found"}`; CSP on `/` is the same-origin policy,
   on `/health` still `default-src 'none'`.
+
+## Patch release v0.0.3.3 (2026-11-26 — public pay-path mismatches fixed in the product)
+
+The live demo (see DEMO.md, local only) exposed two v0.0.3.2
+frontend/backend path mismatches, bridged at the time by the demo
+proxy. Both are now fixed in the product; no proxy is needed.
+
+- **Defect 1 — public payment-link API paths.** The pay page called
+  `GET /api/v1/payment-links/public/<slug>` and
+  `POST /api/v1/payment-links/public/<slug>/pay`, but the handlers
+  were mounted on `/pay/:slug` (feature commit `baf0272`).
+  Canonical contract, now implemented: the public API lives under
+  `/api/v1/payment-links/public/…` like every other API route —
+  the paths the frontend has always called — and `/pay/<slug>` is
+  purely the browser page. Chosen over rewriting the frontend to
+  `/pay/:slug` because a non-versioned JSON route on a page URL
+  was the root cause of Defect 2 as well. `PublicLinkView` gains a
+  payer-safe `gateways` list (merchant's configured gateways, else
+  all supported; ids only), and the pay page hides gateway cards
+  the merchant does not offer. OpenAPI + docs/API.md updated.
+- **Defect 2 — dynamic page shells.** With the JSON route gone
+  from `/pay/:slug`, the embedded-static resolver additionally
+  falls back for two-segment paths to the placeholder-built shell
+  (`<seg>/<seg>/index.html`), so `/pay/<slug>` and
+  `/checkout/<id>` serve their HTML shells; exact assets, real
+  directory pages, and API routes still win.
+- **Tests:** new integration test runs the whole loop against the
+  bare app — public fetch with a payer-safe field audit (allowlist
+  of response keys; no merchant_id/owner/secret strings), public
+  pay → checkout submit → device-key SMS → `completed`; new
+  static_ui shell tests; resolver fixture tests. Local: workspace
+  733 passed / 0 failed, SDK 8/8, fmt + clippy clean.
+- **CI:** feature run 45849072417 and bump run 45849952796
+  (`6166186`), each verified twice at job/step level — all 6 jobs
+  success, 0 failed steps.
+- **Release:** tag `v0.0.3.3` at `6166186`, confirmed Latest.
+  Assets (read-back): `miraclepay-v0.0.3.3-linux-x86_64.tar.gz`
+  11,121,895 B (api 33,727,352 B + worker 918,232 B) ·
+  `miraclepay-v0.0.3.3-debug.apk` 6,167,225 B ·
+  `miraclepay-v0.0.3.3-release-unsigned.apk` 4,953,779 B.
+  Android versionName 0.0.3.3 / versionCode 6; Cargo crates stay
+  0.0.3 (four-part semver), as before.
+- **No-proxy acceptance proof (published tarball, fresh download,
+  SANDBOX_MODE, plain curl direct to the binary):**
+  `GET /pay/demo-store-pay/` → 200 text/html (title "MiraclePay —
+  Pay"); `GET /checkout/txn_placeholder123` → 200 text/html;
+  `GET /api/v1/payment-links/public/demo-store-pay` → 200 JSON
+  {title, amount 50000 BDT, merchant_name, gateways[14], branding}
+  with no internal fields; `POST …/pay` → 201
+  {transaction_id txn_18eba2600b…, status pending};
+  `POST /api/v1/checkout/<id>/submit` (sender 01712345678, TrxID
+  V33FIXED01) → processing; device key created for the demo
+  merchant; `POST /api/v1/sms` with the matching bKash SMS →
+  {"outcome":"verified"}; `GET /api/v1/checkout/<id>` →
+  status "completed". The proof instance was stopped afterwards.
