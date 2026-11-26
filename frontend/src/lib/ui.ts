@@ -28,6 +28,11 @@ const BADGES: Record<string, { cls: string; label: string }> = {
   draft: { cls: "badge", label: "Draft" },
   disabled: { cls: "badge", label: "Disabled" },
   open: { cls: "badge-pending", label: "Open" },
+  sent: { cls: "badge-info", label: "Sent" },
+  issued: { cls: "badge-pending", label: "Issued" },
+  overdue: { cls: "badge-failed", label: "Overdue" },
+  void: { cls: "badge", label: "Void" },
+  voided: { cls: "badge", label: "Void" },
   resolved: { cls: "badge-success", label: "Resolved" },
 };
 

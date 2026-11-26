@@ -797,3 +797,46 @@ accessibility final pass (WCAG 2.2 AA) · 199 consistency sweep
 ### Wave 151 — CI verdict ✅
 - Commit `1bb2b06`, CI run **45807148059**: verified twice at
   job+step level — all 6 jobs success (0 failed steps).
+
+### Waves 152–158 — Design system foundation
+- `frontend/src/styles/tokens.css`: 3-layer tokens (primitives are
+  the only hex), semantic light + dark (prefers-color-scheme +
+  data-theme), type/spacing/radius/shadow/motion/z scales, legacy
+  aliases, Bangla type rules. BaseLayout rebuilt on tokens: AA
+  danger text (#b42318 on soft), border-strong control boundaries,
+  visible focus ring, 44px targets, global classes for toast,
+  skeleton, dialog, steps, copy-field, sticky summary, auth shell.
+- `lib/ui.ts` helpers: single statusBadge taxonomy, toast,
+  withBusy, skeletonAfter (150ms), copyText, confirmAction
+  (native <dialog>), fieldError, reduced-motion scroll.
+- Components: Icon (24 inline SVGs), PageHeader, StatCard,
+  EmptyState; favicon.svg + public/ created (logo mark).
+- Token drift lint (`scripts/check-tokens.mjs`) in CI: 48 → 0
+  after landing/auth migration; baseline ratcheted to 0.
+- CI run **45807726561** (commit `db88433`): verified twice at
+  job+step level — all 6 jobs success, 0 failed steps. ✅
+
+### Waves 159–180 — Landing + auth + dashboard (incl. Wave 165 review #1)
+- Landing rebuilt: wordmark + logo mark, "Payments that verify
+  themselves" hero with verification-moment card, honest stats
+  band, region-grouped gateway wall, icon feature cards, pricing
+  card (৳0 / 0%), full footer; stale v0.0.1 copy removed.
+- Auth: one shell (auth-card) for login/register; new
+  /forgot-password page wired to the existing Wave 88 reset
+  endpoints (api.ts helpers added); 2FA field explained inline;
+  busy labels on submit.
+- Dashboard shell: sticky app bar (wordmark, account email,
+  language, **logout wired** — api.ts logout() was never called),
+  grouped nav (Operate/Configure/Admin), Admin hidden for
+  non-admins, Plugins nav-orphan adopted, 44px targets.
+- Onboarding checklist is actionable: every unfinished step
+  links to the page that completes it (Wave 164).
+- Tables: shared statusBadge taxonomy replaces per-page badge
+  mappings (transactions, invoices; invoice statuses added);
+  money columns right-aligned tabular (.num); transactions get
+  server pagination (25/page, prev/next).
+- Inline styles: settings 11 → 0, dashboard overview 22 → 0
+  (utility classes in BaseLayout).
+- Wave 165 review #1: 5-role panel (Design Lead, Design Systems,
+  Accessibility, QA, UX Research) — reviews in design-audit/review165-*.
+- CI verdict logged below.

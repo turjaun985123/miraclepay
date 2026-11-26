@@ -162,6 +162,30 @@ const {
       .copy-field { display: flex; align-items: stretch; gap: var(--space-2); }
       .copy-field .copy-value { flex: 1; display: flex; align-items: center; padding: var(--space-2_5) var(--space-3); background: var(--color-surface-sunken); border: 1px dashed var(--color-border-strong); border-radius: var(--radius-md); font-family: var(--font-mono); font-size: var(--text-base); letter-spacing: 0.02em; overflow-x: auto; white-space: nowrap; }
 
+      /* Utilities (Wave 175/199: replace page inline styles) */
+      .u-m0 { margin: 0 !important; } .u-row-between { justify-content: space-between; }
+      .u-w-auto { width: auto; } .u-minw { min-width: 13.75rem; }
+      .w-xs { max-width: 10rem; } .w-sm { max-width: 12rem; } .w-md { max-width: 14rem; } .w-lg { max-width: 16rem; }
+      .u-flex1 { flex: 1 1 200px; } .u-end { align-items: flex-end; }
+      .u-mb { margin-bottom: var(--space-4); } .u-mt { margin-top: var(--space-4); } .u-mt5 { margin-top: var(--space-5); }
+      .u-list-none { list-style: none; margin: 0; padding: 0; } .u-pre { white-space: pre-wrap; }
+      .u-break { overflow-wrap: anywhere; } .u-grid2 { grid-template-columns: 1fr 1fr; } .u-mb0 { margin-bottom: 0 !important; }
+      .u-search-flex { flex: 1 1 240px; }
+
+      /* Auth shell (Waves 161–163): one card for login/register/forgot */
+      .auth-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: var(--space-8) var(--space-4); }
+      .auth-card { width: 100%; max-width: var(--container-auth); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); padding: var(--space-8); }
+      .auth-brand { display: flex; align-items: center; gap: var(--space-2); font-weight: 700; letter-spacing: var(--tracking-tight); color: var(--color-ink); font-size: var(--text-lg); margin-bottom: var(--space-4); }
+      .auth-brand img { width: 1.75rem; height: 1.75rem; }
+      .auth-card h1 { text-align: left; font-size: var(--text-2xl); }
+      .auth-sub { color: var(--color-muted); margin-bottom: var(--space-6); }
+      .auth-switch { margin: var(--space-6) 0 0; text-align: center; color: var(--color-muted); }
+
+      /* Wordmark (public header/footer) */
+      .wordmark { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: 700; letter-spacing: var(--tracking-tight); color: var(--color-ink); font-size: var(--text-lg); }
+      .wordmark img { width: 1.75rem; height: 1.75rem; }
+      .wordmark:hover { text-decoration: none; }
+
       /* Sticky payer summary (checkout/pay, mobile) */
       .sticky-summary { position: sticky; bottom: 0; background: var(--color-surface); border-top: 1px solid var(--color-border); padding: var(--space-3) 0 calc(var(--space-3) + env(safe-area-inset-bottom)); margin-top: var(--space-4); }
 

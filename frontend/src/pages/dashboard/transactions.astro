@@ -83,7 +83,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
                 <th scope="col">Date</th>
                 <th scope="col">ID</th>
                 <th scope="col">Gateway</th>
-                <th scope="col">Amount</th>
+                <th scope="col" class="num">Amount</th>
                 <th scope="col">Customer</th>
                 <th scope="col">Provider Trx</th>
                 <th scope="col">Status</th>
@@ -92,6 +92,11 @@ import DashboardNav from '../../components/DashboardNav.astro';
             </thead>
             <tbody id="tx-body"></tbody>
           </table>
+        </div>
+        <div class="pagination" id="tx-pagination" hidden>
+          <button type="button" class="btn btn-ghost btn-sm" id="tx-prev">← Previous</button>
+          <span class="small muted" id="tx-page-label">Page 1</span>
+          <button type="button" class="btn btn-ghost btn-sm" id="tx-next">Next →</button>
         </div>
       </section>
     </section>
@@ -121,6 +126,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
     listMerchants,
     listTransactions,
   } from '../../lib/api';
+  import { statusBadge } from '../../lib/ui';
 
   // Loose record shape: the API client types a transaction with flat
   // `amount_minor` / `currency` fields, while the backend serialises a
@@ -216,20 +222,6 @@ import DashboardNav from '../../components/DashboardNav.astro';
     return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
   }
 
-  function badgeClass(status: string): string {
-    switch (status) {
-      case 'completed':
-        return 'badge badge-success';
-      case 'pending':
-      case 'processing':
-        return 'badge badge-pending';
-      case 'failed':
-      case 'expired':
-        return 'badge badge-failed';
-      default:
-        return 'badge';
-    }
-  }
 
   function textCell(text: string, className?: string): HTMLTableCellElement {
     const cell = document.createElement('td');
@@ -326,7 +318,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
 
     const errorEl = document.createElement('span');
     errorEl.className = 'small';
-    errorEl.style.color = 'var(--danger, #b3261e)';
+    errorEl.style.color = 'var(--color-danger-text)';
     errorEl.hidden = true;
 
     confirmButton.addEventListener('click', async () => {
@@ -399,7 +391,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
       row.append(idCell);
 
       row.append(textCell(tx.gateway ?? tx.method ?? '—'));
-      row.append(textCell(formatMoney(amountMinor(tx), currencyCode(tx))));
+      row.append(textCell(formatMoney(amountMinor(tx), currencyCode(tx)), 'num'));
 
       const customer =
         [tx.customer_name, tx.customer_email, tx.customer_phone]
@@ -415,10 +407,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
       );
 
       const statusCell = document.createElement('td');
-      const badge = document.createElement('span');
-      badge.className = badgeClass(status);
-      badge.textContent = status ? status.replace(/_/g, ' ') : '—';
-      statusCell.append(badge);
+      statusCell.innerHTML = status ? statusBadge(status) : '—';
       row.append(statusCell);
 
       const actionsCell = document.createElement('td');
@@ -440,6 +429,9 @@ import DashboardNav from '../../components/DashboardNav.astro';
     }
   }
 
+  const PAGE_SIZE = 25;
+  let txPage = 0;
+
   async function loadTransactions(): Promise<void> {
     if (!merchantId) return;
     hideMessage();
@@ -454,7 +446,13 @@ import DashboardNav from '../../components/DashboardNav.astro';
         merchant_id: merchantId,
         status: status && status !== 'all' ? status : undefined,
         gateway: gateway || undefined,
+        limit: PAGE_SIZE,
+        offset: txPage * PAGE_SIZE,
       });
+      const pager = document.getElementById('tx-pagination');
+      const label = document.getElementById('tx-page-label');
+      const prev = document.getElementById('tx-prev') as HTMLButtonElement | null;
+      const next = document.getElementById('tx-next') as HTMLButtonElement | null;
       // Tolerate a bare array or an envelope such as { transactions: [...] }.
       const rows: TxRecord[] = Array.isArray(result)
         ? (result as TxRecord[])
@@ -463,6 +461,12 @@ import DashboardNav from '../../components/DashboardNav.astro';
           (result as { items?: TxRecord[] })?.items ??
           []);
       renderTransactions(rows);
+      if (pager && label && prev && next) {
+        pager.hidden = rows.length === 0 && txPage === 0;
+        label.textContent = `Page ${txPage + 1}`;
+        prev.disabled = txPage === 0;
+        next.disabled = rows.length < PAGE_SIZE;
+      }
     } catch (error) {
       if (tableEl) tableEl.hidden = true;
       if (emptyEl) emptyEl.hidden = true;
@@ -548,16 +552,27 @@ import DashboardNav from '../../components/DashboardNav.astro';
 
   filtersForm?.addEventListener('submit', (event) => {
     event.preventDefault();
+    txPage = 0;
     void loadTransactions();
   });
 
   statusSelect?.addEventListener('change', () => {
+    txPage = 0;
     void loadTransactions();
   });
 
   resetButton?.addEventListener('click', () => {
     if (statusSelect) statusSelect.value = 'all';
     if (gatewayInput) gatewayInput.value = '';
+    txPage = 0;
+    void loadTransactions();
+  });
+
+  document.getElementById('tx-prev')?.addEventListener('click', () => {
+    if (txPage > 0) { txPage--; void loadTransactions(); }
+  });
+  document.getElementById('tx-next')?.addEventListener('click', () => {
+    txPage++;
     void loadTransactions();
   });
 

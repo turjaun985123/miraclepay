@@ -10,14 +10,14 @@ import DashboardNav from '../../components/DashboardNav.astro';
   <DashboardNav />
 
   <main id="main" class="container stack">
-    <div class="row" style="justify-content: space-between;">
+    <div class="row u-row-between">
       <div>
         <h1>Dashboard</h1>
-        <p class="muted" style="margin: 0;">Overview of your merchant account.</p>
+        <p class="muted u-m0">Overview of your merchant account.</p>
       </div>
       <div id="merchant-switcher" class="row" hidden>
-        <label class="label" for="merchant-select" style="margin: 0;">Merchant</label>
-        <select id="merchant-select" class="input" style="width: auto; min-width: 220px;"></select>
+        <label class="label u-m0" for="merchant-select">Merchant</label>
+        <select id="merchant-select" class="input u-w-auto u-minw"></select>
       </div>
     </div>
 
@@ -62,7 +62,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
             placeholder="https://example.com/webhooks/miraclepay" />
           <p class="field-hint">We POST payment events to this URL.</p>
         </div>
-        <div id="cm-error" class="alert alert-error" role="alert" hidden style="margin-bottom: 1rem;"></div>
+        <div id="cm-error" class="alert alert-error u-mb" role="alert" hidden></div>
         <button id="cm-submit" class="btn" type="submit">Create merchant</button>
       </form>
     </section>
@@ -94,31 +94,31 @@ import DashboardNav from '../../components/DashboardNav.astro';
 
       <section id="onboarding-card" class="card" aria-labelledby="onboarding-heading" hidden>
         <h2 id="onboarding-heading">Get started — <span id="onboarding-percent">0%</span> complete</h2>
-        <ul id="onboarding-steps" style="list-style: none; margin: 0; padding: 0;" class="stack"></ul>
+        <ul id="onboarding-steps" class="stack u-list-none"></ul>
       </section>
 
       <section class="card" aria-labelledby="search-heading">
         <h2 id="search-heading">Search</h2>
         <form id="search-form" class="row" novalidate>
-          <input id="search-q" class="input" type="search" placeholder="Search transactions, payment links, invoices…"
-            aria-label="Search" autocomplete="off" style="flex: 1 1 240px;" />
+          <input id="search-q" class="input u-search-flex" type="search" placeholder="Search transactions, payment links, invoices…"
+            aria-label="Search" autocomplete="off" />
           <button class="btn" type="submit">Search</button>
         </form>
         <p id="search-error" class="alert alert-error" role="alert" hidden></p>
         <div id="search-results" class="stack" hidden>
           <div>
             <h3>Transactions</h3>
-            <ul id="search-transactions" style="list-style: none; margin: 0; padding: 0;"></ul>
+            <ul id="search-transactions" class="u-list-none"></ul>
             <p id="search-transactions-empty" class="muted small" hidden>No matching transactions.</p>
           </div>
           <div>
             <h3>Payment links</h3>
-            <ul id="search-links" style="list-style: none; margin: 0; padding: 0;"></ul>
+            <ul id="search-links" class="u-list-none"></ul>
             <p id="search-links-empty" class="muted small" hidden>No matching payment links.</p>
           </div>
           <div>
             <h3>Invoices</h3>
-            <ul id="search-invoices" style="list-style: none; margin: 0; padding: 0;"></ul>
+            <ul id="search-invoices" class="u-list-none"></ul>
             <p id="search-invoices-empty" class="muted small" hidden>No matching invoices.</p>
           </div>
         </div>
@@ -140,16 +140,16 @@ import DashboardNav from '../../components/DashboardNav.astro';
         <h2>Create payment</h2>
         <form id="create-payment-form" novalidate>
           <div class="grid">
-            <div class="field" style="margin-bottom: 0;">
+            <div class="field u-mb0">
               <label class="label" for="cp-gateway">Gateway</label>
               <select id="cp-gateway" name="gateway" class="input" required></select>
             </div>
-            <div class="field" style="margin-bottom: 0;">
+            <div class="field u-mb0">
               <label class="label" for="cp-amount">Amount</label>
               <input id="cp-amount" name="amount" class="input" type="number"
                 min="0.01" step="0.01" inputmode="decimal" required placeholder="500.00" />
             </div>
-            <div class="field" style="margin-bottom: 0;">
+            <div class="field u-mb0">
               <label class="label" for="cp-currency">Currency</label>
               <select id="cp-currency" name="currency" class="input">
                 <option value="BDT">BDT</option>
@@ -158,19 +158,19 @@ import DashboardNav from '../../components/DashboardNav.astro';
                 <option value="USD">USD</option>
               </select>
             </div>
-            <div class="field" style="margin-bottom: 0;">
+            <div class="field u-mb0">
               <label class="label" for="cp-reference">Reference</label>
               <input id="cp-reference" name="reference" class="input" type="text"
                 placeholder="ORDER-1001" />
             </div>
           </div>
-          <div id="cp-error" class="alert alert-error" role="alert" hidden style="margin-top: 1rem;"></div>
-          <div class="row" style="margin-top: 1rem;">
+          <div id="cp-error" class="alert alert-error u-mt" role="alert" hidden></div>
+          <div class="row u-mt">
             <button id="cp-submit" class="btn" type="submit">Create payment</button>
           </div>
         </form>
 
-        <div id="payment-result" class="stack" hidden style="margin-top: 1.25rem;">
+        <div id="payment-result" class="stack u-mt5" hidden>
           <div class="alert alert-success" role="status">Payment created successfully.</div>
           <dl class="result-grid">
             <div>
@@ -192,7 +192,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
           </dl>
           <div id="pr-instructions-wrap" hidden>
             <h3>Payment instructions</h3>
-            <p id="pr-instructions" style="white-space: pre-wrap;"></p>
+            <p id="pr-instructions" class="u-pre"></p>
           </div>
           <div class="row">
             <a id="pr-checkout-link" class="btn" href="#" target="_blank" rel="noopener" hidden>
@@ -229,7 +229,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
         <h2 id="kyc-heading">Business verification (KYC)</h2>
         <p id="kyc-status" class="muted">Loading…</p>
         <form id="kyc-form" novalidate>
-          <div class="grid" style="grid-template-columns:1fr 1fr;gap:1rem">
+          <div class="grid u-grid2">
             <div class="field">
               <label class="label" for="kyc-type">Business type</label>
               <select id="kyc-type" class="input">
@@ -269,14 +269,14 @@ import DashboardNav from '../../components/DashboardNav.astro';
             otpauth URI as a QR code in the app), then enter the
             current 6-digit code to enable 2FA:
           </p>
-          <p class="mono" id="twofa-secret" style="overflow-wrap:anywhere"></p>
-          <p class="mono small muted" id="twofa-uri" style="overflow-wrap:anywhere"></p>
+          <p class="mono u-break" id="twofa-secret"></p>
+          <p class="mono small muted u-break" id="twofa-uri"></p>
         </div>
         <form id="twofa-form" novalidate>
           <div class="field">
             <label class="label" for="twofa-code">Authenticator code</label>
             <input id="twofa-code" class="input" type="text" inputmode="numeric"
-              autocomplete="one-time-code" placeholder="123456" style="max-width:200px" />
+              autocomplete="one-time-code" placeholder="123456" class="w-sm" />
           </div>
           <p id="twofa-error" class="alert alert-error" role="alert" hidden></p>
           <p id="twofa-ok" class="alert alert-success" role="status" hidden></p>
@@ -514,10 +514,31 @@ import DashboardNav from '../../components/DashboardNav.astro';
             const mark = document.createElement('span');
             mark.className = step.done ? 'badge badge-success' : 'badge badge-pending';
             mark.textContent = step.done ? 'Done' : 'To do';
+            // Wave 164: checklist items are actionable — each
+            // unfinished step links to the page that completes it.
+            const STEP_LINKS = {
+              email_verified: '/dashboard/settings',
+              gateway_configured: '/dashboard/gateways',
+              kyc_submitted: '/dashboard',
+              payment_link_created: '/dashboard/payment-links',
+              api_key_created: '/dashboard/api-keys',
+              branding_set: '/dashboard/settings',
+              webhook_configured: '/dashboard/webhooks',
+              first_payment: '/dashboard/payment-links',
+            };
             const label = document.createElement('span');
             label.textContent = step.label ?? step.id ?? '';
-            if (step.done) label.className = 'muted';
-            li.append(mark, label);
+            if (step.done) {
+              label.className = 'muted';
+              li.append(mark, label);
+            } else if (STEP_LINKS[step.id]) {
+              const a = document.createElement('a');
+              a.href = STEP_LINKS[step.id];
+              a.textContent = label.textContent + ' →';
+              li.append(mark, a);
+            } else {
+              li.append(mark, label);
+            }
             list.append(li);
           }
         }
@@ -617,7 +638,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
         rect.setAttribute('y', String(height - 18 - h));
         rect.setAttribute('width', String(Math.max(1, barW - 4)));
         rect.setAttribute('height', String(Math.max(0, h)));
-        rect.setAttribute('fill', '#0b7a55');
+        rect.setAttribute('fill', getComputedStyle(document.documentElement).getPropertyValue('--color-chart-1').trim());
         const title = document.createElementNS(NS, 'title');
         title.textContent = `${day.date}: ${formatMoney(day.volume_minor, 'BDT')} (${day.completed} completed)`;
         rect.appendChild(title);

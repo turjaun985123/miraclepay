@@ -169,7 +169,7 @@ const currencies = ['BDT', 'USD', 'EUR', 'GBP', 'INR', 'PKR'];
             <tr>
               <th scope="col">Number</th>
               <th scope="col">Customer</th>
-              <th scope="col">Total</th>
+              <th scope="col" class="num">Total</th>
               <th scope="col">Status</th>
               <th scope="col">Created</th>
               <th scope="col">Actions</th>
@@ -274,6 +274,7 @@ const currencies = ['BDT', 'USD', 'EUR', 'GBP', 'INR', 'PKR'];
     type Invoice,
     type Merchant,
   } from '../../lib/api';
+  import { statusBadge } from '../../lib/ui';
 
   // ------------------------------------------------------------------
   // Auth guard
@@ -545,25 +546,6 @@ const currencies = ['BDT', 'USD', 'EUR', 'GBP', 'INR', 'PKR'];
   // ------------------------------------------------------------------
   // Invoices list
   // ------------------------------------------------------------------
-  function badgeClass(status: string): string {
-    switch (status.toLowerCase()) {
-      case 'paid':
-      case 'sent':
-        return 'badge badge-success';
-      case 'pending':
-      case 'issued':
-      case 'overdue':
-        return 'badge badge-pending';
-      case 'failed':
-      case 'cancelled':
-      case 'canceled':
-      case 'void':
-      case 'voided':
-        return 'badge badge-failed';
-      default:
-        return 'badge';
-    }
-  }
 
   function formatDate(value?: string): string {
     if (!value) return '—';
@@ -605,16 +587,14 @@ const currencies = ['BDT', 'USD', 'EUR', 'GBP', 'INR', 'PKR'];
           : customerName || customerEmail || '—';
 
       const totalCell = document.createElement('td');
+      totalCell.className = 'num';
       totalCell.textContent = formatMoney(
         invoiceTotal(invoice),
         invoice.currency || currentCurrency(),
       );
 
       const statusCell = document.createElement('td');
-      const badge = document.createElement('span');
-      badge.className = badgeClass(invoice.status ?? '');
-      badge.textContent = invoice.status ?? 'unknown';
-      statusCell.append(badge);
+      statusCell.innerHTML = statusBadge((invoice.status ?? 'unknown').toLowerCase());
 
       const createdCell = document.createElement('td');
       createdCell.textContent = formatDate(invoice.created_at);

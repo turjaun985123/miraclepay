@@ -1,12 +1,9 @@
 ---
-// MiraclePay v0.0.1 — DashboardNav
-// Original clean-room component: dashboard sub-navigation bar.
-// Pure markup + scoped styles; no client script.
-//
-// `active` is optional: some pages render <DashboardNav /> with no
-// props, others pass e.g. active="transactions". When it is omitted,
-// the current section is derived from the request path so the bar
-// still highlights correctly.
+// MiraclePay — Dashboard app shell (Waves 169/178 redesign).
+// Sticky top bar (wordmark, account email, language, logout) +
+// grouped pill nav: Operate / Configure / Admin. Admin items are
+// hidden for non-admin users (checked via /auth/me). `active` prop
+// or path-derived highlighting, as before.
 
 interface Props {
   active?: string;
@@ -14,140 +11,102 @@ interface Props {
 
 const { active } = Astro.props;
 
-interface NavLink {
-  key: string;
-  label: string;
-  href: string;
-}
-
+interface NavLink { key: string; label: string; href: string; group: string; adminOnly?: boolean }
 const links: NavLink[] = [
-  { key: "overview", label: "Overview", href: "/dashboard" },
-  { key: "transactions", label: "Transactions", href: "/dashboard/transactions" },
-  { key: "payment-links", label: "Payment Links", href: "/dashboard/payment-links" },
-  { key: "invoices", label: "Invoices", href: "/dashboard/invoices" },
-  { key: "gateways", label: "Gateways", href: "/dashboard/gateways" },
-  { key: "webhooks", label: "Webhooks", href: "/dashboard/webhooks" },
-  { key: "api-keys", label: "API Keys", href: "/dashboard/api-keys" },
-  { key: "settings", label: "Settings", href: "/dashboard/settings" },
-  { key: "admin", label: "Admin", href: "/admin" },
+  { key: "overview", label: "Overview", href: "/dashboard", group: "Operate" },
+  { key: "transactions", label: "Transactions", href: "/dashboard/transactions", group: "Operate" },
+  { key: "payment-links", label: "Payment Links", href: "/dashboard/payment-links", group: "Operate" },
+  { key: "invoices", label: "Invoices", href: "/dashboard/invoices", group: "Operate" },
+  { key: "gateways", label: "Gateways", href: "/dashboard/gateways", group: "Configure" },
+  { key: "webhooks", label: "Webhooks", href: "/dashboard/webhooks", group: "Configure" },
+  { key: "api-keys", label: "API Keys", href: "/dashboard/api-keys", group: "Configure" },
+  { key: "plugins", label: "Plugins", href: "/admin/plugins", group: "Configure" },
+  { key: "settings", label: "Settings", href: "/dashboard/settings", group: "Configure" },
+  { key: "admin", label: "Admin", href: "/admin", group: "Admin", adminOnly: true },
 ];
+const groups = ["Operate", "Configure", "Admin"];
 
-// Fallback used only when no `active` prop was supplied.
 const pathname = Astro.url.pathname.replace(/\/+$/, "") || "/";
 const derivedActive =
   pathname === "/dashboard"
     ? "overview"
-    : (links.find(
-        (link) => link.key !== "overview" && pathname.startsWith(link.href),
-      )?.key ?? undefined);
-
+    : (links.find((l) => l.key !== "overview" && pathname.startsWith(l.href))?.key ?? undefined);
 const current = active ?? derivedActive;
 ---
 
-<nav class="dashboard-nav" aria-label="Dashboard">
-  <ul class="dashboard-nav-list">
-    {
-      links.map((link) => {
-        const isActive = link.key === current;
-        return (
-          <li class="dashboard-nav-item">
-            <a
-              class:list={["dashboard-nav-link", { "is-active": isActive }]}
-              href={link.href}
-              aria-current={isActive ? "page" : undefined}
-              data-i18n={`nav_${link.key.replaceAll("-", "_")}`}
-            >
-              {link.label}
-            </a>
-          </li>
-        );
-      })
-    }
-    <li class="dashboard-nav-item">
-      <button id="mp-lang-toggle" class="dashboard-nav-link" type="button" aria-label="Switch language / ভাষা বদলান" style="background:none;border:none;cursor:pointer;font:inherit">বাংলা</button>
-    </li>
-  </ul>
-</nav>
+<header class="app-shell">
+  <div class="shell-bar container">
+    <a class="wordmark" href="/dashboard"><img src="/favicon.svg" alt="" width="28" height="28" /> MiraclePay</a>
+    <div class="shell-account">
+      <span id="mp-user-email" class="muted small"></span>
+      <button id="mp-lang-toggle" class="btn btn-ghost btn-sm" type="button" aria-label="Switch language / ভাষা বদলান">বাংলা</button>
+      <button id="mp-logout" class="btn btn-ghost btn-sm" type="button">Log out</button>
+    </div>
+  </div>
+  <nav class="dashboard-nav container" aria-label="Dashboard">
+    {groups.map((g) => (
+      <div class="nav-group" data-group={g}>
+        <span class="nav-group-label" aria-hidden="true">{g}</span>
+        <ul class="dashboard-nav-list">
+          {links.filter((l) => l.group === g).map((link) => {
+            const isActive = link.key === current;
+            return (
+              <li class="dashboard-nav-item" data-admin-only={link.adminOnly ? "1" : undefined} hidden={link.adminOnly ? true : undefined}>
+                <a class:list={["dashboard-nav-link", { "is-active": isActive }]} href={link.href} aria-current={isActive ? "page" : undefined} data-i18n={`nav_${link.key.replaceAll("-", "_")}`}>{link.label}</a>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    ))}
+  </nav>
+</header>
 
 <script>
   import { applyI18n, getLang, otherLang, setLang, toggleLabel } from "../lib/i18n";
   applyI18n();
   const toggle = document.getElementById("mp-lang-toggle");
-  function syncToggle(): void {
-    if (toggle) toggle.textContent = toggleLabel(getLang());
-  }
+  function syncToggle(): void { if (toggle) toggle.textContent = toggleLabel(getLang()); }
   syncToggle();
-  toggle?.addEventListener("click", () => {
-    setLang(otherLang(getLang()));
-    syncToggle();
+  toggle?.addEventListener("click", () => { setLang(otherLang(getLang())); syncToggle(); });
+
+  // Account context + admin visibility + logout (Wave 169).
+  import { me, logout, getToken } from "../lib/api";
+  const emailEl = document.getElementById("mp-user-email");
+  const logoutBtn = document.getElementById("mp-logout");
+  if (!getToken()) {
+    if (logoutBtn) (logoutBtn as HTMLElement).style.display = "none";
+  } else {
+    me().then((u) => {
+      if (emailEl && u?.email) emailEl.textContent = u.email;
+      if (u?.is_admin) {
+        document.querySelectorAll("[data-admin-only]").forEach((el) => ((el as HTMLElement).hidden = false));
+      }
+    }).catch(() => { /* nav stays usable without account context */ });
+  }
+  logoutBtn?.addEventListener("click", async () => {
+    await logout();
+    window.location.href = "/login";
   });
 </script>
 
 <style>
-  .dashboard-nav {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: 0.5rem;
-    margin-bottom: 1rem;
-    overflow-x: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--border) transparent;
-  }
-
-  .dashboard-nav::-webkit-scrollbar {
-    height: 6px;
-  }
-
-  .dashboard-nav::-webkit-scrollbar-thumb {
-    background: var(--border);
-    border-radius: 999px;
-  }
-
-  .dashboard-nav-list {
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    min-width: max-content;
-  }
-
-  .dashboard-nav-item {
-    display: flex;
-  }
-
-  .dashboard-nav-link {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.375rem 0.75rem;
-    border: 1px solid transparent;
-    border-radius: 999px;
-    color: var(--muted);
-    font-size: 0.875rem;
-    font-weight: 600;
-    line-height: 1.5;
-    white-space: nowrap;
-    transition:
-      background 0.15s ease,
-      color 0.15s ease;
-  }
-
-  .dashboard-nav-link:hover {
-    background: var(--bg);
-    color: var(--ink);
-    text-decoration: none;
-  }
-
-  .dashboard-nav-link.is-active {
-    background: var(--brand-soft);
-    color: var(--brand-dark);
-  }
-
-  .dashboard-nav-link.is-active:hover {
-    background: var(--brand-soft);
-    color: var(--brand-dark);
+  .app-shell { position: sticky; top: 0; z-index: var(--z-sticky); background: var(--color-bg); padding-top: var(--space-3); }
+  .shell-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding-top: 0; padding-bottom: var(--space-2); }
+  .shell-account { display: flex; align-items: center; gap: var(--space-2); }
+  .dashboard-nav { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: var(--space-2) var(--space-3); margin-bottom: var(--space-4); }
+  .nav-group { display: flex; align-items: center; gap: var(--space-2); }
+  .nav-group-label { font-size: var(--text-xs); font-weight: 700; letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--color-muted); }
+  .dashboard-nav-list { display: flex; align-items: center; gap: var(--space-1); margin: 0; padding: 0; list-style: none; flex-wrap: wrap; }
+  .dashboard-nav-item { display: flex; }
+  .dashboard-nav-item[hidden] { display: none; }
+  .dashboard-nav-link { display: inline-flex; align-items: center; min-height: var(--target-min); padding: var(--space-1_5) var(--space-3); border: 1px solid transparent; border-radius: var(--radius-full); color: var(--color-muted); font-size: var(--text-base-sm); font-weight: 600; line-height: 1.5; white-space: nowrap; transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out); }
+  .dashboard-nav-link:hover { background: var(--color-surface-sunken); color: var(--color-ink); text-decoration: none; }
+  .dashboard-nav-link.is-active { background: var(--color-brand-soft); color: var(--color-brand-hover); }
+  @media (max-width: 640px) {
+    .shell-bar { padding-left: var(--space-4); padding-right: var(--space-4); }
+    #mp-user-email { display: none; }
+    .dashboard-nav { margin-left: var(--space-4); margin-right: var(--space-4); overflow-x: auto; flex-wrap: nowrap; }
+    .nav-group { flex: none; }
   }
 </style>

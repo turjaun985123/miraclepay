@@ -18,16 +18,16 @@ import DashboardNav from '../../components/DashboardNav.astro';
   <DashboardNav active="settings" />
 
   <main id="main" class="container stack">
-    <div class="row" style="justify-content: space-between;">
+    <div class="row u-row-between">
       <div>
         <h1>Settings</h1>
-        <p class="muted" style="margin: 0;">
+        <p class="muted u-m0">
           Checkout branding, notifications and payouts for your merchant.
         </p>
       </div>
       <div id="merchant-switcher" class="row" hidden>
-        <label class="label" for="merchant-select" style="margin: 0;">Merchant</label>
-        <select id="merchant-select" class="input" style="width: auto; min-width: 220px;"></select>
+        <label class="label u-m0" for="merchant-select">Merchant</label>
+        <select id="merchant-select" class="input u-w-auto u-minw"></select>
       </div>
     </div>
 
@@ -45,7 +45,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
 
     <form id="settings-form" class="stack" hidden novalidate>
       <section class="card stack" aria-labelledby="branding-heading">
-        <h2 id="branding-heading" style="margin: 0;">Checkout branding</h2>
+        <h2 id="branding-heading" class="u-m0">Checkout branding</h2>
 
         <div class="field">
           <label class="label" for="brand-name">Brand name</label>
@@ -59,7 +59,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
             <input id="brand-color" type="color" value="#0b7a55"
               aria-label="Pick brand colour" />
             <input id="brand-color-text" class="input mono" type="text"
-              placeholder="#0b7a55" style="max-width: 12rem;" />
+              placeholder="#0b7a55" class="w-sm" />
           </div>
           <p class="field-hint">Accent colour for your checkout and payment pages, as #rrggbb.</p>
         </div>
@@ -80,7 +80,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
       </section>
 
       <section class="card stack" aria-labelledby="notifications-heading">
-        <h2 id="notifications-heading" style="margin: 0;">Notifications</h2>
+        <h2 id="notifications-heading" class="u-m0">Notifications</h2>
 
         <div class="field row">
           <input id="notify-payment" type="checkbox" />
@@ -94,11 +94,11 @@ import DashboardNav from '../../components/DashboardNav.astro';
       </section>
 
       <section class="card stack" aria-labelledby="payouts-heading">
-        <h2 id="payouts-heading" style="margin: 0;">Payouts</h2>
+        <h2 id="payouts-heading" class="u-m0">Payouts</h2>
 
         <div class="field">
           <label class="label" for="payout-schedule">Payout schedule</label>
-          <select id="payout-schedule" class="input" style="max-width: 16rem;">
+          <select id="payout-schedule" class="input w-lg">
             <option value="manual">Manual</option>
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
@@ -109,7 +109,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
         <div class="field" id="payout-day-field" hidden>
           <label class="label" for="payout-day" id="payout-day-label">Payout day</label>
           <input id="payout-day" class="input" type="number" step="1"
-            style="max-width: 10rem;" />
+            class="w-xs" />
           <p class="field-hint" id="payout-day-hint"></p>
         </div>
 
@@ -121,7 +121,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
         <div class="field">
           <label class="label" for="settle-threshold">Settle threshold (minor units)</label>
           <input id="settle-threshold" class="input" type="number" min="0" step="1"
-            inputmode="numeric" style="max-width: 14rem;" />
+            inputmode="numeric" class="w-md" />
           <p class="field-hint">In the currency&rsquo;s minor unit (e.g. poisha) — 10000 = 100.00.</p>
         </div>
       </section>

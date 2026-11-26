@@ -927,3 +927,21 @@ export function formatMoney(amountMinor: number, currency: string): string {
   const code = (currency ?? '').trim().toUpperCase();
   return code ? `${code} ${formatted}` : formatted;
 }
+
+/** Password reset (Wave 166; backend Wave 88). The request always
+ *  resolves identically whether or not the account exists. */
+export function passwordResetRequest(email: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>('/api/v1/auth/password-reset/request', {
+    method: 'POST',
+    auth: false,
+    body: jsonBody({ email }),
+  });
+}
+
+export function passwordResetConfirm(token: string, newPassword: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>('/api/v1/auth/password-reset/confirm', {
+    method: 'POST',
+    auth: false,
+    body: jsonBody({ token, new_password: newPassword }),
+  });
+}
