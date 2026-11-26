@@ -59,6 +59,12 @@ jobs:
       - name: Build the frontend
         run: npm run build
 
+      # JS SDK tests (Wave 21): zero-dependency node:test suite with a
+      # stubbed fetch; runs from the repo root, not the frontend dir.
+      - name: Test the JS SDK
+        working-directory: ${{ github.workspace }}
+        run: npm --prefix sdk/js test
+
   docker:
     name: Docker (api + frontend images)
     runs-on: ubuntu-latest

@@ -178,3 +178,10 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 ### Wave 20 — OpenAPI 3.1 spec (this commit)
 - New `api::openapi` module generating the spec from a route table mirroring `build_router` 1:1 (66 operations across 54 paths, `:param` → `{param}`, bearer-JWT security scheme, standard error responses).
 - Served live at `GET /openapi.json`; unit tests pin structure, per-path presence, path-parameter declaration, and the operation count as a drift guard — adding a route without a spec entry now fails tests. Local: 624 workspace tests pass.
+
+### Wave 20 — CI verdict ✅
+- Commit `8870b46`, CI run **45756152367**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 21 — JavaScript SDK package (this commit)
+- New `sdk/js` package `@miraclepay/sdk` 0.0.1: zero-dependency ESM client (Node 18+/browser fetch), one method per API operation, JWT-or-API-key bearer auth, `MiraclePayError` carrying status + server message, hand-written TypeScript definitions, README.
+- 6 `node:test` tests with a stubbed fetch (request shape, auth precedence, login token storage, error mapping, query encoding) — all pass locally; the Frontend CI job now runs the SDK suite on every push.
