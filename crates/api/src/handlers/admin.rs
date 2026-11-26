@@ -109,6 +109,27 @@ pub async fn platform_stats(
     }))
 }
 
+/// `POST /admin/notifications/dispatch` (Wave 35) — hand every
+/// queued notification to the SMTP transport and record outcomes.
+/// Without SMTP configuration this is a 409 with the missing
+/// variables named: queued mail is never fake-sent.
+pub async fn dispatch_notifications(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_admin(&auth)?;
+    let config = miraclepay_worker::smtp_transport::SmtpConfig::from_env()
+        .map_err(ApiError::Conflict)?;
+    let transport = miraclepay_worker::smtp_transport::SmtpTransport { config };
+    let mut notifications = state.notifications.write().await;
+    let summary =
+        miraclepay_worker::notification_job::dispatch_batch(&transport, &mut notifications).await;
+    Ok(Json(serde_json::json!({
+        "sent": summary.sent,
+        "failed": summary.failed,
+    })))
+}
+
 /// Query for [`platform_analytics`].
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct AnalyticsQuery {

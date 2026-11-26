@@ -292,3 +292,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - New `domain::fx`: rational rate table (units per 1 BDT as `num/den` — integer math only, no floats near money), `convert()` with round-half-up, identity conversions rate-free, missing/invalid rates are errors, never guesses. Indicative Nov-2026 defaults (USD 0.00837, INR 0.701, PKR 2.33, EUR 0.00771 per BDT), documented as reporting-only, never a dealing rate.
 - Platform settings gain `fx_rates` (serde-defaulted, admin-overridable via the existing settings endpoints).
 - New endpoints `GET /api/v1/fx/rates` and `GET /api/v1/fx/convert` (auth; unknown currency/negative amount → 400). OpenAPI now 77 operations. Workspace: 657 tests pass.
+
+### Wave 34 — CI verdict ✅
+- Commit `a4e778e`, CI run **45760567615**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 35 — Email notifications: real SMTP transport (this commit)
+- Notifications were recorded but never sent. New `worker::smtp_transport` implements the existing `NotificationTransport` trait: env-gated config (`SMTP_HOST`/`SMTP_FROM` required, port/user/pass/helo optional), RFC 5322 rendering with a header-injection guard, dot-stuffing, optional AUTH PLAIN, full SMTP dialogue over TCP. Scope stated in-module: plain TCP (no STARTTLS) — local relay/tunnel use.
+- Proven end-to-end in tests against a fake SMTP server on a real socket: the full EHLO→MAIL→RCPT→DATA dialogue and message content are asserted; unconfigured/missing variables produce named errors, never fake sends.
+- New admin endpoint `POST /api/v1/admin/notifications/dispatch` drains the queue through the transport via the existing `dispatch_batch` engine and reports `{sent, failed}` (409 when SMTP is not configured). OpenAPI now 78 operations. Workspace: 662 tests pass.

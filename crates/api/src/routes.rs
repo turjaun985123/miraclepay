@@ -257,6 +257,10 @@ pub fn build_router(state: AppState) -> Router {
         // ---------------------------------------------------------
         .route("/api/v1/admin/stats", get(admin::platform_stats))
         .route("/api/v1/admin/analytics", get(admin::platform_analytics))
+        .route(
+            "/api/v1/admin/notifications/dispatch",
+            post(admin::dispatch_notifications),
+        )
         .route("/api/v1/admin/users", get(admin::list_users))
         .route("/api/v1/admin/merchants", get(admin::list_all_merchants))
         .route(
