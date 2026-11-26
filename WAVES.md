@@ -739,3 +739,57 @@ that commit's CI run.
   (4,905,889 B; unsigned — no keystore secrets configured,
   labelled as such). GitHub license API returns AGPL-3.0.
   Waves 51–150 complete.
+
+---
+
+# Waves 151–200 — Design UI/UX program (v0.0.3)
+
+Team: 10-agent design engineering team (Design Lead, UX Researcher,
+Design Systems Engineer, Visual Designer, Dashboard UI Engineer,
+Checkout UX Engineer, Android UI Engineer, Motion/Interaction
+Designer, Accessibility Engineer, QA/Visual Regression Engineer).
+No backend feature work; API behaviour unchanged unless a design
+needs a trivially safe addition. No screenshots committed (standing
+rule) — verification is build + code-level + CI checks.
+
+Roadmap: 151 team audit + DESIGN.md · 152 tokens.css + aliases ·
+153 component library (Astro) · 154 JS helpers (statusBadge, toast,
+skeleton, busy-button) · 155 icon set (inline SVG) · 156 typography
++ Bangla type rules · 157 dark mode (semantic layer) · 158 token
+lint CI gate + drift ledger · 159 landing hero + brand · 160
+landing sections (gateways/features/pricing/footer) · 161 auth
+shell + AuthCard · 162 login redesign · 163 register redesign ·
+164 onboarding checklist actionable · 165 TEAM REVIEW #1 · 166
+auth states (2FA/forgot UX) · 167 landing Bangla pass · 168
+marketing polish · 169 dashboard shell (sidebar/topbar) · 170
+overview stat cards + chart · 171 transactions table (pagination,
+money alignment) · 172 payment links + invoices tables · 173
+gateways + API keys patterns · 174 webhooks + plugins pages ·
+175 settings (sticky save, sections) · 176 admin overview ·
+177 admin tables/audit · 178 dashboard search + filters · 179
+dashboard empty/error states sweep · 180 TEAM REVIEW #2 · 181
+checkout unified template (trust bar, steps) · 182 checkout
+gateway selection + copyable recipient · 183 checkout states +
+polling · 184 pay page unified with checkout · 185 pay states +
+receipt · 186 checkout/pay Bangla + numerals · 187 trust +
+branding contrast gate · 188 checkout QA sweep · 189 Android M3
+theme + colour roles · 190 Android main screen (status card,
+banners) · 191 Android outbox list · 192 Android settings
+(TextInputLayout) · 193 Android strings/i18n + states · 194
+Android dark + polish · 195 TEAM REVIEW #3 (all 10) · 196
+responsive sweep 360→1440 · 197 motion + skeletons sweep · 198
+accessibility final pass (WCAG 2.2 AA) · 199 consistency sweep
+(drift ledger to zero, bundle perf) · 200 v0.0.3 release.
+
+### Wave 151 — Team design audit (10/10 agents) + DESIGN.md
+- All 10 role agents delivered audits to design-audit/01..10:
+  four competing brand primaries (green/violet/blue/teal);
+  checkout never renders the receiving wallet number (P0);
+  no app shell (no header/logout/merchant context); 63 hex
+  literals, 51 inline styles, no dark mode; motion/feedback
+  near-zero and payer pages never poll; AA failures (danger
+  4.44:1, input borders 1.24:1, focus outline 1.12:1,
+  un-gated merchant brand colour); Android M2 + hard-coded
+  strings; empty brand surface (no logo/favicon/icons).
+- DESIGN.md adopts 8 principles, the 3-layer token system and
+  the per-surface "done" definitions. CI verdict logged below.
