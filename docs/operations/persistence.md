@@ -13,7 +13,7 @@ persist" limit with a working record store.
   full state back every `PERSIST_SNAPSHOT_SECS` seconds (default
   15; `0` disables the task). Each snapshot is one transaction per
   run: a collection's rows are replaced atomically.
-- All 22 collections are covered: users, merchants, api_keys,
+- All 25 collections are covered: users, merchants, api_keys,
   gateway_configs, settings, transactions, payment_links, invoices,
   webhook_events, deliveries, plans, subscriptions, refunds,
   settlements, disputes, notifications, audit_log, used_trx,

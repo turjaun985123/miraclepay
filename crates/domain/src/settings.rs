@@ -97,6 +97,14 @@ pub struct MerchantSettings {
     /// the pay page (at most 200 characters).
     #[serde(default)]
     pub checkout_message: Option<String>,
+    /// Payout schedule (Wave 101): "manual" | "daily" | "weekly" |
+    /// "monthly". `None`/absent in old records means "manual".
+    #[serde(default)]
+    pub payout_schedule: Option<String>,
+    /// Day for weekly (1 = Monday .. 7 = Sunday) or monthly
+    /// (1..=28) schedules.
+    #[serde(default)]
+    pub payout_day: Option<u8>,
 }
 
 impl MerchantSettings {
@@ -158,6 +166,27 @@ pub fn validate_merchant_settings(settings: &MerchantSettings) -> Result<(), Vec
             errors.push("logo_url must be an https URL of at most 500 characters".to_string());
         }
     }
+    if let Some(schedule) = &settings.payout_schedule {
+        match schedule.as_str() {
+            "manual" | "daily" => {}
+            "weekly" => {
+                if !matches!(settings.payout_day, Some(1..=7)) {
+                    errors
+                        .push("payout_day must be 1..=7 for a weekly payout schedule".to_string());
+                }
+            }
+            "monthly" => {
+                if !matches!(settings.payout_day, Some(1..=28)) {
+                    errors.push(
+                        "payout_day must be 1..=28 for a monthly payout schedule".to_string(),
+                    );
+                }
+            }
+            other => errors.push(format!(
+                "payout_schedule must be manual, daily, weekly or monthly (got {other})"
+            )),
+        }
+    }
     if let Some(message) = &settings.checkout_message {
         if message.chars().count() > 200 {
             errors.push("checkout_message must be at most 200 characters".to_string());
@@ -192,6 +221,8 @@ mod tests {
             brand_color: None,
             logo_url: None,
             checkout_message: None,
+            payout_schedule: None,
+            payout_day: None,
         }
     }
 
@@ -352,6 +383,8 @@ mod branding_tests {
             brand_color: None,
             logo_url: None,
             checkout_message: None,
+            payout_schedule: None,
+            payout_day: None,
         }
     }
 

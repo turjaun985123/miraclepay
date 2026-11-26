@@ -64,6 +64,7 @@ impl AppState {
             password_hash: password::hash_password(DEMO_PASSWORD),
             role: UserRole::Merchant,
             email_verified: true,
+            suspended: false,
             totp_secret: None,
             totp_enabled: false,
             created_at: now,

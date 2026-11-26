@@ -64,6 +64,8 @@ pub const COLLECTIONS: &[&str] = &[
     "merchant_settings",
     "refresh_tokens",
     "auth_tokens",
+    "merchant_members",
+    "link_views",
 ];
 
 fn to_value<T: Serialize>(item: &T) -> serde_json::Value {
@@ -109,6 +111,8 @@ struct PersistUser {
     password_hash: String,
     role: miraclepay_domain::user::UserRole,
     email_verified: bool,
+    #[serde(default)]
+    suspended: bool,
     totp_secret: Option<String>,
     totp_enabled: bool,
     created_at: chrono::DateTime<chrono::Utc>,
@@ -123,6 +127,7 @@ impl From<&miraclepay_domain::user::User> for PersistUser {
             password_hash: u.password_hash.clone(),
             role: u.role,
             email_verified: u.email_verified,
+            suspended: u.suspended,
             totp_secret: u.totp_secret.clone(),
             totp_enabled: u.totp_enabled,
             created_at: u.created_at,
@@ -139,6 +144,7 @@ impl From<PersistUser> for miraclepay_domain::user::User {
             password_hash: u.password_hash,
             role: u.role,
             email_verified: u.email_verified,
+            suspended: u.suspended,
             totp_secret: u.totp_secret,
             totp_enabled: u.totp_enabled,
             created_at: u.created_at,
@@ -228,6 +234,11 @@ pub async fn collect(state: &AppState) -> Vec<(&'static str, CollectionData)> {
         map_entries(&state.refresh_tokens.read().await),
     ));
     out.push(("auth_tokens", map_entries(&state.auth_tokens.read().await)));
+    out.push((
+        "merchant_members",
+        map_entries(&state.merchant_members.read().await),
+    ));
+    out.push(("link_views", map_entries(&state.link_views.read().await)));
     out
 }
 
@@ -369,6 +380,8 @@ pub async fn apply(state: &AppState, collection: &str, entries: &CollectionData)
         "merchant_settings" => apply_map(&state.merchant_settings, entries).await,
         "refresh_tokens" => apply_map(&state.refresh_tokens, entries).await,
         "auth_tokens" => apply_map(&state.auth_tokens, entries).await,
+        "merchant_members" => apply_map(&state.merchant_members, entries).await,
+        "link_views" => apply_map(&state.link_views, entries).await,
         _ => {}
     }
 }
@@ -425,6 +438,7 @@ mod tests {
             password_hash: "x".to_string(),
             role: UserRole::Merchant,
             email_verified: false,
+            suspended: false,
             totp_secret: None,
             totp_enabled: false,
             created_at: chrono::Utc::now(),

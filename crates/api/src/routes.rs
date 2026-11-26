@@ -28,8 +28,8 @@ use axum::{
 
 use crate::handlers::{
     admin, api_keys, auth, auth_flows, disputes, fx, gateways, invoices, kyc, merchants,
-    payment_links, payments, provider_webhooks, settlements, sms, subscriptions, transactions,
-    webhooks,
+    payment_links, payments, product, provider_webhooks, settlements, sms, subscriptions,
+    transactions, webhooks,
 };
 use crate::state::AppState;
 
@@ -279,6 +279,42 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/v1/disputes/:id/evidence",
             post(disputes::add_evidence),
+        )
+        .route(
+            "/api/v1/disputes/:id/evidence/files",
+            post(disputes::add_evidence_file),
+        )
+        // Product depth (Waves 96-113)
+        .route("/api/v1/merchants/:id/onboarding", get(product::onboarding))
+        .route(
+            "/api/v1/merchants/:id/team",
+            get(product::list_team).post(product::invite_team_member),
+        )
+        .route(
+            "/api/v1/merchants/:id/team/:member_id",
+            delete(product::remove_team_member),
+        )
+        .route(
+            "/api/v1/transactions/export.csv",
+            get(product::export_transactions_csv),
+        )
+        .route("/api/v1/search", get(product::search))
+        .route(
+            "/api/v1/gateways/:provider/test",
+            post(product::test_gateway),
+        )
+        .route("/api/v1/payment-links/:id/stats", get(product::link_stats))
+        .route(
+            "/api/v1/transactions/:id/receipt.pdf",
+            get(product::receipt_pdf),
+        )
+        .route(
+            "/api/v1/admin/users/:id/suspend",
+            post(product::admin_suspend_user),
+        )
+        .route(
+            "/api/v1/admin/users/:id/activate",
+            post(product::admin_activate_user),
         )
         .route(
             "/api/v1/admin/disputes/:id/decide",

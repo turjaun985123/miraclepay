@@ -13,6 +13,7 @@ pub mod config;
 pub mod db;
 pub mod dto;
 pub mod handlers;
+pub mod key_auth;
 pub mod metrics;
 pub mod openapi;
 pub mod pagination;

@@ -93,6 +93,10 @@ pub struct AppState {
     /// One-time auth tokens (Waves 88-89: password reset + email
     /// verification), keyed by the SHA-256 hash of the raw token.
     pub auth_tokens: Arc<RwLock<HashMap<String, crate::auth_tokens::AuthTokenRecord>>>,
+    /// Merchant team members (Wave 102), keyed by member id.
+    pub merchant_members: Arc<RwLock<HashMap<String, crate::handlers::product::TeamMember>>>,
+    /// Public payment-link view counts (Wave 111), keyed by link id.
+    pub link_views: Arc<RwLock<HashMap<String, u64>>>,
     /// Merchant KYC profiles (Wave 33), keyed by merchant id.
     pub kyc_profiles: Arc<RwLock<HashMap<String, miraclepay_domain::kyc::KycProfile>>>,
     /// Per-merchant settings incl. checkout branding (Wave 37).
@@ -149,6 +153,8 @@ impl AppState {
             audit_log: Arc::new(RwLock::new(Vec::new())),
             refresh_tokens: Arc::new(RwLock::new(HashMap::new())),
             auth_tokens: Arc::new(RwLock::new(HashMap::new())),
+            merchant_members: Arc::new(RwLock::new(HashMap::new())),
+            link_views: Arc::new(RwLock::new(HashMap::new())),
             kyc_profiles: Arc::new(RwLock::new(HashMap::new())),
             merchant_settings: Arc::new(RwLock::new(HashMap::new())),
             disputes: Arc::new(RwLock::new(HashMap::new())),
@@ -361,6 +367,7 @@ impl AppState {
             password_hash,
             role: UserRole::Admin,
             email_verified: true,
+            suspended: false,
             totp_secret: None,
             totp_enabled: false,
             created_at: Utc::now(),

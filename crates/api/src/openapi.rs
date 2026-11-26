@@ -406,6 +406,83 @@ const ROUTES: &[(&str, &[&str], &str, &str, bool)] = &[
         true,
     ),
     (
+        "/api/v1/disputes/{id}/evidence/files",
+        &["post"],
+        "Attach an evidence file reference to a dispute",
+        "Disputes",
+        true,
+    ),
+    (
+        "/api/v1/merchants/{id}/onboarding",
+        &["get"],
+        "Merchant onboarding checklist (derived from live state)",
+        "Merchants",
+        true,
+    ),
+    (
+        "/api/v1/merchants/{id}/team",
+        &["get", "post"],
+        "List or invite merchant team members",
+        "Merchants",
+        true,
+    ),
+    (
+        "/api/v1/merchants/{id}/team/{member_id}",
+        &["delete"],
+        "Remove a team member",
+        "Merchants",
+        true,
+    ),
+    (
+        "/api/v1/transactions/export.csv",
+        &["get"],
+        "Export a merchant's transactions as CSV",
+        "Transactions",
+        true,
+    ),
+    (
+        "/api/v1/search",
+        &["get"],
+        "Search transactions, payment links and invoices",
+        "Search",
+        true,
+    ),
+    (
+        "/api/v1/gateways/{provider}/test",
+        &["post"],
+        "Test a stored gateway configuration against the provider",
+        "Gateways",
+        true,
+    ),
+    (
+        "/api/v1/payment-links/{id}/stats",
+        &["get"],
+        "Payment link views and payment conversion",
+        "Payment Links",
+        true,
+    ),
+    (
+        "/api/v1/transactions/{id}/receipt.pdf",
+        &["get"],
+        "Download a payment receipt PDF",
+        "Transactions",
+        true,
+    ),
+    (
+        "/api/v1/admin/users/{id}/suspend",
+        &["post"],
+        "Suspend a user account (admin)",
+        "Admin",
+        true,
+    ),
+    (
+        "/api/v1/admin/users/{id}/activate",
+        &["post"],
+        "Reactivate a suspended user (admin)",
+        "Admin",
+        true,
+    ),
+    (
         "/api/v1/disputes/{id}/evidence",
         &["post"],
         "Add merchant evidence to a dispute",
@@ -704,11 +781,13 @@ mod tests {
 
     #[test]
     fn operation_count_matches_the_router_surface() {
-        // routes::build_router registers 99 method handlers as of
-        // Wave 90 — 98 in this table plus GET /openapi.json itself.
+        // routes::build_router registers 114 method handlers as of
+        // Wave 113 — 111 operations in this table plus
+        // GET /openapi.json itself and the pre-existing admin
+        // user list counted once.
         // If you add a route, add it to ROUTES above and update
         // this number.
-        assert_eq!(operation_count(), 98);
+        assert_eq!(operation_count(), 110);
     }
 
     #[test]

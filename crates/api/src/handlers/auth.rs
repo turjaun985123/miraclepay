@@ -98,6 +98,7 @@ pub async fn register(
         password_hash,
         role: UserRole::Merchant,
         email_verified: false,
+        suspended: false,
         totp_secret: None,
         totp_enabled: false,
         created_at: chrono::Utc::now(),
@@ -163,6 +164,13 @@ pub async fn login(
         miraclepay_domain::password::verify_password(&req.password, &user.password_hash);
     if !candidate_ok {
         return Err(ApiError::Unauthorized);
+    }
+
+    // Wave 113: suspended accounts cannot log in.
+    if user.suspended {
+        return Err(ApiError::Forbidden(
+            "account suspended — contact support".to_string(),
+        ));
     }
 
     // Wave 26: TOTP second factor, when the user enabled it.
@@ -425,6 +433,7 @@ mod tests {
             password_hash: "stored-hash-value".to_string(),
             role: UserRole::Merchant,
             email_verified: false,
+            suspended: false,
             totp_secret: None,
             totp_enabled: false,
             created_at: chrono::Utc::now(),

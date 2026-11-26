@@ -38,6 +38,23 @@ use miraclepay_domain::webhook::WebhookEvent;
 use miraclepay_gateways::types::{GatewayError, PaymentRequest};
 
 use crate::auth_middleware::AuthUser;
+use crate::key_auth::authenticate_api_key;
+use axum::http::HeaderMap;
+use miraclepay_domain::api_key::ApiScope;
+
+/// Wave 103: a caller is either a JWT user or an API key with the
+/// required scope. JWT wins when both are presented.
+async fn resolve_caller(
+    state: &AppState,
+    auth: Option<AuthUser>,
+    headers: &HeaderMap,
+    scope: ApiScope,
+) -> Result<AuthUser, ApiError> {
+    match auth {
+        Some(user) => Ok(user),
+        None => authenticate_api_key(state, headers, scope).await,
+    }
+}
 use crate::dto::ApiError;
 use crate::state::AppState;
 
@@ -140,10 +157,12 @@ fn parse_status(raw: &str) -> Option<TxStatus> {
 /// Returns `201` with `{ transaction, initiated: { redirect_url,
 /// instructions } }`.
 pub async fn create_payment(
-    auth: AuthUser,
+    auth: Option<AuthUser>,
+    headers: HeaderMap,
     State(state): State<AppState>,
     Json(req): Json<CreatePaymentReq>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
+    let auth = resolve_caller(&state, auth, &headers, ApiScope::PaymentsWrite).await?;
     // The merchant must exist …
     {
         let merchants = state.merchants.read().await;
@@ -263,10 +282,12 @@ pub async fn create_payment(
 /// The caller must own the transaction's merchant (admins may fetch
 /// any transaction).
 pub async fn get_payment(
-    auth: AuthUser,
+    auth: Option<AuthUser>,
+    headers: HeaderMap,
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
+    let auth = resolve_caller(&state, auth, &headers, ApiScope::PaymentsRead).await?;
     let transaction = {
         let transactions = state.transactions.read().await;
         transactions.get(&id).cloned()
@@ -287,10 +308,12 @@ pub async fn get_payment(
 /// Optional `merchant_id` and `status` query filters narrow the
 /// result; at most 100 transactions are returned.
 pub async fn list_payments(
-    auth: AuthUser,
+    auth: Option<AuthUser>,
+    headers: HeaderMap,
     State(state): State<AppState>,
     Query(query): Query<ListQ>,
 ) -> Result<Json<Value>, ApiError> {
+    let auth = resolve_caller(&state, auth, &headers, ApiScope::PaymentsRead).await?;
     let status_filter = match query.status.as_deref() {
         Some(raw) => Some(
             parse_status(raw)

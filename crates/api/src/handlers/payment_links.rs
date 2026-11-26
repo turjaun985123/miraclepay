@@ -398,6 +398,12 @@ pub async fn public_link(
         _ => return Err(ApiError::NotFound("link not available".to_string())),
     };
 
+    // Wave 111: count public views for link analytics.
+    {
+        let mut views = state.link_views.write().await;
+        *views.entry(link.id.clone()).or_insert(0) += 1;
+    }
+
     let branding = {
         let all_settings = state.merchant_settings.read().await;
         match all_settings.get(&link.merchant_id) {

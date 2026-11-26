@@ -112,6 +112,7 @@ async fn snapshot_hydrate_round_trip_against_real_postgres() {
                 password_hash: miraclepay_domain::password::hash_password("hunter2pass"),
                 role: miraclepay_domain::user::UserRole::Merchant,
                 email_verified: true,
+                suspended: false,
                 totp_secret: None,
                 totp_enabled: false,
                 created_at: chrono::Utc::now(),

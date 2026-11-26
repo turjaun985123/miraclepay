@@ -61,10 +61,24 @@ pub struct Dispute {
     pub status: DisputeStatus,
     /// Merchant's evidence note (set via the evidence endpoint).
     pub evidence_note: Option<String>,
+    /// Evidence file references (Wave 100): merchant-supplied
+    /// links to hosted evidence (receipts, screenshots). The
+    /// platform stores references, not file bytes.
+    #[serde(default)]
+    pub evidence_files: Vec<EvidenceFile>,
     /// Admin's closing note.
     pub outcome_note: Option<String>,
     pub opened_at: DateTime<Utc>,
     pub decided_at: Option<DateTime<Utc>>,
+}
+
+/// One merchant-supplied evidence file reference (Wave 100).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EvidenceFile {
+    pub name: String,
+    /// HTTPS URL where the file is hosted.
+    pub url: String,
+    pub added_at: DateTime<Utc>,
 }
 
 /// Validate opening a dispute against `tx` for `amount`.

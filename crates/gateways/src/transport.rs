@@ -507,3 +507,96 @@ mod sandbox_audit_tests {
         .expect("bkash config")
     }
 }
+
+// ---------------------------------------------------------------------
+// Connection test (Wave 108)
+// ---------------------------------------------------------------------
+
+/// Test a merchant's stored gateway configuration with the
+/// cheapest authenticated call each provider offers: bKash token
+/// grant, PayPal OAuth token, Stripe balance read. Missing
+/// credential pieces answer `NotConfigured` before any network
+/// call; other providers answer honestly that no test is wired.
+///
+/// Credential mapping from the stored [`GatewayConfig`]:
+/// bKash — `api_key` = app key, `api_secret` = app secret,
+/// `extra.username` / `extra.password`; PayPal — `api_key` =
+/// client id, `api_secret` = client secret; Stripe — `api_secret`
+/// (or `api_key`) = secret key.
+pub fn test_connection<T: HttpTransport>(
+    transport: &T,
+    config: &crate::types::GatewayConfig,
+) -> Result<String, GatewayError> {
+    use crate::types::GatewayId;
+    let need = |value: &Option<String>, name: &str| -> Result<String, GatewayError> {
+        value
+            .clone()
+            .filter(|v| !v.trim().is_empty())
+            .ok_or_else(|| GatewayError::NotConfigured(format!("missing {name} in gateway config")))
+    };
+    match config.gateway {
+        GatewayId::Bkash => {
+            let username = config
+                .extra
+                .get("username")
+                .and_then(|v| v.as_str())
+                .filter(|v| !v.trim().is_empty())
+                .ok_or_else(|| {
+                    GatewayError::NotConfigured("missing extra.username in gateway config".into())
+                })?
+                .to_string();
+            let password = config
+                .extra
+                .get("password")
+                .and_then(|v| v.as_str())
+                .filter(|v| !v.trim().is_empty())
+                .ok_or_else(|| {
+                    GatewayError::NotConfigured("missing extra.password in gateway config".into())
+                })?
+                .to_string();
+            let provider = BkashTokenizedConfig {
+                username,
+                password,
+                app_key: need(&config.api_key, "api_key (app key)")?,
+                app_secret: need(&config.api_secret, "api_secret (app secret)")?,
+                sandbox: config.sandbox,
+            };
+            let token = bkash_grant_token(transport, &provider)?;
+            Ok(format!(
+                "bKash token grant succeeded (expires_in: {:?})",
+                token.expires_in
+            ))
+        }
+        GatewayId::Paypal => {
+            let provider = PayPalConfig {
+                client_id: need(&config.api_key, "api_key (client id)")?,
+                client_secret: need(&config.api_secret, "api_secret (client secret)")?,
+                sandbox: config.sandbox,
+            };
+            let body = execute(transport, &provider.token_request(), "paypal")?;
+            let token = parse_token(&body)?;
+            Ok(format!(
+                "PayPal OAuth succeeded (expires_in: {:?})",
+                token.expires_in
+            ))
+        }
+        GatewayId::Stripe => {
+            let secret = match need(&config.api_secret, "api_secret (secret key)") {
+                Ok(v) => v,
+                Err(_) => need(&config.api_key, "api_key (secret key)")?,
+            };
+            let spec = HttpRequestSpec {
+                method: "GET",
+                url: "https://api.stripe.com/v1/balance".to_string(),
+                headers: vec![("Authorization".to_string(), format!("Bearer {secret}"))],
+                body: String::new(),
+            };
+            execute(transport, &spec, "stripe")?;
+            Ok("Stripe balance read succeeded".to_string())
+        }
+        other => Err(GatewayError::Provider(format!(
+            "no connection test is wired for {} yet",
+            other.as_str()
+        ))),
+    }
+}

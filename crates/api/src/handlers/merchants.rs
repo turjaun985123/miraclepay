@@ -259,6 +259,8 @@ pub fn default_merchant_settings(merchant_id: &str) -> settings::MerchantSetting
         brand_color: None,
         logo_url: None,
         checkout_message: None,
+        payout_schedule: None,
+        payout_day: None,
     }
 }
 

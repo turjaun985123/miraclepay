@@ -56,6 +56,11 @@ pub struct User {
     pub password_hash: String,
     /// Role determining what this account may access.
     pub role: UserRole,
+    /// Whether an admin has suspended this account (Wave 113).
+    /// Suspended users cannot log in. Absent in old records =
+    /// active.
+    #[serde(default)]
+    pub suspended: bool,
     /// Whether the user has verified ownership of `email`.
     pub email_verified: bool,
     /// TOTP shared secret (base32), set at 2FA setup (Wave 26).
@@ -150,6 +155,7 @@ mod tests {
             password_hash: "$argon2id$stored-hash-value".to_string(),
             role: UserRole::Merchant,
             email_verified: true,
+            suspended: false,
             totp_secret: None,
             totp_enabled: false,
             created_at: Utc::now(),

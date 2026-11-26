@@ -102,6 +102,7 @@ pub async fn open_dispute(
         reason: body.reason,
         status: DisputeStatus::Opened,
         evidence_note: None,
+        evidence_files: Vec::new(),
         outcome_note: None,
         opened_at: Utc::now(),
         decided_at: None,
@@ -202,6 +203,55 @@ pub async fn add_evidence(
         )));
     }
     dispute.evidence_note = Some(body.note);
+    if dispute.status == DisputeStatus::Opened {
+        dispute.status = DisputeStatus::UnderReview;
+    }
+    Ok(Json(dispute.clone()))
+}
+
+/// Request body for [`add_evidence_file`] (Wave 100).
+#[derive(Debug, Clone, Deserialize)]
+pub struct EvidenceFileRequest {
+    pub name: String,
+    pub url: String,
+}
+
+/// `POST /disputes/:id/evidence/files` — attach an evidence file
+/// reference (HTTPS URL to a hosted file; the platform stores the
+/// reference, not the bytes) while the dispute is undecided.
+pub async fn add_evidence_file(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<EvidenceFileRequest>,
+) -> Result<Json<Dispute>, ApiError> {
+    if body.name.trim().is_empty() || body.name.chars().count() > 200 {
+        return Err(ApiError::BadRequest(
+            "evidence file name must be 1..=200 characters".to_string(),
+        ));
+    }
+    if !body.url.starts_with("https://") || body.url.len() > 2_000 {
+        return Err(ApiError::BadRequest(
+            "evidence file url must be an https URL of at most 2000 characters".to_string(),
+        ));
+    }
+    load_visible(&state, &auth, &id).await?;
+    let mut disputes = state.disputes.write().await;
+    let dispute = disputes
+        .get_mut(&id)
+        .ok_or_else(|| ApiError::NotFound(format!("dispute {id} not found")))?;
+    if dispute.status.is_terminal() {
+        return Err(ApiError::Conflict(format!(
+            "dispute {id} is already decided"
+        )));
+    }
+    dispute
+        .evidence_files
+        .push(miraclepay_domain::dispute::EvidenceFile {
+            name: body.name,
+            url: body.url,
+            added_at: Utc::now(),
+        });
     if dispute.status == DisputeStatus::Opened {
         dispute.status = DisputeStatus::UnderReview;
     }
