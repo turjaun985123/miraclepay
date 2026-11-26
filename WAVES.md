@@ -62,3 +62,8 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 ## Log
 
 (verdicts appended per wave below)
+
+### Wave 1 — GitHub repo + first CI ✅
+- Repo: https://github.com/turjaun985123/miraclepay (PUBLIC), commit `751711f`
+- Secret scan before staging: clean (only dummy passwords in unit tests); 129 source files, no target/node_modules/dist/.env
+- CI run **45750801468**: verified twice at job+step level — Frontend (Astro build) success, Android (assembleDebug) success (first Android build anywhere), Rust (test + build) success. All steps success.

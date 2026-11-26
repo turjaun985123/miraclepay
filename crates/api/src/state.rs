@@ -98,6 +98,10 @@ pub struct AppState {
     pub settings: Arc<RwLock<settings::PlatformSettings>>,
     /// Secret used to sign and verify session tokens (JWTs).
     pub jwt_secret: String,
+    /// Postgres pool when `DATABASE_URL` was set and migrations
+    /// succeeded (Wave 2); `None` means the in-memory store is the
+    /// active backend. See [`crate::db`].
+    pub db_pool: Option<sqlx::PgPool>,
 }
 
 impl AppState {
@@ -126,6 +130,24 @@ impl AppState {
             used_trx: Arc::new(RwLock::new(HashSet::new())),
             settings: Arc::new(RwLock::new(settings::PlatformSettings::default())),
             jwt_secret,
+            db_pool: None,
+        }
+    }
+
+    /// Attach a Postgres pool (Wave 2). Builder-style: returns the
+    /// state with `db_pool` set so `main` can do
+    /// `AppState::from_env().with_db_pool(init.pool)`.
+    pub fn with_db_pool(mut self, pool: Option<sqlx::PgPool>) -> Self {
+        self.db_pool = pool;
+        self
+    }
+
+    /// Storage mode in effect, for `/health` and logs.
+    pub fn db_mode(&self) -> crate::db::DbMode {
+        if self.db_pool.is_some() {
+            crate::db::DbMode::Postgres
+        } else {
+            crate::db::DbMode::InMemory
         }
     }
 

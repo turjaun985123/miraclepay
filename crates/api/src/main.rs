@@ -1,10 +1,12 @@
 //! MiraclePay API server binary (v0.0.1).
-//! Env: PORT (default 8080), JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD.
+//! Env: PORT (default 8080), JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD,
+//! DATABASE_URL (optional; unset = in-memory store, see `api::db`).
 use miraclepay_api::{build_router, AppState};
 
 #[tokio::main]
 async fn main() {
-    let state = AppState::from_env();
+    let db = miraclepay_api::db::init_from_env().await;
+    let state = AppState::from_env().with_db_pool(db.pool);
     if let (Ok(email), Ok(password)) = (
         std::env::var("ADMIN_EMAIL"),
         std::env::var("ADMIN_PASSWORD"),

@@ -1,6 +1,7 @@
 //! MiraclePay API — Axum HTTP layer. Thin handlers over the domain,
 //! gateways and sms-verify crates; one operation = one endpoint.
 pub mod auth_middleware;
+pub mod db;
 pub mod dto;
 pub mod handlers;
 pub mod pagination;

@@ -16,6 +16,7 @@ chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2"
 hmac = "0.12"
 sha2 = "0.10"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "chrono", "json", "migrate", "macros"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

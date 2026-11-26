@@ -19,6 +19,7 @@
 //!   [`build_router`] rather than scattering headers across handlers.
 
 use axum::{
+    extract::State,
     response::IntoResponse,
     routing::{delete, get, patch, post, put},
     Json, Router,
@@ -34,8 +35,14 @@ use crate::state::AppState;
 ///
 /// Inline by design — it has no business logic, it simply serialises
 /// the value produced by `crate::dto::health()`.
-async fn health() -> impl IntoResponse {
-    Json(crate::dto::health())
+async fn health(State(state): State<AppState>) -> impl IntoResponse {
+    let base = crate::dto::health();
+    Json(serde_json::json!({
+        "status": base.status,
+        "version": base.version,
+        "name": base.name,
+        "db": state.db_mode().as_str(),
+    }))
 }
 
 /// Build the complete MiraclePay API router.
