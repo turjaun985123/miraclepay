@@ -143,3 +143,10 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - New `domain::invoice_pdf`: dependency-free one-page PDF renderer (correct xref offsets, PDF string escaping, totals from the domain's own subtotal/discount/tax/total) with 4 unit tests including an xref-offset check.
 - New endpoint `GET /api/v1/invoices/:id/pdf` (owner-scoped, `application/pdf`, attachment filename = invoice number).
 - Local: 608 workspace tests pass.
+
+### Wave 14 — CI verdict ✅
+- Commit `ffd3841`, CI run **45754679303**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 15 — Payment-link expiry + one-time links (this commit)
+- Gap found: the domain and the pay flow already enforced `expires_at`/`max_uses`, but `create_link` hardcoded `expires_at: None` — merchants could never set an expiry.
+- `POST /payment-links` now accepts `expires_at` (future, RFC 3339) or `expires_in_hours` (> 0; explicit wins), validated by a tested `resolve_expiry` helper (4 tests); `max_uses: 0` is rejected and `max_uses: 1` gives a true one-time link. Frontend `CreateLinkData` typed for all three fields.

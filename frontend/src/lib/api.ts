@@ -302,7 +302,12 @@ export interface CreateLinkData {
   amount_minor?: number | null;
   currency?: string;
   slug?: string;
+  /** Wave 15: cap on uses; 1 = one-time link. */
+  max_uses?: number | null;
+  /** Wave 15: absolute expiry (RFC 3339, future)… */
   expires_at?: string | null;
+  /** …or relative expiry in hours from creation. */
+  expires_in_hours?: number | null;
   [key: string]: unknown;
 }
 

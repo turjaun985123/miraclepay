@@ -58,7 +58,41 @@ pub struct CreateLinkRequest {
     /// Whether checkout must collect the customer's email address.
     pub collect_email: bool,
     /// Optional cap on the number of times the link may be used.
+    /// `Some(1)` makes the link one-time (Wave 15). `Some(0)` is
+    /// rejected: a link that can never be used is a mistake.
     pub max_uses: Option<u32>,
+    /// Wave 15: absolute expiry for the link (RFC 3339). Must be in
+    /// the future. Takes precedence over `expires_in_hours`.
+    pub expires_at: Option<chrono::DateTime<Utc>>,
+    /// Wave 15: relative expiry — hours from creation. Must be > 0.
+    pub expires_in_hours: Option<i64>,
+}
+
+/// Resolve a link's expiry from the create request (Wave 15).
+///
+/// Explicit `expires_at` wins over `expires_in_hours`; both must
+/// describe a future moment or the request is rejected.
+fn resolve_expiry(
+    req: &CreateLinkRequest,
+    now: chrono::DateTime<Utc>,
+) -> Result<Option<chrono::DateTime<Utc>>, ApiError> {
+    if let Some(at) = req.expires_at {
+        if at <= now {
+            return Err(ApiError::BadRequest(
+                "expires_at must be in the future".to_string(),
+            ));
+        }
+        return Ok(Some(at));
+    }
+    if let Some(hours) = req.expires_in_hours {
+        if hours <= 0 {
+            return Err(ApiError::BadRequest(
+                "expires_in_hours must be greater than zero".to_string(),
+            ));
+        }
+        return Ok(Some(now + chrono::Duration::hours(hours)));
+    }
+    Ok(None)
 }
 
 /// Query of `GET /payment-links`.
@@ -203,6 +237,12 @@ pub async fn create_link(
     if req.title.trim().is_empty() {
         return Err(ApiError::BadRequest("title must not be empty".to_string()));
     }
+    if req.max_uses == Some(0) {
+        return Err(ApiError::BadRequest(
+            "max_uses must be at least 1 when set".to_string(),
+        ));
+    }
+    let expires_at = resolve_expiry(&req, Utc::now())?;
     ensure_merchant_owned(&state, &auth, &req.merchant_id)?;
 
     // A fixed amount needs a supported currency; an open-amount link
@@ -242,7 +282,7 @@ pub async fn create_link(
         max_uses: req.max_uses,
         uses: 0,
         active: true,
-        expires_at: None,
+        expires_at,
         created_at: Utc::now(),
     };
 
@@ -437,4 +477,54 @@ pub async fn pay_link(
             status: TxStatus::Pending,
         }),
     ))
+}
+
+#[cfg(test)]
+mod expiry_tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    fn req(expires_at: Option<chrono::DateTime<Utc>>, hours: Option<i64>) -> CreateLinkRequest {
+        CreateLinkRequest {
+            merchant_id: "m-1".to_string(),
+            title: "Test".to_string(),
+            description: None,
+            amount_minor: None,
+            currency: "BDT".to_string(),
+            collect_phone: false,
+            collect_email: false,
+            max_uses: None,
+            expires_at,
+            expires_in_hours: hours,
+        }
+    }
+
+    fn now() -> chrono::DateTime<Utc> {
+        Utc.with_ymd_and_hms(2026, 11, 26, 4, 0, 0).unwrap()
+    }
+
+    #[test]
+    fn no_expiry_fields_means_no_expiry() {
+        assert_eq!(resolve_expiry(&req(None, None), now()).unwrap(), None);
+    }
+
+    #[test]
+    fn explicit_future_expiry_wins_over_hours() {
+        let at = now() + chrono::Duration::days(2);
+        assert_eq!(resolve_expiry(&req(Some(at), Some(1)), now()).unwrap(), Some(at));
+    }
+
+    #[test]
+    fn past_expiry_is_rejected() {
+        let at = now() - chrono::Duration::hours(1);
+        assert!(resolve_expiry(&req(Some(at), None), now()).is_err());
+    }
+
+    #[test]
+    fn relative_hours_resolve_from_now() {
+        let got = resolve_expiry(&req(None, Some(48)), now()).unwrap();
+        assert_eq!(got, Some(now() + chrono::Duration::hours(48)));
+        assert!(resolve_expiry(&req(None, Some(0)), now()).is_err());
+        assert!(resolve_expiry(&req(None, Some(-5)), now()).is_err());
+    }
 }
