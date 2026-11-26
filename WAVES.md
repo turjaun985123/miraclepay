@@ -193,3 +193,12 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - New `frontend/src/lib/i18n.ts`: en/bn dictionary (30+ strings), `t()` with `{placeholder}` substitution, `applyI18n()` over `data-i18n` attributes, localStorage persistence (`mp-lang`), `document.lang` sync for accessibility.
 - Public pay page fully wired (static + script-set strings, toggle button, fixed-amount button label follows the language); hosted checkout wired for its static strings + toggle.
 - Honest scope: dashboard/admin pages and checkout's script-generated messages remain English in v0.0.1.
+
+### Wave 22 — CI verdict ✅
+- Commit `570008a`, CI run **45756655058**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 23 — Accessibility pass (this commit)
+- Skip-to-content link in the base layout; every page's `<main>` now carries `id="main"` (13 pages).
+- Brand green darkened (`#0e9f6e` → `#0b7a55`, dark `#095c40`): white button text contrast ≈3.1:1 → ≈5:1 (WCAG AA).
+- `prefers-reduced-motion` support: global transition/animation dampening in CSS + the pay page's success scroll now honours the OS setting.
+- Existing strengths kept: `:focus-visible` outlines, labelled forms, `role="alert"` errors, scoped table headers.

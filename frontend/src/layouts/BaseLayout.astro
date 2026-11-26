@@ -28,8 +28,10 @@ const {
         --surface: #ffffff;
         --ink: #101828;
         --muted: #667085;
-        --brand: #0e9f6e;
-        --brand-dark: #087a54;
+        /* Wave 23 (a11y): brand green darkened so white button text
+           meets WCAG AA contrast (was #0e9f6e ≈ 3.1:1, now ≈ 5:1). */
+        --brand: #0b7a55;
+        --brand-dark: #095c40;
         --brand-soft: #e6f6ef;
         --border: #e4e7ec;
         --danger: #d92d20;
@@ -63,6 +65,25 @@ const {
       a:hover { text-decoration: underline; }
       code, .mono { font-family: var(--font-mono); font-size: 0.9em; }
       :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+      /* Skip link (Wave 23): visually hidden until keyboard focus. */
+      .skip-link {
+        position: absolute; left: 1rem; top: -4rem; z-index: 100;
+        background: var(--surface); color: var(--ink);
+        padding: 0.5rem 1rem; border-radius: var(--radius-sm);
+        box-shadow: var(--shadow); transition: top 0.15s ease;
+      }
+      .skip-link:focus { top: 1rem; }
+
+      /* Reduced motion (Wave 23): no transitions or smooth scroll
+         for users who ask their OS for less motion. */
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+          scroll-behavior: auto !important;
+        }
+      }
 
       /* Layout */
       .container { width: 100%; max-width: 1120px; margin-inline: auto; padding: 1.5rem 1.25rem 3rem; }
@@ -144,6 +165,7 @@ const {
     </style>
   </head>
   <body>
+    <a class="skip-link" href="#main">Skip to content</a>
     <slot />
   </body>
 </html>
