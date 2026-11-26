@@ -12,6 +12,7 @@ pub mod routes;
 pub mod security;
 pub mod state;
 pub mod validation;
+pub mod versioning;
 
 pub use routes::build_router;
 pub use state::AppState;

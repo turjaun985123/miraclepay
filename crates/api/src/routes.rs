@@ -262,6 +262,8 @@ pub fn build_router(state: AppState) -> Router {
             post(subscriptions::resume_subscription),
         )
         // ---------------------------------------------------------
+        // API version discovery (Wave 40, public).
+        .route("/api/versions", get(crate::versioning::versions))
         // Admin
         // ---------------------------------------------------------
         .route("/api/v1/admin/stats", get(admin::platform_stats))
@@ -282,6 +284,11 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/admin/settings",
             get(admin::get_settings).put(admin::update_settings),
         )
+        // Wave 40: structured fallback for unmatched paths
+        // (unsupported API versions get a named error).
+        .fallback(crate::versioning::api_fallback)
+        // Wave 40: API-Version response header on /api/v1 calls.
+        .layer(axum::middleware::from_fn(crate::versioning::version_middleware))
         // Wave 12: rate-limit middleware (auth 10/min, SMS ingest
         // 120/min, general API 600/min per client; see `rate_limit`).
         .layer(axum::middleware::from_fn_with_state(

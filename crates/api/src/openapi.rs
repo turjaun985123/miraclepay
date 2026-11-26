@@ -12,6 +12,7 @@ use serde_json::{json, Map, Value};
 
 /// (path, methods, summary, tag, requires_auth)
 const ROUTES: &[(&str, &[&str], &str, &str, bool)] = &[
+    ("/api/versions", &["get"], "API version discovery", "Meta", false),
     ("/health", &["get"], "Liveness + storage mode", "System", false),
     ("/api/v1/auth/register", &["post"], "Register a user account", "Auth", false),
     ("/api/v1/auth/login", &["post"], "Log in, receive a JWT", "Auth", false),
@@ -195,11 +196,11 @@ mod tests {
 
     #[test]
     fn operation_count_matches_the_router_surface() {
-        // routes::build_router registers 87 method handlers as of
-        // Wave 39 — 86 in this table plus GET /openapi.json itself.
+        // routes::build_router registers 88 method handlers as of
+        // Wave 40 — 87 in this table plus GET /openapi.json itself.
         // If you add a route, add it to ROUTES above and update
         // this number.
-        assert_eq!(operation_count(), 86);
+        assert_eq!(operation_count(), 87);
     }
 
     #[test]

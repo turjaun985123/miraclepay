@@ -331,3 +331,10 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - New `domain::fraud`: pure rule engine over precomputed aggregates — `high_value` (≥ ৳50,000, 20 pts), `velocity` (≥10 payments/merchant/10 min, 30), `sender_reuse` (sender completed at ≥3 other merchants in 24 h, 40), `amount_outlier` (>5× merchant median, needs ≥5 history, 25). Scores bucket low/medium/high; every signal carries a human-readable detail.
 - `AppState::assess_risk` computes the aggregates from the transaction store and runs on both creation paths (API payments + payment-link pays); assessments stored per transaction.
 - New admin endpoint `GET /api/v1/admin/fraud/flagged` (score ≥ 30, highest first, paginated). Deliberately advisory — signals never auto-block a payment in v0.0.1, so a false positive cannot strand a customer's money. OpenAPI now 86 operations. Workspace: 673 tests pass.
+
+### Wave 39 — CI verdict ✅
+- Commit `907d5c1`, CI run **45762418054**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 40 — API versioning formalised (this commit)
+- New `api::versioning`: `GET /api/versions` (public discovery: current/supported/deprecated), `API-Version: v1` header stamped on every `/api/v1` response, and a router fallback that answers unsupported-version paths (`/api/v2/...`) with a structured `unsupported_api_version` 404 naming the supported versions — while typo'd v1 paths stay plain 404s (path classification is unit-tested, incl. the `/api/vendors` false-positive case).
+- Policy written down in `docs/api-versioning.md`: additive changes within v1, breaking changes as a new version with a ≥6-month overlap and Sunset headers, app version (0.0.1) explicitly decoupled from API version (v1). OpenAPI now 87 operations. Workspace: 674 tests pass.
