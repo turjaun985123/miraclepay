@@ -92,6 +92,9 @@ pub struct AppState {
     pub refresh_tokens: Arc<RwLock<HashMap<String, crate::refresh::RefreshRecord>>>,
     /// Merchant KYC profiles (Wave 33), keyed by merchant id.
     pub kyc_profiles: Arc<RwLock<HashMap<String, miraclepay_domain::kyc::KycProfile>>>,
+    /// Per-merchant settings incl. checkout branding (Wave 37).
+    pub merchant_settings:
+        Arc<RwLock<HashMap<String, miraclepay_domain::settings::MerchantSettings>>>,
     /// Provider transaction references already consumed by the SMS
     /// verification flow.
     ///
@@ -137,6 +140,7 @@ impl AppState {
             audit_log: Arc::new(RwLock::new(Vec::new())),
             refresh_tokens: Arc::new(RwLock::new(HashMap::new())),
             kyc_profiles: Arc::new(RwLock::new(HashMap::new())),
+            merchant_settings: Arc::new(RwLock::new(HashMap::new())),
             used_trx: Arc::new(RwLock::new(HashSet::new())),
             settings: Arc::new(RwLock::new(settings::PlatformSettings::default())),
             jwt_secret,

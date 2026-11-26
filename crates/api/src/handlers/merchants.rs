@@ -40,6 +40,7 @@ use miraclepay_domain::{
     ids::merchant_id,
     merchant::{validate_create, CreateMerchant, Merchant, MerchantStatus},
     money::Currency,
+    settings,
     stats::{compute_balance, MerchantBalance},
 };
 
@@ -259,4 +260,86 @@ pub async fn merchant_balance(
     );
 
     Ok(Json(balance))
+}
+
+// ---------------------------------------------------------------------------
+// Merchant settings incl. checkout branding (Wave 37)
+// ---------------------------------------------------------------------------
+
+/// Default settings for a merchant that has never saved any:
+/// platform fee applies, notifications on, no branding.
+pub fn default_merchant_settings(merchant_id: &str) -> settings::MerchantSettings {
+    settings::MerchantSettings {
+        merchant_id: merchant_id.to_string(),
+        fee_bps: None,
+        auto_settle: false,
+        settle_threshold_minor: 0,
+        notify_on_payment: true,
+        notify_on_refund: true,
+        brand_name: None,
+        brand_color: None,
+        logo_url: None,
+        checkout_message: None,
+    }
+}
+
+/// `GET /merchants/:id/settings` — the merchant's settings
+/// (defaults when never saved). Owner or admin.
+pub async fn get_merchant_settings(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<settings::MerchantSettings>, ApiError> {
+    let merchants = state.merchants.read().await;
+    merchants
+        .get(&id)
+        .filter(|merchant| can_view(&auth, &merchant.owner_user_id))
+        .ok_or_else(|| ApiError::NotFound(format!("merchant {id} not found")))?;
+    drop(merchants);
+    let stored = state.merchant_settings.read().await;
+    Ok(Json(
+        stored
+            .get(&id)
+            .cloned()
+            .unwrap_or_else(|| default_merchant_settings(&id)),
+    ))
+}
+
+/// `PUT /merchants/:id/settings` — replace the merchant's
+/// settings. Owner-only. Domain validation errors are returned
+/// together as a 400.
+pub async fn update_merchant_settings(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(mut body): Json<settings::MerchantSettings>,
+) -> Result<Json<settings::MerchantSettings>, ApiError> {
+    {
+        let merchants = state.merchants.read().await;
+        let merchant = merchants
+            .get(&id)
+            .ok_or_else(|| ApiError::NotFound(format!("merchant {id} not found")))?;
+        if merchant.owner_user_id != auth.user_id {
+            return Err(ApiError::Forbidden(
+                "only the merchant owner can change settings".to_string(),
+            ));
+        }
+    }
+    body.merchant_id = id.clone();
+    settings::validate_merchant_settings(&body).map_err(|errors| {
+        ApiError::BadRequest(format!("invalid merchant settings: {}", errors.join("; ")))
+    })?;
+    state
+        .merchant_settings
+        .write()
+        .await
+        .insert(id.clone(), body.clone());
+    state.audit(
+        Some(auth.user_id.clone()),
+        Some(id.clone()),
+        "merchant.settings_updated",
+        "merchant",
+        None,
+    );
+    Ok(Json(body))
 }

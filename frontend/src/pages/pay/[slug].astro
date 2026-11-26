@@ -36,9 +36,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     </section>
 
     <section id="pay-card" class="card pay-card" hidden>
+      <img id="pay-logo" class="pay-logo" alt="" hidden />
       <p id="pay-merchant" class="pay-merchant muted" hidden></p>
       <h1 id="pay-title">Payment</h1>
       <p id="pay-description" class="muted" hidden></p>
+      <p id="pay-brand-message" class="pay-brand-message" hidden></p>
 
       <p id="pay-fixed-amount" class="pay-amount" hidden></p>
 
@@ -161,6 +163,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     line-height: 1.15;
   }
 
+  .pay-logo {
+    max-height: 56px;
+    max-width: 220px;
+    object-fit: contain;
+    margin-bottom: 0.5rem;
+  }
+  .pay-brand-message {
+    border-left: 3px solid var(--brand, var(--brand-green, #0b7a55));
+    padding-left: 0.6rem;
+  }
   .pay-submit {
     width: 100%;
     padding: 0.75rem 1rem;
@@ -218,6 +230,12 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     title?: string;
     description?: string | null;
     merchant_name?: string;
+    branding?: {
+      display_name?: string | null;
+      brand_color?: string | null;
+      logo_url?: string | null;
+      checkout_message?: string | null;
+    } | null;
     collect_phone?: boolean;
     collect_email?: boolean;
     amount_minor?: number | null;
@@ -320,6 +338,34 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       if (merchantEl && link.merchant_name) {
         merchantEl.textContent = link.merchant_name;
         merchantEl.hidden = false;
+      }
+
+      // Per-merchant branding (Wave 37): display name wins over
+      // the legal name, the logo shows when set, the checkout
+      // message renders as-is (textContent — never HTML), and the
+      // brand colour accents the pay button. The colour is
+      // validated server-side as #rrggbb before it can be stored.
+      const branding = link.branding ?? null;
+      if (branding) {
+        if (merchantEl && branding.display_name) {
+          merchantEl.textContent = branding.display_name;
+          merchantEl.hidden = false;
+        }
+        const logoEl = document.getElementById('pay-logo') as HTMLImageElement | null;
+        if (logoEl && branding.logo_url) {
+          logoEl.src = branding.logo_url;
+          logoEl.alt = branding.display_name ?? link.merchant_name ?? '';
+          logoEl.hidden = false;
+        }
+        const brandMsgEl = document.getElementById('pay-brand-message');
+        if (brandMsgEl && branding.checkout_message) {
+          brandMsgEl.textContent = branding.checkout_message;
+          brandMsgEl.hidden = false;
+        }
+        if (branding.brand_color && /^#[0-9a-fA-F]{6}$/.test(branding.brand_color)) {
+          document.documentElement.style.setProperty('--brand', branding.brand_color);
+          if (submitButton) submitButton.style.background = branding.brand_color;
+        }
       }
 
       if (descriptionEl && link.description) {

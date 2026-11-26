@@ -88,6 +88,10 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/merchants/:id/balance",
             get(merchants::merchant_balance),
         )
+        .route(
+            "/api/v1/merchants/:id/settings",
+            get(merchants::get_merchant_settings).put(merchants::update_merchant_settings),
+        )
         // Merchant KYC-lite (Wave 33)
         .route(
             "/api/v1/merchants/:id/kyc",

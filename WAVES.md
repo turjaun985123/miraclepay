@@ -307,3 +307,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 ### Wave 36 — SMS device management: real device presence (this commit)
 - Root cause found: `ApiKey.last_used_at` existed since the first build but was **never written**, so the dashboard's "Last used" column always said Never. Device authentication (`sms::authenticate_device`) now records successful use, throttled to one write per minute per key.
 - `ApiKeyView` gains a derived `device_status` (revoked / never_connected / online ≤5 min / idle ≤24 h / offline), unit-tested across the ladder; the dashboard API-keys page renders it as a presence badge ("Device online", "Never connected", …) with a fallback for older responses. Workspace: 663 tests pass, Astro build passes.
+
+### Wave 36 — CI verdict ✅
+- Commit `8008bc4`, CI run **45761235751**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 37 — Checkout branding per merchant (this commit)
+- `MerchantSettings` existed in the domain with validation but was never wired into the API. Now: state storage, `GET/PUT /merchants/:id/settings` (owner write, owner/admin read, defaults when unsaved), audit entry on update. OpenAPI now 80 operations.
+- Branding fields: `brand_name` (≤60 chars), `brand_color` (`#rrggbb`, validated), `logo_url` (https only), `checkout_message` (≤200 chars) — all validated in the domain with every error collected.
+- The public pay-link payload gains a `branding` object; the pay page applies it (display name wins, logo, message via textContent only, brand colour on the pay button after a client-side hex re-check). Typed settings client added to the dashboard API library. Workspace: 666 tests pass, Astro build passes.

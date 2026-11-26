@@ -584,6 +584,36 @@ export interface KycProfile {
   [key: string]: unknown;
 }
 
+/** Merchant settings incl. checkout branding (Wave 37). */
+export interface MerchantSettings {
+  merchant_id: string;
+  fee_bps?: number | null;
+  auto_settle: boolean;
+  settle_threshold_minor: number;
+  notify_on_payment: boolean;
+  notify_on_refund: boolean;
+  brand_name?: string | null;
+  brand_color?: string | null;
+  logo_url?: string | null;
+  checkout_message?: string | null;
+  [key: string]: unknown;
+}
+
+export function getMerchantSettings(merchantId: string): Promise<MerchantSettings> {
+  return apiFetch<MerchantSettings>(
+    `/api/v1/merchants/${encodeURIComponent(merchantId)}/settings`,
+  );
+}
+
+export function updateMerchantSettings(
+  settings: MerchantSettings,
+): Promise<MerchantSettings> {
+  return apiFetch<MerchantSettings>(
+    `/api/v1/merchants/${encodeURIComponent(settings.merchant_id)}/settings`,
+    { method: 'PUT', body: JSON.stringify(settings) },
+  );
+}
+
 export function getKyc(merchantId: string): Promise<KycProfile> {
   return apiFetch<KycProfile>(`/api/v1/merchants/${encodeURIComponent(merchantId)}/kyc`);
 }

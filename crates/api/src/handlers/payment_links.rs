@@ -125,6 +125,19 @@ pub struct PublicLinkView {
     pub collect_phone: bool,
     /// Whether checkout must collect the customer's email address.
     pub collect_email: bool,
+    /// Per-merchant checkout branding (Wave 37).
+    pub branding: PublicBranding,
+}
+
+/// The branding slice of [`PublicLinkView`]: everything optional —
+/// an unbranded merchant gets all `None` and the platform default
+/// look.
+#[derive(Debug, Clone, Serialize)]
+pub struct PublicBranding {
+    pub display_name: Option<String>,
+    pub brand_color: Option<String>,
+    pub logo_url: Option<String>,
+    pub checkout_message: Option<String>,
 }
 
 /// Body of `POST /pay/{slug}`.
@@ -386,6 +399,24 @@ pub async fn public_link(
         _ => return Err(ApiError::NotFound("link not available".to_string())),
     };
 
+    let branding = {
+        let all_settings = state.merchant_settings.read().await;
+        match all_settings.get(&link.merchant_id) {
+            Some(settings) => PublicBranding {
+                display_name: settings.brand_name.clone(),
+                brand_color: settings.brand_color.clone(),
+                logo_url: settings.logo_url.clone(),
+                checkout_message: settings.checkout_message.clone(),
+            },
+            None => PublicBranding {
+                display_name: None,
+                brand_color: None,
+                logo_url: None,
+                checkout_message: None,
+            },
+        }
+    };
+
     Ok(Json(PublicLinkView {
         title: link.title.clone(),
         description: link.description.clone(),
@@ -393,6 +424,7 @@ pub async fn public_link(
         merchant_name: merchant_name(&state, &link.merchant_id),
         collect_phone: link.collect_phone,
         collect_email: link.collect_email,
+        branding,
     }))
 }
 

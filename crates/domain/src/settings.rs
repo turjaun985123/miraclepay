@@ -83,6 +83,20 @@ pub struct MerchantSettings {
     pub notify_on_payment: bool,
     /// Send the merchant a notification when a payment is refunded.
     pub notify_on_refund: bool,
+    /// Checkout branding (Wave 37): display name shown on the
+    /// public pay page instead of the legal business name.
+    #[serde(default)]
+    pub brand_name: Option<String>,
+    /// Checkout branding: accent colour as `#rrggbb`.
+    #[serde(default)]
+    pub brand_color: Option<String>,
+    /// Checkout branding: logo image URL (https only).
+    #[serde(default)]
+    pub logo_url: Option<String>,
+    /// Checkout branding: short message shown to the customer on
+    /// the pay page (at most 200 characters).
+    #[serde(default)]
+    pub checkout_message: Option<String>,
 }
 
 impl MerchantSettings {
@@ -126,11 +140,42 @@ pub fn validate_merchant_settings(settings: &MerchantSettings) -> Result<(), Vec
         ));
     }
 
+    // Checkout branding (Wave 37).
+    if let Some(name) = &settings.brand_name {
+        if name.trim().is_empty() || name.chars().count() > 60 {
+            errors.push("brand_name must be 1..=60 characters".to_string());
+        }
+    }
+    if let Some(color) = &settings.brand_color {
+        if !is_hex_color(color) {
+            errors.push(format!(
+                "brand_color must be a #rrggbb hex colour, got {color:?}"
+            ));
+        }
+    }
+    if let Some(url) = &settings.logo_url {
+        if !url.starts_with("https://") || url.len() > 500 || url.chars().any(char::is_whitespace) {
+            errors.push("logo_url must be an https URL of at most 500 characters".to_string());
+        }
+    }
+    if let Some(message) = &settings.checkout_message {
+        if message.chars().count() > 200 {
+            errors.push("checkout_message must be at most 200 characters".to_string());
+        }
+    }
+
     if errors.is_empty() {
         Ok(())
     } else {
         Err(errors)
     }
+}
+
+/// Whether `value` is a `#rrggbb` hex colour.
+pub fn is_hex_color(value: &str) -> bool {
+    value.len() == 7
+        && value.starts_with('#')
+        && value[1..].chars().all(|c| c.is_ascii_hexdigit())
 }
 
 #[cfg(test)]
@@ -145,6 +190,10 @@ mod tests {
             settle_threshold_minor: 100_00,
             notify_on_payment: true,
             notify_on_refund: true,
+            brand_name: None,
+            brand_color: None,
+            logo_url: None,
+            checkout_message: None,
         }
     }
 
@@ -289,5 +338,53 @@ mod tests {
             serde_json::from_str::<MerchantSettings>(&json).expect("deserialize merchant"),
             merchant
         );
+    }
+}
+
+#[cfg(test)]
+mod branding_tests {
+    use super::*;
+
+    fn settings() -> MerchantSettings {
+        MerchantSettings {
+            merchant_id: "mch_1".to_string(),
+            fee_bps: None,
+            auto_settle: false,
+            settle_threshold_minor: 0,
+            notify_on_payment: true,
+            notify_on_refund: true,
+            brand_name: None,
+            brand_color: None,
+            logo_url: None,
+            checkout_message: None,
+        }
+    }
+
+    #[test]
+    fn valid_branding_passes() {
+        let mut s = settings();
+        s.brand_name = Some("Rahim Store".to_string());
+        s.brand_color = Some("#0b7a55".to_string());
+        s.logo_url = Some("https://cdn.example.com/logo.png".to_string());
+        s.checkout_message = Some("Pay with bKash — instant delivery.".to_string());
+        assert_eq!(validate_merchant_settings(&s), Ok(()));
+    }
+
+    #[test]
+    fn invalid_branding_collects_all_errors() {
+        let mut s = settings();
+        s.brand_color = Some("green".to_string());
+        s.logo_url = Some("http://insecure.example.com/logo.png".to_string());
+        s.checkout_message = Some("x".repeat(201));
+        let errors = validate_merchant_settings(&s).unwrap_err();
+        assert_eq!(errors.len(), 3, "{errors:?}");
+    }
+
+    #[test]
+    fn hex_color_check() {
+        assert!(is_hex_color("#0B7a55"));
+        assert!(!is_hex_color("#12345"));
+        assert!(!is_hex_color("123456"));
+        assert!(!is_hex_color("#12345g"));
     }
 }
