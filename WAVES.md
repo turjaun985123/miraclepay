@@ -392,3 +392,12 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 ### Wave 47 — Upgrade/migration guide + ops runbook (this commit)
 - `docs/operations/runbook.md`: 30-second deployment check (/health db + sandbox fields, /api/versions, /metrics), the full env reference (core, gateways, SMTP — grepped from the code, not remembered), and incident playbooks: webhook dead letters → redeliver endpoint, SMTP-not-configured 409, stuck-Pending payments (device presence + Android outbox), 429 budgets, fraud-flag review, rollback pointer, and daily/weekly routines.
 - `docs/operations/upgrade-guide.md`: compatibility promises (API v1 additive-only; append-only migrations 0001–0004; in-memory = nothing to migrate), pre-upgrade checklist, compose upgrade steps, and the two rollback shapes (no-migration vs migration-ran → restore, never hand-edit bookkeeping). Every endpoint/env claim in both docs was verified against the code while writing.
+
+### Wave 47 — CI verdict ✅
+- Commit `b074724`, CI run **45764417644**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 48 — Docs completeness (this commit)
+- README rewritten where stale: 4-job CI description, sandbox quickstart, Docker one-liner, JS SDK component row, full docs index (webhooks/errors/versioning/runbook/upgrade/backup/performance/sandbox), current test counts (678 Rust + 7 SDK), and the Wave 8/31 SMS-safety notes in the verification walkthrough.
+- `docs/API.md`: §3.2 now documents the Wave-45 error envelope with the errors.md pointer; §4 declares the OpenAPI document (89 operations) the canonical endpoint catalogue instead of pretending the hand tables are complete.
+- `docs/ARCHITECTURE.md` §6.2 corrected: it claimed the API "does not use Postgres yet" — since Wave 2 the pool connects and migrations run at startup (handlers still use in-memory collections; stated plainly as the v0.0.1 limit).
+- `.env.example` gains the CORS, SMTP and SANDBOX sections it was missing.

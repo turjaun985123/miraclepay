@@ -445,7 +445,14 @@ parsed transaction id.
 
 ### 6.2 v0.0.1 runtime: in-memory state
 
-**The v0.0.1 API does not use Postgres yet.** `AppState`
+**Runtime state in v0.0.1 is in-memory; Postgres is wired but
+not yet the store of record.** Since Wave 2 the API connects a
+SQLx pool at startup when `DATABASE_URL` is set and runs the
+migrations; `/health` reports `"db": "postgres"` or
+`"in_memory"`. Handlers still read and write the in-memory
+`AppState` collections described below — the pool is the
+foundation the persistence waves build on, and the honest limit
+of v0.0.1. `AppState`
 (`crates/api/src/state.rs`) keeps every record in memory, behind
 `Arc<RwLock<…>>`:
 

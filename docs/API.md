@@ -108,11 +108,15 @@ Labelled **Public** in the tables: `GET /health`, `POST /api/v1/auth/register`, 
 
 ### 3.2 Error format
 
-Every error is a single JSON object:
+Every error uses the Wave-45 envelope (full catalogue:
+`docs/errors.md`):
 
 ```json
-{ "error": "<human-readable message>" }
+{ "error": "<human-readable message>", "code": "<stable_code>", "status": 400 }
 ```
+
+`error` is for humans and may be reworded; `code` is the stable
+machine-readable field clients should branch on.
 
 | HTTP status | Meaning |
 |---|---|
@@ -126,6 +130,14 @@ Every error is a single JSON object:
 ---
 
 ## 4. Endpoints
+
+> **Canonical catalogue:** the OpenAPI document served at
+> `GET /openapi.json` (89 operations, generated from the route
+> table with drift-guard tests) is the source of truth for the
+> endpoint list. The tables below cover the core surface and the
+> conventions; newer additions (FX, disputes, KYC, merchant
+> settings/analytics, fraud flags, metrics) are documented in the
+> OpenAPI document and the wave log (`WAVES.md`).
 
 Auth key: **JWT** = §2.1 · **API key / JWT** = see §2.2 note · **Device key** = §2.3 · **Admin** = JWT with role `admin` · **Public** = §2.4.
 
