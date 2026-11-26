@@ -27,6 +27,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Android 14 (Wave 42): typed foreground service for
+         WorkManager's data-sync execution, and the battery
+         exemption ask — aggressive OEM battery savers are the top
+         cause of missed forwards on BD devices. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <application
         android:allowBackup="false"
         android:label="MiraclePay"
@@ -62,6 +69,16 @@
                 <action android:name="android.provider.Telephony.SMS_RECEIVED" />
             </intent-filter>
         </receiver>
+
+        <!--
+          WorkManager's foreground service, re-declared with the
+          Android 14 dataSync type (Wave 42). tools:node="merge"
+          adds the attribute to the library manifest entry.
+        -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
 
         <!-- Re-arm forwarding when the device finishes booting. -->
         <receiver

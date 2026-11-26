@@ -50,6 +50,7 @@ public class MainActivity extends AppCompatActivity {
     private Button settingsButton;
     private Button testButton;
     private Button permissionButton;
+    private Button batteryButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,6 +65,7 @@ public class MainActivity extends AppCompatActivity {
         settingsButton = findViewById(R.id.settingsButton);
         testButton = findViewById(R.id.testButton);
         permissionButton = findViewById(R.id.permissionButton);
+        batteryButton = findViewById(R.id.batteryButton);
 
         settingsButton.setOnClickListener(v ->
                 startActivity(new Intent(this, SettingsActivity.class)));
@@ -71,6 +73,7 @@ public class MainActivity extends AppCompatActivity {
         testButton.setOnClickListener(v -> testConnection());
 
         permissionButton.setOnClickListener(v -> requestSmsPermissions());
+        batteryButton.setOnClickListener(v -> requestBatteryExemption());
 
         // Reflect the saved forwarding state before attaching the listener,
         // so restoring the switch does not re-save the same value.
@@ -133,6 +136,13 @@ public class MainActivity extends AppCompatActivity {
         if (!smsGranted) {
             permissionButton.bringToFront();
         }
+
+        // Battery exemption (Wave 42): without it, aggressive OEM
+        // battery savers can defer forwards for hours. Show the
+        // button only while not exempt.
+        boolean batteryExempt = isBatteryExempt();
+        batteryButton.setVisibility(batteryExempt ? View.GONE : View.VISIBLE);
+        statusText.append("\nBattery: " + (batteryExempt ? "Unrestricted" : "Restricted"));
     }
 
     /** Runs ApiClient.testConnection off the UI thread and toasts the result. */
@@ -175,7 +185,49 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void requestSmsPermissions() {
+        // Android 13+ (Wave 42): POST_NOTIFICATIONS is a runtime
+        // permission too — without it the forwarding notification
+        // (and foreground-service notice) cannot be shown. Ask for
+        // it together with the SMS pair.
+        if (android.os.Build.VERSION.SDK_INT >= 33
+                && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                        != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(
+                    this,
+                    new String[] {
+                            Manifest.permission.RECEIVE_SMS,
+                            Manifest.permission.READ_SMS,
+                            Manifest.permission.POST_NOTIFICATIONS
+                    },
+                    REQUEST_SMS_PERMISSIONS);
+            return;
+        }
         ActivityCompat.requestPermissions(this, SMS_PERMISSIONS, REQUEST_SMS_PERMISSIONS);
+    }
+
+    /** Whether the app is exempt from battery optimization. */
+    private boolean isBatteryExempt() {
+        if (android.os.Build.VERSION.SDK_INT < 23) {
+            return true;
+        }
+        android.os.PowerManager powerManager =
+                (android.os.PowerManager) getSystemService(POWER_SERVICE);
+        return powerManager != null
+                && powerManager.isIgnoringBatteryOptimizations(getPackageName());
+    }
+
+    /** Open the system dialog asking for a battery exemption. */
+    private void requestBatteryExemption() {
+        try {
+            Intent intent = new Intent(
+                    android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            intent.setData(android.net.Uri.parse("package:" + getPackageName()));
+            startActivity(intent);
+        } catch (Exception e) {
+            Toast.makeText(this,
+                    "Open Settings → Battery and set MiraclePay to Unrestricted.",
+                    Toast.LENGTH_LONG).show();
+        }
     }
 
     @Override

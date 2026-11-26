@@ -90,6 +90,24 @@ public class SmsForwardWorker extends Worker {
     @NonNull
     @Override
     public Result doWork() {
+        // Android 14 reliability (Wave 42): run the forward as a
+        // foreground (dataSync) execution so the OS does not kill
+        // the process mid-request on aggressive OEM builds. The
+        // manifest declares the dataSync type for WorkManager's
+        // SystemForegroundService and the FOREGROUND_SERVICE /
+        // FOREGROUND_SERVICE_DATA_SYNC permissions. If promotion
+        // fails (e.g. started from a restricted background state),
+        // fall back to plain background execution — WorkManager
+        // retries still apply.
+        try {
+            setForegroundAsync(new androidx.work.ForegroundInfo(
+                    Notify.FOREGROUND_NOTIFICATION_ID,
+                    Notify.foregroundNotification(getApplicationContext()),
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC));
+        } catch (Exception e) {
+            Log.w(TAG, "Foreground promotion unavailable; running in background", e);
+        }
+
         Data input = getInputData();
         String sender = input.getString(KEY_SENDER);
         String body = input.getString(KEY_BODY);

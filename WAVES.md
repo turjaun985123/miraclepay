@@ -346,3 +346,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - New `GET /merchants/:id/analytics` (owner/admin): the Wave-19 daily-series aggregation scoped to one merchant (14 days default, clamped 1..=90) with period totals. OpenAPI now 88 operations.
 - Dashboard home gains a "Sales — last 14 days" card: a dependency-free inline-SVG bar chart (per-day completed BDT volume, hover titles with amounts/counts, accessible `role="img"` label) plus totals.
 - Live polling: the dashboard refreshes balance, transactions and the chart every 30 s while the tab is visible (pauses when hidden), with a Live badge and an "Updated HH:MM:SS" stamp. Workspace: 674 tests pass, Astro build passes.
+
+### Wave 41 — CI verdict ✅
+- Commit `2642c25`, CI run **45762959862**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 42 — Android foreground-service reliability + Android 14 permissions (this commit)
+- **Foreground execution:** `SmsForwardWorker` now promotes itself with `setForegroundAsync` using a typed (`dataSync`) foreground notification before the HTTP call, so Android 14 / aggressive OEM builds don't kill the process mid-forward; promotion failure falls back to background execution (retries still apply). Manifest re-declares WorkManager's `SystemForegroundService` with `android:foregroundServiceType="dataSync"` and adds `FOREGROUND_SERVICE_DATA_SYNC`. New `Notify` helper owns the low-importance channel.
+- **POST_NOTIFICATIONS:** declared but never requested at runtime — on Android 13+ the permission ask now includes it alongside the SMS pair.
+- **Battery exemption:** status line shows Battery Restricted/Unrestricted, with a button opening the system exemption dialog (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` declared) — the top cause of delayed forwards on BD devices. Verified by the CI Android job (assembleDebug + assembleRelease); no local Android SDK exists.
