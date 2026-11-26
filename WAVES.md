@@ -424,3 +424,122 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - Release commit `3bcb1e4`, CI run **45766905242**: verified twice at job+step level — all 5 jobs success (0 failed steps).
 - Tag `v0.0.1` pushed at `3bcb1e4`; GitHub Release **MiraclePay v0.0.1** published (not draft) with both CI-built APKs attached and verified by read-back: `miraclepay-v0.0.1-debug.apk` (6,107,551 B) and `miraclepay-v0.0.1-release-unsigned.apk` (4,904,573 B), asset state `uploaded`.
 - **50/50 waves complete.** Final state: 678 Rust tests + 7 SDK tests green, fmt + clippy + RustSec audit gated, 89 OpenAPI operations, docs set complete (API, architecture, webhooks, errors, versioning, runbook, upgrade, backup, performance, sandbox).
+
+---
+
+# Waves 51–150 — v0.0.2 (standing order 2026-11-26: "Don't stop before another 100 waves for 0.0.2")
+
+Same discipline: local tests → secret scan → push → CI verified twice at
+job + step level → verdict logged with commit + run id. Related waves may
+share one commit/run; every wave is individually logged. Wave 150 = tag
+v0.0.2 + GitHub Release.
+
+## Roadmap (Waves 51–150)
+
+| Wave | Scope |
+|---|---|
+| 51 | Full AGPL-3.0 LICENSE file at repo root (own commit) |
+| 52 | Version bump to 0.0.2 (Cargo ×6, frontend, Android versionCode 2, docs) |
+| 53 | Persistence infra: migration 0005 `mp_records` JSONB store + persist module (snapshot/hydrate engine) |
+| 54 | Persist users + merchants |
+| 55 | Persist API keys / SMS devices |
+| 56 | Persist gateway configs |
+| 57 | Persist platform settings + FX rates |
+| 58 | Persist transactions (ledger) |
+| 59 | Persist payment links |
+| 60 | Persist invoices |
+| 61 | Persist webhook events + deliveries |
+| 62 | Persist plans + subscriptions |
+| 63 | Persist refunds + settlements |
+| 64 | Persist disputes |
+| 65 | Persist notifications |
+| 66 | Persist audit log |
+| 67 | Persist SMS state (used_trx, risk assessments) |
+| 68 | Persist KYC profiles |
+| 69 | Persist merchant settings |
+| 70 | Persist refresh tokens |
+| 71 | Startup hydration + periodic snapshot task wiring |
+| 72 | CI Postgres service + persistence round-trip integration test |
+| 73 | Full API smoke flow against real Postgres (fresh-state hydration proof) |
+| 74 | In-memory fallback regression (no DATABASE_URL unchanged) |
+| 75 | Persistence docs + /health persisted-collection stats |
+| 76 | bKash live HTTP transport (sandbox, env-gated) |
+| 77 | Stripe live HTTP: Checkout Session create |
+| 78 | PayPal live HTTP: OAuth + Orders create |
+| 79 | Nagad live HTTP (merchant API verify, env-gated) |
+| 80 | Stripe webhook receiver + signature verification |
+| 81 | PayPal webhook receiver + signature verification |
+| 82 | bKash callback/IPN endpoint + execute flow |
+| 83 | Razorpay live HTTP: Orders create |
+| 84 | Gateway transport hardening (timeouts, idempotency, sandbox audit) |
+| 85 | Live-gateway docs + NotConfigured matrix tests |
+| 86 | SMTP STARTTLS |
+| 87 | Signed Android release in CI (keystore via secrets when present) |
+| 88 | Password-reset flow |
+| 89 | Email verification flow |
+| 90 | Session management (list/revoke refresh sessions) |
+| 91 | Backup restore drill in CI |
+| 92 | Graceful shutdown + final snapshot |
+| 93 | Startup config validation (fail loudly on bad env) |
+| 94 | Health/readiness split (/health/live, /health/ready) |
+| 95 | Production checklist docs + .env.example completion |
+| 96 | Merchant onboarding wizard (frontend) |
+| 97 | Checkout theming per merchant (full branding application) |
+| 98 | Multi-currency display in dashboard (FX totals) |
+| 99 | Partial refunds UI |
+| 100 | Dispute evidence upload (API + UI) |
+| 101 | Payout schedule setting + settlement engine respect |
+| 102 | Team members / roles per merchant |
+| 103 | API key scopes enforcement |
+| 104 | Webhook event subscriptions per merchant + UI |
+| 105 | Transaction export CSV |
+| 106 | Transaction statement PDF export |
+| 107 | Dashboard global search |
+| 108 | Notification preferences per user |
+| 109 | Android: SMS sender rule filters |
+| 110 | Android: forwarding history stats |
+| 111 | Gateway test-connection (dashboard) |
+| 112 | Payment-link analytics (views, conversions) |
+| 113 | Customer receipt PDF endpoint |
+| 114 | Admin user management (suspend/activate, 2FA reset) |
+| 115 | API changelog (docs/CHANGELOG.md) |
+| 116 | E2E API test suite in CI |
+| 117 | Frontend smoke test in CI |
+| 118 | Load-test smoke in CI |
+| 119 | Dependency updates (cargo/npm) |
+| 120 | RustSec audit re-verification |
+| 121 | Accessibility round 2 |
+| 122 | Bangla i18n complete (dashboard + admin) |
+| 123 | Deployment guide: Docker |
+| 124 | Deployment guide: bare metal + systemd |
+| 125 | Deployment guide: VPS / cPanel notes |
+| 126 | Operator handbook |
+| 127 | API changelog + versioning docs for 0.0.2 |
+| 128 | SMS corpus expansion (Nagad/Rocket/Upay round 2) |
+| 129 | Webhook redelivery UI wiring |
+| 130 | Invoice email-send action |
+| 131 | Settlement CSV export |
+| 132 | Audit-log CSV export (admin) |
+| 133 | Per-API-key rate limiting |
+| 134 | Request body limits + timeout middleware |
+| 135 | OpenAPI coverage for all new endpoints |
+| 136 | v0.0.1 → v0.0.2 migration verification on real Postgres |
+| 137 | Full regression pass (workspace + frontend + SDK) |
+| 138 | Release notes drafted (docs/releases/0.0.2.md) |
+| 139 | Version sweep (no stray 0.0.1 in version fields) |
+| 140 | Security review pass + fixes |
+| 141 | Android release readiness (signing status documented) |
+| 142 | Frontend version display (footer shows app version) |
+| 143 | Worker delivery store: DB snapshot interplay documented + tested |
+| 144 | Snapshot efficiency: dirty-collection tracking + indexes |
+| 145 | Performance doc refresh with new measurements |
+| 146 | REPORT/README refresh for 0.0.2 |
+| 147 | Feature freeze + bugfix-only pass |
+| 148 | Release-candidate verification (fresh-clone instructions) |
+| 149 | v0.0.2 tag prep (notes final, log complete) |
+| 150 | Tag v0.0.2 + GitHub Release with APKs, verified by read-back |
+
+## Log (Waves 51–150)
+
+### Wave 51 — AGPL-3.0 LICENSE file (this commit)
+- The repo asserted AGPL-3.0 in README, Cargo.toml (×6) and NOTICE.md but shipped no licence text — GitHub's license API returned 404. Added the full official GNU AGPL-3.0 text (34,524 bytes, via GitHub's license API template for AGPL-3.0) as `LICENSE` at repo root. Own commit per the standing plan.
