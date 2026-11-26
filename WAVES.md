@@ -202,3 +202,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - Brand green darkened (`#0e9f6e` → `#0b7a55`, dark `#095c40`): white button text contrast ≈3.1:1 → ≈5:1 (WCAG AA).
 - `prefers-reduced-motion` support: global transition/animation dampening in CSS + the pay page's success scroll now honours the OS setting.
 - Existing strengths kept: `:focus-visible` outlines, labelled forms, `role="alert"` errors, scoped table headers.
+
+### Wave 23 — CI verdict ✅
+- Commit `dcea63f`, CI run **45757008439**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 24 — Security headers + CORS (this commit)
+- New outermost `api::security` middleware: every response (incl. 429s/errors) carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, CSP `default-src 'none'; frame-ancestors 'none'`, `Referrer-Policy: no-referrer`, HSTS 1y.
+- CORS off by default (same-origin deployment); `CORS_ALLOWED_ORIGINS` env allowlist enables it with origin echo (never a bare wildcard on credentialed requests), preflight answered by the middleware without consuming rate-limit budget.
+- Tests: origin parse/match unit tests + an integration test asserting the headers on a live router response and the absence of CORS headers by default.

@@ -8,6 +8,7 @@ pub mod openapi;
 pub mod pagination;
 pub mod rate_limit;
 pub mod routes;
+pub mod security;
 pub mod state;
 pub mod validation;
 

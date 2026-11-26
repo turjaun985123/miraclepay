@@ -429,3 +429,32 @@ async fn unauthenticated_merchants_list_is_401() {
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     assert_eq!(body["error"], json!("unauthorized"));
 }
+
+// ---------------------------------------------------------------------------
+// Wave 24: security headers on every response
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn responses_carry_security_headers() {
+    let app = app();
+    let response = app
+        .clone()
+        .oneshot(request(Method::GET, "/health", None, None, None))
+        .await
+        .expect("router must answer");
+    assert_eq!(response.status(), StatusCode::OK);
+    let headers = response.headers();
+    assert_eq!(headers.get("x-content-type-options").unwrap(), "nosniff");
+    assert_eq!(headers.get("x-frame-options").unwrap(), "DENY");
+    assert_eq!(headers.get("referrer-policy").unwrap(), "no-referrer");
+    assert!(headers
+        .get("content-security-policy")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .contains("frame-ancestors 'none'"));
+    assert!(headers.contains_key("strict-transport-security"));
+    // CORS is off by default (no allowlist configured in tests):
+    // no Access-Control-Allow-Origin may be emitted.
+    assert!(!headers.contains_key("access-control-allow-origin"));
+}

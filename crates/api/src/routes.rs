@@ -255,6 +255,9 @@ pub fn build_router(state: AppState) -> Router {
             state.clone(),
             crate::rate_limit::rate_limit_middleware,
         ))
+        // Wave 24: security headers + CORS — outermost layer, so
+        // headers are present even on rate-limit and error responses.
+        .layer(axum::middleware::from_fn(crate::security::security_middleware))
         // Shared state for every handler above.
         .with_state(state)
 }
