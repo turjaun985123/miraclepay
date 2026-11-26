@@ -376,6 +376,8 @@ import DashboardNav from '../../components/DashboardNav.astro';
   }
 
   async function copyText(text: string, button: HTMLButtonElement): Promise<void> {
+    // Shared toast feedback (Review 180 motion F-03) alongside the
+    // button label swap this page already does.
     const original = button.textContent;
     try {
       if (navigator.clipboard?.writeText) {
@@ -391,6 +393,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
         area.remove();
       }
       button.textContent = 'Copied';
+      { const { toast } = await import('../../lib/ui'); toast('Copied'); }
     } catch {
       button.textContent = 'Copy failed';
     }

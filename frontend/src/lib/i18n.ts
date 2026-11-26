@@ -87,6 +87,8 @@ const STRINGS: Record<string, { en: string; bn: string }> = {
   step_done: { en: 'Confirmed', bn: 'নিশ্চিত হয়েছে' },
   co_check_status: { en: 'Check status', bn: 'অবস্থা দেখুন' },
   co_reference: { en: 'Reference', bn: 'রেফারেন্স' },
+  co_wallet_hint: { en: 'The mobile wallet number you sent the payment from.', bn: 'যে মোবাইল ওয়ালেট নম্বর থেকে পেমেন্ট পাঠিয়েছেন।' },
+  co_trx_hint: { en: 'The transaction ID shown in your payment confirmation / SMS.', bn: 'আপনার পেমেন্ট কনফার্মেশন / SMS-এ দেখানো ট্রান্স্যাকশন আইডি।' },
   co_unavailable: { en: 'Checkout unavailable', bn: 'চেকআউট পাওয়া যাচ্ছে না' },
   co_pay: { en: 'Pay', bn: 'পেমেন্ট' },
   co_amount_due: { en: 'Amount due', bn: 'প্রদেয় পরিমাণ' },

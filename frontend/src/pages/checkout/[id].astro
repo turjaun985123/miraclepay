@@ -144,7 +144,7 @@ import Icon from '../../components/Icon.astro';
               placeholder="01XXXXXXXXX"
               required
             />
-            <p class="field-hint">
+            <p class="field-hint" data-i18n="co_wallet_hint">
               The mobile wallet number you sent the payment from.
             </p>
           </div>
@@ -152,7 +152,7 @@ import Icon from '../../components/Icon.astro';
           <div class="field">
             <label class="label" for="provider_trx_id" data-i18n="co_trx_id">Transaction ID</label>
             <input
-              class="input"
+              class="input u-uppercase"
               id="provider_trx_id"
               name="provider_trx_id"
               type="text"
@@ -162,7 +162,7 @@ import Icon from '../../components/Icon.astro';
               placeholder="e.g. 9HX7K2LMNP"
               required
             />
-            <p class="field-hint">
+            <p class="field-hint" data-i18n="co_trx_hint">
               The transaction ID shown in your payment confirmation / SMS.
             </p>
           </div>
@@ -591,8 +591,15 @@ import Icon from '../../components/Icon.astro';
     stepEls.forEach((li) => {
       const n = Number(li.getAttribute('data-step'));
       li.classList.toggle('done', n < current);
-      if (n === current) li.setAttribute('aria-current', 'step');
-      else li.removeAttribute('aria-current');
+      const label = li.querySelector('[data-i18n]')?.textContent ?? '';
+      if (n === current) {
+        li.setAttribute('aria-current', 'step');
+        li.setAttribute('aria-label', `${label} (current step)`);
+      } else {
+        li.removeAttribute('aria-current');
+        if (n < current) li.setAttribute('aria-label', `${label} (completed)`);
+        else li.removeAttribute('aria-label');
+      }
     });
   }
 
@@ -633,6 +640,7 @@ import Icon from '../../components/Icon.astro';
 
   function render(details: CheckoutView): void {
     const status = String(details.status ?? 'pending').toLowerCase();
+    if (submittedAreaEl) submittedAreaEl.hidden = true;
 
     if (refEl && refRowEl && details.transaction_id) {
       refEl.textContent = details.transaction_id;
@@ -697,6 +705,9 @@ import Icon from '../../components/Icon.astro';
         details.amount_minor,
         details.currency,
       );
+      if (submitButton && status === 'pending') {
+        submitButton.textContent = `I have paid ${amountEl.textContent} — submit details`;
+      }
     }
     fxAmountMinor = typeof details.amount_minor === 'number' ? details.amount_minor : null;
     fxCurrency = String(details.currency ?? 'BDT').toUpperCase();
@@ -805,7 +816,11 @@ import Icon from '../../components/Icon.astro';
       return;
     }
 
-    if (submitButton) submitButton.disabled = true;
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.dataset.label = submitButton.textContent ?? '';
+      submitButton.textContent = 'Submitting…';
+    }
 
     try {
       const data = {
@@ -823,13 +838,20 @@ import Icon from '../../components/Icon.astro';
         statusEl.innerHTML = statusBadge('processing');
       }
       if (submittedAreaEl) submittedAreaEl.hidden = false;
+      // Review 180 P0: confirmation must be able to LAND on this
+      // page — start the same polling the processing state uses.
+      setSteps(3);
+      if (pollTimer === undefined) startPolling();
     } catch (error) {
       showFormError(
         error instanceof Error && error.message
           ? error.message
           : 'Your payment details could not be submitted. Please check them and try again.',
       );
-      if (submitButton) submitButton.disabled = false;
+      if (submitButton) {
+        submitButton.disabled = false;
+        if (submitButton.dataset.label) submitButton.textContent = submitButton.dataset.label;
+      }
     }
   });
 

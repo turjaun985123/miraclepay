@@ -24,6 +24,14 @@ const {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
     <meta name="color-scheme" content="light dark" />
+    <script is:inline>
+      // Apply the stored theme before first paint (Wave 198):
+      // data-theme="dark"/"light" overrides prefers-color-scheme.
+      try {
+        var t = localStorage.getItem('mp-theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch (e) { /* storage unavailable: follow the system */ }
+    </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>MiraclePay — {title}</title>
     <style>
@@ -148,6 +156,12 @@ const {
       /* Dialog (native <dialog>, Wave 154) */
       dialog.mp-dialog { border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-surface-raised); color: var(--color-ink); box-shadow: var(--shadow-xl); padding: var(--space-6); max-width: min(28rem, calc(100vw - 2rem)); z-index: var(--z-modal); }
       dialog.mp-dialog::backdrop { background: var(--color-overlay); }
+      @keyframes mp-dialog-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+      dialog.mp-dialog[open] { animation: mp-dialog-in var(--motion-base) var(--ease-out); }
+      .btn { transition: background var(--motion-fast) var(--ease-out), transform var(--motion-instant) var(--ease-out), opacity var(--motion-fast) var(--ease-out); }
+      .btn:active { transform: scale(0.98); }
+      .steps li { transition: color var(--motion-base) var(--ease-out); }
+      .steps .step-dot { transition: background var(--motion-base) var(--ease-out), color var(--motion-base) var(--ease-out); }
 
       /* Steps (checkout, onboarding) */
       .steps { display: flex; gap: var(--space-2); list-style: none; margin: 0 0 var(--space-5); padding: 0; }
@@ -181,6 +195,9 @@ const {
       .gateway-card:has(input:checked) { border-color: var(--color-brand); background: var(--color-brand-soft); box-shadow: 0 0 0 1px var(--color-brand); }
       .gateway-card input { accent-color: var(--color-brand); margin: 0 0 var(--space-1); width: 1.125rem; height: 1.125rem; }
       .gateway-name { font-weight: 700; }
+      .gateway-card:has(input:checked) .gateway-name::after { content: " ✓"; color: var(--color-brand); }
+      .gateway-card:focus-within { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+      .u-uppercase { text-transform: uppercase; }
       .gateway-hint { font-size: var(--text-sm); color: var(--color-muted); }
       .trust-row { display: flex; align-items: center; justify-content: center; gap: var(--space-2); margin-top: var(--space-4); text-align: center; font-size: var(--text-base-sm); color: var(--color-muted); }
       .trust-row svg { color: var(--color-brand); flex: none; }
@@ -232,6 +249,16 @@ const {
         el.setAttribute('tabindex', '0');
         el.setAttribute('role', 'region');
         if (!el.getAttribute('aria-label')) el.setAttribute('aria-label', 'Scrollable table');
+      });
+      // Theme toggle (Wave 198): any [data-theme-toggle] button
+      // cycles system -> dark -> light, persisted in localStorage.
+      document.querySelectorAll('[data-theme-toggle]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const cur = document.documentElement.dataset.theme;
+          const next = cur === 'dark' ? 'light' : 'dark';
+          document.documentElement.dataset.theme = next;
+          try { localStorage.setItem('mp-theme', next); } catch (e) { /* ignore */ }
+        });
       });
       // Review 195 a11y: every data table gets a caption naming it
       // (from its section heading) when the markup has none.

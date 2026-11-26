@@ -32,6 +32,11 @@ const BADGES: Record<string, { cls: string; label: string }> = {
   issued: { cls: "badge-pending", label: "Issued" },
   overdue: { cls: "badge-failed", label: "Overdue" },
   void: { cls: "badge", label: "Void" },
+  delivered: { cls: "badge-success", label: "Delivered" },
+  queued: { cls: "badge-pending", label: "Queued" },
+  retrying: { cls: "badge-pending", label: "Retrying" },
+  dead_letter: { cls: "badge-failed", label: "Dead letter" },
+  deadletter: { cls: "badge-failed", label: "Dead letter" },
   voided: { cls: "badge", label: "Void" },
   resolved: { cls: "badge-success", label: "Resolved" },
 };

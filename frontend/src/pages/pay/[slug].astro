@@ -146,6 +146,9 @@ import Icon from '../../components/Icon.astro';
         merchant, MiraclePay verifies it automatically — you don&rsquo;t need
         to upload a screenshot or do anything else on this page.
       </p>
+      <p>
+        <a id="success-track-link" class="btn btn-ghost" href="#" hidden>I've sent the money — track this payment</a>
+      </p>
       <p class="muted small" data-i18n="pay_keep_note">
         Keep your transaction ID and reference until the payment is confirmed.
       </p>
@@ -216,7 +219,7 @@ import Icon from '../../components/Icon.astro';
 </style>
 
 <script>
-  import { apiFetch, formatMoney, payLink, publicLink } from '../../lib/api';
+  import { apiFetch, checkoutDetails, formatMoney, payLink, publicLink } from '../../lib/api';
   import { applyI18n, getLang, otherLang, setLang, t, toggleLabel } from '../../lib/i18n';
   import { brandAccent, clearFieldError, copyText, fieldError } from '../../lib/ui';
 
@@ -563,7 +566,11 @@ import Icon from '../../components/Icon.astro';
       return;
     }
 
-    if (submitButton) submitButton.disabled = true;
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.dataset.label = submitButton.textContent ?? '';
+      submitButton.textContent = 'Starting…';
+    }
 
     try {
       const result = (await payLink(slug, {
@@ -585,15 +592,49 @@ import Icon from '../../components/Icon.astro';
       setSteps(3);
       if (cardEl) cardEl.hidden = true;
       if (successEl) successEl.hidden = false;
+      // Review 180 P0/P1: the success state is a dead end today.
+      // Deep-link to the hosted checkout tracker for this
+      // transaction and poll it so confirmation lands here too.
+      const trackLink = document.getElementById('success-track-link') as HTMLAnchorElement | null;
+      if (trackLink && transactionId) {
+        trackLink.href = `/checkout/${encodeURIComponent(transactionId)}`;
+        trackLink.hidden = false;
+      }
+      if (transactionId) {
+        let tries = 0;
+        const timer = window.setInterval(() => {
+          tries += 1;
+          if (tries > 30) { window.clearInterval(timer); return; }
+          void checkoutDetails(transactionId).then((d) => {
+            const st = String((d as { status?: string }).status ?? '').toLowerCase();
+            if (st === 'completed' || st === 'paid' || st === 'success') {
+              window.clearInterval(timer);
+              const body = successEl?.querySelector('[data-i18n="pay_started_body"]');
+              if (body) body.textContent = 'Payment confirmed — the merchant has been notified. Thank you!';
+            }
+          }).catch(() => { /* keep polling */ });
+        }, 6000);
+      }
       // Respect reduced-motion preferences (Wave 23).
       const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       successEl?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
     } catch (error) {
       showFormError(error instanceof Error ? error.message : t('pay_err_start'));
-      if (submitButton) submitButton.disabled = false;
+      if (submitButton) {
+        submitButton.disabled = false;
+        if (submitButton.dataset.label) submitButton.textContent = submitButton.dataset.label;
+      }
     }
   });
 
+  amountInput?.addEventListener('input', () => {
+    if (fixedAmountMinor === null && submitButton) {
+      const minor = payableMinor();
+      submitButton.textContent = minor !== null
+        ? t('pay_now_amount', { amount: formatMoney(minor, currency) })
+        : t('pay_now');
+    }
+  });
   phoneInput?.addEventListener('input', () => clearFieldError(phoneInput));
   emailInput?.addEventListener('input', () => clearFieldError(emailInput));
   amountInput?.addEventListener('input', () => clearFieldError(amountInput));

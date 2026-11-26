@@ -603,6 +603,11 @@ import DashboardNav from '../../components/DashboardNav.astro';
             </div>`,
           )
           .join('');
+        // Keyboard/SR access for the bar chart (Review 180 F-5):
+        // the bars are decorative spans, so summarise as one image.
+        dailyEl.setAttribute('role', 'img');
+        dailyEl.setAttribute('aria-label',
+          'Daily transactions: ' + daily.map((d) => `${d.date}: ${d.count}`).join(', '));
       }
       const body = document.getElementById('analytics-gateways-body');
       if (body) {
@@ -616,6 +621,11 @@ import DashboardNav from '../../components/DashboardNav.astro';
             </tr>`,
           )
           .join('');
+        // Keyboard/SR access for the bar chart (Review 180 F-5):
+        // the bars are decorative spans, so summarise as one image.
+        dailyEl.setAttribute('role', 'img');
+        dailyEl.setAttribute('aria-label',
+          'Daily transactions: ' + daily.map((d) => `${d.date}: ${d.count}`).join(', '));
       }
     } catch (error) {
       showError(

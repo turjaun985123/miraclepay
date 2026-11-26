@@ -275,6 +275,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
 
 <script>
   import { apiFetch, getToken, listMerchants } from '../../lib/api';
+  import { statusBadge } from '../../lib/ui';
   import type { Merchant } from '../../lib/api';
 
   // ── Local shapes for the webhook endpoints ─────────────────────
@@ -448,37 +449,6 @@ import DashboardNav from '../../components/DashboardNav.astro';
     return td;
   }
 
-  function statusBadge(status: string): HTMLSpanElement {
-    const badge = document.createElement('span');
-    const normalised = status.toLowerCase();
-    let kind = '';
-    if (
-      normalised === 'delivered' ||
-      normalised === 'success' ||
-      normalised === 'succeeded' ||
-      normalised === 'completed'
-    ) {
-      kind = 'badge-success';
-    } else if (
-      normalised === 'pending' ||
-      normalised === 'queued' ||
-      normalised === 'retrying'
-    ) {
-      kind = 'badge-pending';
-    } else if (
-      normalised === 'failed' ||
-      normalised === 'dead_letter' ||
-      normalised === 'deadletter'
-    ) {
-      kind = 'badge-failed';
-    }
-    badge.className = kind ? `badge ${kind}` : 'badge';
-    badge.textContent =
-      normalised === 'dead_letter' || normalised === 'deadletter'
-        ? 'Dead letter'
-        : status;
-    return badge;
-  }
 
   // ── State ──────────────────────────────────────────────────────
   let merchantId: string | null = null;
@@ -626,7 +596,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
       row.appendChild(cell(delivery.url ?? '—', 'mono small url-cell'));
 
       const statusCell = document.createElement('td');
-      statusCell.appendChild(statusBadge(delivery.status ?? 'unknown'));
+      statusCell.innerHTML = statusBadge(delivery.status ?? 'unknown');
       row.appendChild(statusCell);
 
       row.appendChild(

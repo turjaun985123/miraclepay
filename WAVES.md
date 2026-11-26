@@ -899,3 +899,19 @@ accessibility final pass (WCAG 2.2 AA) · 199 consistency sweep
 - Strings: 7 → 52 entries; all layout literals extracted.
 - Verification: CI Android job (assembleDebug + release) — no
   Android SDK on this VM; verdict logged below.
+- CI run **45809840897** (commit `def77d8`): 5/6 jobs success;
+  Android job FAILED at resource compile — strings.xml invalid
+  escapes (bare apostrophes + literal \u sequences from the new
+  strings). Fixed in `38ee15b` (escaped apostrophes, real UTF-8
+  → and … characters); re-verdict on the next run below.
+
+### Waves 196–199 — Polish pass (in progress)
+- Inline styles: webhooks 9 → 0, admin 6 → 1 (the remaining one
+  is the data-driven chart-bar width), forgot-password hr →
+  .auth-divider class. Frontend total: 1 inline style left.
+- Accessibility final: every data table gains a visually-hidden
+  caption (from its section heading) via the BaseLayout enhancer;
+  DESIGN.md amendments recorded (border-strong value, motion
+  token names, danger-text token, alias removal moved to v0.0.4).
+- Bundle: dist 388K total, shared CSS 22.5K — no splitting work
+  needed; pages ship per-page JS only.

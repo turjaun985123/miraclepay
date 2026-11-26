@@ -551,6 +551,7 @@ x-device-key: mp_live_&hellip;your key&hellip;</code></pre>
     if (!rawKey) return;
     try {
       await navigator.clipboard.writeText(rawKey);
+      { const { toast } = await import('../../lib/ui'); toast('Copied'); }
       if (newKeyCopied) newKeyCopied.hidden = false;
     } catch {
       // Clipboard unavailable: the key is selectable in the box itself.
