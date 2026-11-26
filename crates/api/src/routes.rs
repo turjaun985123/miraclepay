@@ -28,8 +28,8 @@ use axum::{
 
 use crate::handlers::{
     admin, api_keys, auth, auth_flows, disputes, fx, gateways, invoices, kyc, merchants,
-    payment_links, payments, product, provider_webhooks, settlements, sms, subscriptions,
-    transactions, webhooks,
+    payment_links, payments, plugins_admin, product, provider_webhooks, settlements, sms,
+    subscriptions, transactions, webhooks,
 };
 use crate::state::AppState;
 
@@ -233,6 +233,10 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/transactions/:id/refunds",
             post(transactions::create_refund),
         )
+        .route(
+            "/api/v1/transactions/:id/verify",
+            post(plugins_admin::verify_transaction),
+        )
         .route("/api/v1/refunds", get(transactions::list_refunds))
         .route(
             "/api/v1/refunds/:id/settle",
@@ -410,6 +414,27 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/v1/admin/merchants/:id/status",
             post(admin::set_merchant_status),
+        )
+        .route("/api/v1/admin/plugins", get(plugins_admin::list_plugins))
+        .route(
+            "/api/v1/admin/plugins/:id/enable",
+            post(plugins_admin::enable_plugin),
+        )
+        .route(
+            "/api/v1/admin/plugins/:id/disable",
+            post(plugins_admin::disable_plugin),
+        )
+        .route(
+            "/api/v1/admin/plugins/:id/config",
+            get(plugins_admin::get_plugin_config).put(plugins_admin::put_plugin_config),
+        )
+        .route(
+            "/api/v1/admin/plugins/:id/invoke",
+            post(plugins_admin::invoke_plugin),
+        )
+        .route(
+            "/api/v1/admin/plugins/:id/logs",
+            get(plugins_admin::plugin_logs),
         )
         .route("/api/v1/admin/audit", get(admin::list_audit))
         .route(

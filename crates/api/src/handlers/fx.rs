@@ -5,9 +5,11 @@
 //! - `GET /fx/convert?from=USD&to=BDT&amount_minor=10000` — convert
 //!   a minor-unit amount with `miraclepay_domain::fx::convert`.
 //!
-//! Both require authentication (they expose platform
-//! configuration); neither prices a payment — checkout amounts are
-//! always taken in the payment's own currency.
+//! The rate table is public display data so hosted pay/checkout
+//! pages can show an indicative converted amount to anonymous
+//! visitors. Conversion remains authenticated. Neither endpoint
+//! prices a payment — checkout amounts are always taken in the
+//! payment's own currency.
 
 use axum::extract::{Query, State};
 use axum::response::Json;
@@ -20,11 +22,8 @@ use crate::auth_middleware::AuthUser;
 use crate::dto::ApiError;
 use crate::state::AppState;
 
-/// `GET /fx/rates` — the configured FX table.
-pub async fn list_rates(
-    _auth: AuthUser,
-    State(state): State<AppState>,
-) -> Result<Json<Value>, ApiError> {
+/// `GET /fx/rates` — the configured FX table (public display data).
+pub async fn list_rates(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
     let settings = state.settings.read().await;
     Ok(Json(json!({
         "base": "BDT",

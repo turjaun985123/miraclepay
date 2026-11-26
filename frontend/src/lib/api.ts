@@ -816,7 +816,7 @@ export function listTransactions(
 
 export function refund(txId: string, data: RefundData = {}): Promise<Transaction> {
   return apiFetch<Transaction>(
-    `/api/v1/transactions/${encodeURIComponent(txId)}/refund`,
+    `/api/v1/transactions/${encodeURIComponent(txId)}/refunds`,
     { method: 'POST', body: jsonBody(data) },
   );
 }

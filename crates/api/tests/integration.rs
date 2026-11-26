@@ -443,6 +443,139 @@ async fn unauthenticated_merchants_list_is_401() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+async fn plugin_admin_and_verify_routes_are_registered() {
+    let app = app();
+    let token = register_and_login(&app, "plugin-routes@example.com").await;
+
+    // A normal merchant token reaches the admin guard (403), rather
+    // than falling through to the router's 404 fallback. This is a
+    // regression test for handlers existing without route wiring.
+    for (method, uri) in [
+        (Method::GET, "/api/v1/admin/plugins".to_string()),
+        (
+            Method::POST,
+            "/api/v1/admin/plugins/example/enable".to_string(),
+        ),
+        (
+            Method::POST,
+            "/api/v1/admin/plugins/example/disable".to_string(),
+        ),
+        (
+            Method::GET,
+            "/api/v1/admin/plugins/example/config".to_string(),
+        ),
+        (
+            Method::PUT,
+            "/api/v1/admin/plugins/example/config".to_string(),
+        ),
+        (
+            Method::POST,
+            "/api/v1/admin/plugins/example/invoke".to_string(),
+        ),
+        (
+            Method::GET,
+            "/api/v1/admin/plugins/example/logs".to_string(),
+        ),
+    ] {
+        let body = if method == Method::PUT {
+            Some(json!({}))
+        } else if uri.ends_with("/invoke") {
+            Some(json!({"operation": "ping", "args": {}}))
+        } else {
+            None
+        };
+        let (status, response) = send(&app, request(method, &uri, Some(&token), None, body)).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{uri}: {response}");
+    }
+
+    // The transaction verify route is also wired: a real token gets
+    // the handler's transaction-level 404, not the router fallback.
+    let (status, body) = send(
+        &app,
+        request(
+            Method::POST,
+            "/api/v1/transactions/txn_missing/verify",
+            Some(&token),
+            None,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "verify route: {body}");
+}
+
+#[tokio::test]
+async fn public_fx_rates_and_checkout_branding_are_served() {
+    let app = app();
+    let (token, merchant_id) = setup_merchant_with_bkash(&app, "branding@example.com").await;
+
+    // FX rates are public, non-sensitive display data used by the
+    // anonymous hosted pay/checkout pages.
+    let (status, body) = send(
+        &app,
+        request(Method::GET, "/api/v1/fx/rates", None, None, None),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "public fx rates: {body}");
+    assert_eq!(body["base"], json!("BDT"));
+    assert!(body["rates"].is_array());
+
+    // Round-trip the merchant settings with branding fields set.
+    let (status, mut settings) = send(
+        &app,
+        request(
+            Method::GET,
+            &format!("/api/v1/merchants/{merchant_id}/settings"),
+            Some(&token),
+            None,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "get settings: {settings}");
+    settings["brand_name"] = json!("Branded Shop");
+    settings["brand_color"] = json!("#123abc");
+    settings["logo_url"] = json!("https://example.com/logo.png");
+    settings["checkout_message"] = json!("Thanks for shopping with us");
+    let (status, body) = send(
+        &app,
+        request(
+            Method::PUT,
+            &format!("/api/v1/merchants/{merchant_id}/settings"),
+            Some(&token),
+            None,
+            Some(settings),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "put settings: {body}");
+
+    let (transaction_id, _) = create_bkash_payment(&app, &token, &merchant_id).await;
+    let (status, body) = send(
+        &app,
+        request(
+            Method::GET,
+            &format!("/api/v1/checkout/{transaction_id}"),
+            None,
+            None,
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "checkout details: {body}");
+    assert_eq!(body["branding"]["display_name"], json!("Branded Shop"));
+    assert_eq!(body["branding"]["brand_color"], json!("#123abc"));
+    assert_eq!(
+        body["branding"]["logo_url"],
+        json!("https://example.com/logo.png")
+    );
+    assert_eq!(
+        body["branding"]["checkout_message"],
+        json!("Thanks for shopping with us")
+    );
+}
+
+#[tokio::test]
 async fn responses_carry_security_headers() {
     let app = app();
     let response = app

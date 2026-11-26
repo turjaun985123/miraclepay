@@ -412,6 +412,30 @@ pub async fn checkout_details(
             .unwrap_or_default()
     };
 
+    // Wave 98 correction: hosted checkout uses the same merchant
+    // branding shape as the public payment-link view. Settings are
+    // optional; an unbranded merchant gets null fields and the
+    // platform default look.
+    let branding = {
+        let all_settings = state.merchant_settings.read().await;
+        match all_settings.get(&transaction.merchant_id) {
+            Some(settings) => json!({
+                "display_name": settings.brand_name,
+                "brand_name": settings.brand_name,
+                "brand_color": settings.brand_color,
+                "logo_url": settings.logo_url,
+                "checkout_message": settings.checkout_message,
+            }),
+            None => json!({
+                "display_name": null,
+                "brand_name": null,
+                "brand_color": null,
+                "logo_url": null,
+                "checkout_message": null,
+            }),
+        }
+    };
+
     Ok(Json(json!({
         "transaction_id": transaction.id,
         "amount": transaction.amount.format_display(),
@@ -423,6 +447,10 @@ pub async fn checkout_details(
         "merchant": business_name.clone(),
         "merchant_name": business_name.clone(),
         "business_name": business_name,
+        "branding": branding.clone(),
+        "brand_color": branding["brand_color"],
+        "logo_url": branding["logo_url"],
+        "checkout_message": branding["checkout_message"],
     })))
 }
 

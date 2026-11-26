@@ -550,7 +550,7 @@ const ROUTES: &[(&str, &[&str], &str, &str, bool)] = &[
         &["get"],
         "FX rate table (BDT-based, indicative)",
         "FX",
-        true,
+        false,
     ),
     (
         "/api/v1/fx/convert",

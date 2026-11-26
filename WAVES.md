@@ -656,9 +656,11 @@ v0.0.2 + GitHub Release.
 - Wave 99 — Partial refunds UI — the prompt() is gone:
   transactions now open an inline refund panel (amount +
   reason + confirm/cancel) posting to the same refunds API.
-- Wave 104 — Webhook event subscriptions UI — create-endpoint
-  form gains checkboxes for the nine platform event types,
-  stored in the endpoint's `events` filter.
+- Wave 104 — Webhook events UI — the webhooks page lists the
+  twelve platform event types as a reference section. The API's
+  merchant webhook model has no per-endpoint `events` filter,
+  so no subscription field was invented and no filter is
+  claimed; per-endpoint subscriptions remain future work.
 - Wave 107 — Notification preferences UI — delivered as part
   of the Wave 97 settings page.
 - Wave 115 — Dashboard onboarding + search UI — the dashboard
@@ -703,6 +705,21 @@ v0.0.2 + GitHub Release.
 - Wave 148 — Pre-release verification — full local pass:
   fmt, clippy `-D warnings`, workspace tests, PG tests, SDK
   tests, frontend build, E2E + load smokes.
+
+## Post-RC correction (2026-11-26)
+
+A frontend worker's review caught defects the coordinator's
+route-level checks had missed: the plugin admin and transaction
+verify handlers existed and were in the OpenAPI table but were
+not registered in `routes.rs`; checkout details carried no
+merchant branding; `/fx/rates` required auth although the public
+pay/checkout pages need it; and the frontend `refund()` helper
+used the singular `/refund` path. All four are fixed, with
+router-level regression tests (`plugin_admin_and_verify_routes_
+are_registered`, `public_fx_rates_and_checkout_branding_are_
+served`). The v0.0.2 tag and release were re-pointed to the
+corrected commit before final delivery, with APKs rebuilt by
+that commit's CI run.
 
 ## Wave 149–150 — release (2026-11-26)
 
