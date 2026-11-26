@@ -793,3 +793,7 @@ accessibility final pass (WCAG 2.2 AA) · 199 consistency sweep
   strings; empty brand surface (no logo/favicon/icons).
 - DESIGN.md adopts 8 principles, the 3-layer token system and
   the per-surface "done" definitions. CI verdict logged below.
+
+### Wave 151 — CI verdict ✅
+- Commit `1bb2b06`, CI run **45807148059**: verified twice at
+  job+step level — all 6 jobs success (0 failed steps).

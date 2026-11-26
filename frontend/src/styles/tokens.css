@@ -1,0 +1,131 @@
+/* MiraclePay design tokens — Waves 152–157 (DESIGN.md, design-audit/03).
+   Three layers: primitives (--p-*, the ONLY hex values in the frontend),
+   semantics (--color-* etc.; dark mode re-points only this layer),
+   and legacy aliases for the pre-token names.
+   Breakpoints (named constants, px only): --bp-sm 480, --bp-md 640,
+   --bp-lg 900, --bp-xl 1120. CSS vars can't drive @media; use the
+   literal px values. */
+
+:root {
+  /* ── Primitives ─────────────────────────────── */
+  --p-green-700: #095c40; --p-green-600: #0b7a55; --p-green-500: #0e9f6e; --p-green-50: #e6f6ef;
+  --p-violet-700: #6d28d9; --p-violet-300: #a78bfa;
+  --p-red-700: #b42318; --p-red-600: #d92d20; --p-red-400: #f97066; --p-red-300: #f04438; --p-red-50: #fef3f2;
+  --p-amber-700: #b54708; --p-amber-600: #dc6803; --p-amber-400: #fdb022; --p-amber-50: #fffaeb;
+  --p-blue-600: #2563eb; --p-blue-300: #84adff; --p-blue-50: #eff6ff;
+  --p-gray-950: #0b1220; --p-gray-900: #101828; --p-gray-800: #1d2939; --p-gray-700: #344054;
+  --p-gray-600: #475467; --p-gray-500: #667085; --p-gray-400: #98a2b3; --p-gray-300: #d0d5dd;
+  --p-gray-200: #e4e7ec; --p-gray-100: #f2f4f7; --p-gray-50: #f6f7fb;
+  --p-white: #ffffff; --p-black: #000000;
+  --p-dark-brand: #34c98e; --p-dark-brand-hover: #5ed6a5; --p-dark-brand-soft: #0c2b21; --p-dark-on-brand: #06231a;
+
+  /* ── Semantic colour (light) ────────────────── */
+  --color-bg: var(--p-gray-50);
+  --color-surface: var(--p-white);
+  --color-surface-raised: var(--p-white);
+  --color-surface-sunken: var(--p-gray-100);
+  --color-ink: var(--p-gray-900);
+  --color-ink-2: var(--p-gray-700);
+  --color-muted: var(--p-gray-500);
+  --color-border: var(--p-gray-200);
+  --color-border-strong: #7d879c; /* ≥3:1 on surface — control boundaries (WCAG 1.4.11) */
+  --color-brand: var(--p-green-600);
+  --color-brand-hover: var(--p-green-700);
+  --color-brand-soft: var(--p-green-50);
+  --color-on-brand: var(--p-white);
+  --color-accent: var(--p-violet-700); /* marketing only, never interactive */
+  --color-danger: var(--p-red-600);
+  --color-danger-hover: var(--p-red-700);
+  --color-danger-text: var(--p-red-700); /* 6.05:1 on danger-soft (WCAG AA) */
+  --color-danger-soft: var(--p-red-50);
+  --color-warning: var(--p-amber-700);
+  --color-warning-soft: var(--p-amber-50);
+  --color-info: var(--p-blue-600);
+  --color-info-soft: var(--p-blue-50);
+  --color-focus: var(--p-green-600);
+  --color-overlay: rgb(16 24 40 / 0.48);
+  --color-chart-1: var(--p-green-600); --color-chart-2: var(--p-blue-600);
+  --color-chart-3: var(--p-violet-700); --color-chart-4: var(--p-amber-600); --color-chart-5: var(--p-gray-500);
+
+  /* ── Type ───────────────────────────────────── */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    "Hind Siliguri", "Noto Sans Bengali", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --text-xs: 0.75rem; --text-sm: 0.8125rem; --text-base-sm: 0.875rem;
+  --text-body: 0.9375rem; --text-base: 1rem; --text-lg: 1.125rem;
+  --text-xl: 1.375rem; --text-2xl: 1.5rem; --text-3xl: 1.75rem;
+  --text-display: clamp(2.25rem, 6vw, 3.75rem);
+  --lh-tight: 1.25; --lh-body: 1.55;
+  --tracking-caps: 0.04em; --tracking-tight: -0.02em;
+
+  /* ── Spacing (4px base) ─────────────────────── */
+  --space-0: 0; --space-px: 1px; --space-0_5: 0.125rem; --space-1: 0.25rem;
+  --space-1_5: 0.375rem; --space-2: 0.5rem; --space-2_5: 0.625rem; --space-3: 0.75rem;
+  --space-3_5: 0.875rem; --space-4: 1rem; --space-5: 1.25rem; --space-6: 1.5rem;
+  --space-8: 2rem; --space-10: 2.5rem; --space-12: 3rem; --space-18: 4.5rem;
+  --pad-card: var(--space-5); --pad-card-lg: var(--space-6);
+  --gap-grid: var(--space-4); --section-y: var(--space-10);
+  --container: 70rem; --container-narrow: 35rem; --container-auth: 26rem; --measure: 42rem;
+
+  /* ── Radius / shadow / motion / z ───────────── */
+  --radius-none: 0; --radius-xs: 4px; --radius-sm: 6px; --radius-md: 8px;
+  --radius-lg: 12px; --radius-xl: 16px; --radius-full: 999px;
+  --shadow-xs: 0 1px 2px rgb(16 24 40 / 0.06);
+  --shadow-sm: 0 1px 2px rgb(16 24 40 / 0.06), 0 1px 3px rgb(16 24 40 / 0.08);
+  --shadow-md: 0 4px 8px -2px rgb(16 24 40 / 0.1), 0 2px 4px -2px rgb(16 24 40 / 0.06);
+  --shadow-lg: 0 10px 25px rgb(15 23 42 / 0.08);
+  --shadow-xl: 0 20px 40px -12px rgb(16 24 40 / 0.25);
+  --motion-instant: 75ms; --motion-fast: 120ms; --motion-base: 200ms; --motion-slow: 320ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1); --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --z-base: 0; --z-sticky: 50; --z-nav: 100; --z-dropdown: 200;
+  --z-overlay: 300; --z-modal: 310; --z-toast: 400;
+  --target-min: 2.75rem; /* 44px touch target floor */
+
+  /* ── Legacy aliases (one release) ───────────── */
+  --bg: var(--color-bg); --surface: var(--color-surface); --ink: var(--color-ink);
+  --muted: var(--color-muted); --brand: var(--color-brand); --brand-dark: var(--color-brand-hover);
+  --brand-soft: var(--color-brand-soft); --border: var(--color-border);
+  --danger: var(--color-danger); --danger-soft: var(--color-danger-soft);
+  --warning: var(--color-warning); --warning-soft: var(--color-warning-soft);
+  --accent: var(--color-info); --brand-green: var(--color-brand);
+  --radius: var(--radius-lg); --shadow: var(--shadow-sm);
+  --font: var(--font-sans);
+}
+
+/* ── Dark mode: re-point the semantic layer only ── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg: var(--p-gray-950); --color-surface: var(--p-gray-900);
+    --color-surface-raised: var(--p-gray-800); --color-surface-sunken: var(--p-gray-950);
+    --color-ink: var(--p-gray-100); --color-ink-2: var(--p-gray-300); --color-muted: var(--p-gray-400);
+    --color-border: var(--p-gray-700); --color-border-strong: var(--p-gray-400);
+    --color-brand: var(--p-dark-brand); --color-brand-hover: var(--p-dark-brand-hover);
+    --color-brand-soft: var(--p-dark-brand-soft); --color-on-brand: var(--p-dark-on-brand);
+    --color-accent: var(--p-violet-300);
+    --color-danger: var(--p-red-400); --color-danger-hover: var(--p-red-300);
+    --color-danger-text: var(--p-red-400); --color-danger-soft: #3a1512;
+    --color-warning: var(--p-amber-400); --color-warning-soft: #342605;
+    --color-info: var(--p-blue-300); --color-info-soft: #10264d;
+    --color-focus: var(--p-dark-brand); --color-overlay: rgb(0 0 0 / 0.64);
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4), 0 1px 3px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 4px 8px -2px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+    --shadow-lg: 0 10px 25px rgb(0 0 0 / 0.4); --shadow-xl: 0 20px 40px -12px rgb(0 0 0 / 0.5);
+  }
+}
+:root[data-theme="dark"] {
+  --color-bg: var(--p-gray-950); --color-surface: var(--p-gray-900);
+  --color-surface-raised: var(--p-gray-800); --color-surface-sunken: var(--p-gray-950);
+  --color-ink: var(--p-gray-100); --color-ink-2: var(--p-gray-300); --color-muted: var(--p-gray-400);
+  --color-border: var(--p-gray-700); --color-border-strong: var(--p-gray-400);
+  --color-brand: var(--p-dark-brand); --color-brand-hover: var(--p-dark-brand-hover);
+  --color-brand-soft: var(--p-dark-brand-soft); --color-on-brand: var(--p-dark-on-brand);
+  --color-accent: var(--p-violet-300);
+  --color-danger: var(--p-red-400); --color-danger-hover: var(--p-red-300);
+  --color-danger-text: var(--p-red-400); --color-danger-soft: #3a1512;
+  --color-warning: var(--p-amber-400); --color-warning-soft: #342605;
+  --color-info: var(--p-blue-300); --color-info-soft: #10264d;
+  --color-focus: var(--p-dark-brand); --color-overlay: rgb(0 0 0 / 0.64);
+}
+
+/* Bangla typography rules (Wave 156): generous leading, no caps tricks. */
+:lang(bn) { line-height: 1.7; letter-spacing: normal !important; text-transform: none !important; }
