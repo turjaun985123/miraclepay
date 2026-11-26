@@ -419,3 +419,8 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 ### Wave 50 — v0.0.1 release (this commit)
 - Tag `v0.0.1` on this commit; GitHub Release with the notes below and the CI-built Android APKs (debug + release) attached from this commit's run.
 - Release notes summary: MiraclePay v0.0.1 — Rust/Axum API (89 OpenAPI operations), Astro dashboard + hosted checkout, Android SMS forwarder; SMS auto-verification with the Wave 8/31 safety rules; webhooks with v1+v2 signing, retries and dead-letter; subscriptions, settlements, refunds, disputes, KYC, fraud signals, FX conversion, SMTP notifications, sandbox mode; Postgres wiring (pool + migrations; in-memory collections remain the v0.0.1 store of record — stated plainly), Docker + compose, Prometheus metrics, structured logs, error envelope, API v1 policy; 678 Rust tests + 7 SDK tests; fmt + clippy -D warnings + RustSec audit all gated in CI.
+
+### Wave 50 — CI verdict ✅ + RELEASED
+- Release commit `3bcb1e4`, CI run **45766905242**: verified twice at job+step level — all 5 jobs success (0 failed steps).
+- Tag `v0.0.1` pushed at `3bcb1e4`; GitHub Release **MiraclePay v0.0.1** published (not draft) with both CI-built APKs attached and verified by read-back: `miraclepay-v0.0.1-debug.apk` (6,107,551 B) and `miraclepay-v0.0.1-release-unsigned.apk` (4,904,573 B), asset state `uploaded`.
+- **50/50 waves complete.** Final state: 678 Rust tests + 7 SDK tests green, fmt + clippy + RustSec audit gated, 89 OpenAPI operations, docs set complete (API, architecture, webhooks, errors, versioning, runbook, upgrade, backup, performance, sandbox).
