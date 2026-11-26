@@ -13,7 +13,7 @@
 
 use async_trait::async_trait;
 
-use crate::traits::{manual_instructions, PaymentGateway};
+use crate::traits::PaymentGateway;
 use crate::types::{
     GatewayConfig, GatewayError, GatewayId, InitiatedPayment, PaymentRequest, RefundRequest,
     RefundResult, VerifyResult,
@@ -47,11 +47,8 @@ impl JazzcashGateway {
     /// configured: a config is present, it is enabled, and it carries a
     /// non-empty merchant number.
     fn merchant_number(&self) -> Option<&str> {
-        self.config
-            .as_ref()
-            .filter(|config| config.enabled)
-            .and_then(|config| config.merchant_number.as_deref())
-            .filter(|number| !number.trim().is_empty())
+        // Wave 29: valid Pakistani mobile required (see `pk_manual`).
+        crate::pk_manual::merchant_number(self.config.as_ref())
     }
 }
 
@@ -76,21 +73,14 @@ impl PaymentGateway for JazzcashGateway {
     }
 
     async fn initiate(&self, req: &PaymentRequest) -> Result<InitiatedPayment, GatewayError> {
-        let merchant_number = self
-            .merchant_number()
-            .ok_or_else(|| GatewayError::NotConfigured("jazzcash".into()))?;
-
-        Ok(InitiatedPayment {
-            provider_ref: req.reference.clone(),
-            redirect_url: None,
-            instructions: Some(manual_instructions(
-                "JazzCash",
-                merchant_number,
-                &req.amount.format_display(),
-                &req.reference,
-            )),
-            expires_at: None,
-        })
+        // Wave 29: shared PK-manual gate — valid PK mobile config +
+        // PKR-only amounts (see `pk_manual::checked_manual_initiate`).
+        crate::pk_manual::checked_manual_initiate(
+            "jazzcash",
+            "JazzCash",
+            self.config.as_ref(),
+            req,
+        )
     }
 
     async fn verify(&self, provider_ref: &str) -> Result<VerifyResult, GatewayError> {
@@ -138,13 +128,13 @@ mod tests {
     }
 
     fn configured_gateway() -> JazzcashGateway {
-        JazzcashGateway::with_config(config(true, Some("01700000000")))
+        JazzcashGateway::with_config(config(true, Some("03001234567")))
     }
 
     fn sample_request() -> PaymentRequest {
         PaymentRequest {
             merchant_id: "merchant-1".to_string(),
-            amount: Money::new(50_000, Currency::BDT),
+            amount: Money::new(50_000, Currency::PKR),
             reference: "MP-TEST-001".to_string(),
             customer_name: None,
             customer_email: None,
@@ -164,7 +154,7 @@ mod tests {
 
     #[test]
     fn disabled_or_numberless_config_is_not_configured() {
-        let disabled = JazzcashGateway::with_config(config(false, Some("01700000000")));
+        let disabled = JazzcashGateway::with_config(config(false, Some("03001234567")));
         assert!(!disabled.is_configured());
 
         let numberless = JazzcashGateway::with_config(config(true, None));
@@ -216,7 +206,7 @@ mod tests {
             .instructions
             .expect("manual gateway must return payment instructions");
         assert!(
-            instructions.contains("01700000000"),
+            instructions.contains("03001234567"),
             "instructions must contain the merchant number, got: {instructions}"
         );
         assert!(
@@ -224,7 +214,7 @@ mod tests {
             "instructions must name the gateway, got: {instructions}"
         );
         assert!(
-            instructions.contains("BDT 500.00"),
+            instructions.contains("PKR 500.00"),
             "instructions must contain the formatted amount, got: {instructions}"
         );
         assert!(
@@ -260,6 +250,35 @@ mod tests {
         assert!(
             matches!(&err, GatewayError::Unsupported(msg) if msg == "jazzcash refunds are manual"),
             "expected Unsupported(\"jazzcash refunds are manual\"), got: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn malformed_pk_number_is_invalid_config_not_silent() {
+        let gateway = JazzcashGateway::with_config(config(true, Some("01712345678")));
+        assert!(!gateway.is_configured());
+        let err = gateway
+            .initiate(&sample_request())
+            .await
+            .expect_err("a Bangladeshi number is not a valid PK merchant number");
+        assert!(
+            matches!(&err, GatewayError::InvalidConfig(_)),
+            "expected InvalidConfig, got: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn non_pkr_amount_is_rejected() {
+        let gateway = configured_gateway();
+        let mut req = sample_request();
+        req.amount = Money::new(50_000, Currency::BDT);
+        let err = gateway
+            .initiate(&req)
+            .await
+            .expect_err("PK gateways must not take BDT payments");
+        assert!(
+            matches!(&err, GatewayError::Provider(msg) if msg.contains("PKR")),
+            "expected Provider(..PKR..), got: {err:?}"
         );
     }
 }

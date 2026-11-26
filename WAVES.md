@@ -242,3 +242,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - New `scripts/load-test.mjs` (zero-dep; refuses non-localhost targets without `--allow-remote`) and `docs/operations/performance.md` with the measured baseline.
 - Measured on this shared/throttled VM (debug build, generator on the same host — figures are regression floors, not capacity claims): `/health` 3,693 req/s, 0 errors in 55,513 requests; single-request latency /health ≈1.5–4 ms.
 - **Real finding fixed:** `/openapi.json` rebuilt the whole spec per request; it is now built once and cached (`openapi::spec_cached`, with an equality test). Concurrency numbers on this VM vary >3× between runs from neighbour load, so the doc records the noise honestly instead of claiming a speedup figure.
+
+### Wave 28 — CI verdict ✅
+- Commit `2ad4969`, CI run **45758500211**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 29 — Easypaisa/JazzCash hardening (this commit)
+- Found by audit: both PK adapters accepted **any** non-empty merchant number and **any** currency (their own tests even used a Bangladeshi number + BDT for a Pakistani gateway).
+- New shared `gateways::pk_manual`: `valid_pk_mobile` (03XXXXXXXXX / +923XXXXXXXXX shapes), config classification (malformed number → `InvalidConfig`, missing → `NotConfigured`), and `checked_manual_initiate` enforcing **PKR-only** amounts — both adapters now route through it (one reusable unit, no duplicated logic).
+- Tests corrected to PK fixtures (0300… number, PKR) + new cases: BD number rejected as InvalidConfig, BDT amount rejected. Gateways crate: 136 tests pass; workspace 639.

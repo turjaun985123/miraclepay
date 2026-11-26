@@ -9,6 +9,7 @@ pub mod nagad;
 pub mod paypal;
 pub mod paypal_checkout;
 pub mod paytm;
+pub mod pk_manual;
 pub mod phonepe;
 pub mod razorpay;
 pub mod registry;
