@@ -1,4 +1,4 @@
-# MiraclePay v0.0.1
+# MiraclePay v0.0.2
 
 Self-hosted payment automation platform — a clean-room reimplementation of
 PipraPay's feature set (see `NOTICE.md`), written from scratch in Rust,

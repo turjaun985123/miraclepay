@@ -1,4 +1,4 @@
-// MiraclePay v0.0.1 — top-level build file (clean-room original)
+// MiraclePay v0.0.2 — top-level build file (clean-room original)
 //
 // Plugin versions are declared here with the modern plugins DSL and
 // resolved via the pluginManagement block in settings.gradle.

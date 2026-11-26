@@ -1,4 +1,4 @@
-// MiraclePay v0.0.1 — Android settings (clean-room original)
+// MiraclePay v0.0.2 — Android settings (clean-room original)
 // Requires Gradle 8.7+ (see gradle/wrapper/gradle-wrapper.properties).
 
 pluginManagement {

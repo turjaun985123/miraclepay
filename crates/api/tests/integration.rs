@@ -277,14 +277,14 @@ async fn setup_merchant_with_bkash(app: &Router, email: &str) -> (String, String
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn health_reports_ok_and_version_0_0_1() {
+async fn health_reports_ok_and_version_0_0_2() {
     let app = app();
 
     let (status, body) = send(&app, request(Method::GET, "/health", None, None, None)).await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["status"], json!("ok"));
-    assert_eq!(body["version"], json!("0.0.1"));
+    assert_eq!(body["version"], json!("0.0.2"));
     assert_eq!(body["name"], json!("MiraclePay"));
 }
 

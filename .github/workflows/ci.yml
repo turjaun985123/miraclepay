@@ -1,4 +1,4 @@
-# CI — MiraclePay v0.0.1
+# CI — MiraclePay v0.0.2
 #
 # Clean-room reimplementation. This workflow verifies all three parts of
 # the project on every push and pull request:
@@ -101,10 +101,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build the API/worker image
-        run: docker build -t miraclepay-api:0.0.1 .
+        run: docker build -t miraclepay-api:0.0.2 .
 
       - name: Build the frontend image
-        run: docker build -f Dockerfile.frontend -t miraclepay-frontend:0.0.1 .
+        run: docker build -f Dockerfile.frontend -t miraclepay-frontend:0.0.2 .
 
   android:
     name: Android (assembleDebug)

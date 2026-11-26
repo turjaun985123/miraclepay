@@ -1,4 +1,4 @@
-# MiraclePay v0.0.1 — local / self-hosted deployment
+# MiraclePay v0.0.2 — local / self-hosted deployment
 #
 # Services:
 #   postgres  — primary database (real, ready to use)
@@ -51,7 +51,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: miraclepay-api:0.0.1
+    image: miraclepay-api:0.0.2
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://miraclepay:change-me@postgres:5432/miraclepay}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
@@ -70,7 +70,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: miraclepay-api:0.0.1
+    image: miraclepay-api:0.0.2
     # Same image as the api service; the worker is its own binary.
     command: ["miraclepay-worker"]
     environment:
@@ -89,7 +89,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
-    image: miraclepay-frontend:0.0.1
+    image: miraclepay-frontend:0.0.2
     ports:
       - "${FRONTEND_PORT:-4321}:80"
     depends_on:

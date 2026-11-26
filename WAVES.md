@@ -543,3 +543,11 @@ v0.0.2 + GitHub Release.
 
 ### Wave 51 — AGPL-3.0 LICENSE file (this commit)
 - The repo asserted AGPL-3.0 in README, Cargo.toml (×6) and NOTICE.md but shipped no licence text — GitHub's license API returned 404. Added the full official GNU AGPL-3.0 text (34,524 bytes, via GitHub's license API template for AGPL-3.0) as `LICENSE` at repo root. Own commit per the standing plan.
+
+### Wave 51 — CI verdict ✅
+- Commit `aa6463e`, CI runs **45768731564** and **45769578391** (same commit): verified twice at job+step level — all 5 jobs success (Rust, Frontend, Android, Docker, RustSec audit; 0 failed steps).
+- Post-push confirmation: `gh api repos/turjaun985123/miraclepay/license` now returns **AGPL-3.0** (was 404).
+
+### Wave 52 — Version bump to 0.0.2 (this commit)
+- Version fields only: root `Cargo.toml` + all 5 crates, `frontend/package.json`, `sdk/js/package.json`, Android `versionName "0.0.2"` / `versionCode 2`, health DTO + OpenAPI info version, API startup banner, CI/compose image tags (`miraclepay-api:0.0.2`, `miraclepay-frontend:0.0.2`), README title. Historical v0.0.1 references in docs/logs stay (they describe v0.0.1 accurately).
+- Local: 678 workspace tests pass (2 version assertions updated), fmt + clippy -D warnings clean.
