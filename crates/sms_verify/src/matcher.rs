@@ -178,10 +178,20 @@ pub fn match_transaction(
     let candidates: Vec<&Transaction> = pending.iter().filter(|tx| is_candidate(tx)).collect();
 
     // 3. Exact matches: highest confidence, oldest first.
+    //
+    // Wave 8 guard: a candidate whose amount *contradicts* an amount
+    // present in the SMS can never be exact, however strong the other
+    // signals are. Before this guard, a matching provider TrxID alone
+    // (100 points) settled a transaction for a different amount —
+    // a Tk 999 payment verified against a Tk 1,250 SMS. A missing SMS
+    // amount does not block exactness; a conflicting one does.
+    let amount_contradicted = |tx: &Transaction| {
+        parsed.amount_minor.is_some() && !amount_matches(parsed, tx)
+    };
     let mut exact: Vec<&Transaction> = candidates
         .iter()
         .copied()
-        .filter(|tx| score_candidate(parsed, tx) >= EXACT_THRESHOLD)
+        .filter(|tx| score_candidate(parsed, tx) >= EXACT_THRESHOLD && !amount_contradicted(tx))
         .collect();
     exact.sort_by_key(|tx| tx.created_at);
     if let Some(tx) = exact.first() {
@@ -263,7 +273,12 @@ mod tests {
     }
 
     #[test]
-    fn exact_by_trx_id_even_when_amount_and_sender_differ() {
+    fn trx_id_match_with_contradicting_amount_is_not_exact() {
+        // Wave 8: this test previously asserted the unsafe behaviour
+        // (TrxID match settled a different-amount transaction). The
+        // score is still 100 — scoring is unchanged — but
+        // match_transaction must refuse Exact when the SMS amount
+        // contradicts the transaction amount.
         let mut candidate = tx("tx-1", 999_999, 9);
         candidate.provider_trx_id = Some("TRX-ABC123".to_string());
         candidate.sender_number = Some(OTHER_SENDER.to_string());
@@ -275,7 +290,7 @@ mod tests {
         assert_eq!(score_candidate(&parsed, &candidate), 100);
         assert_eq!(
             match_transaction(&parsed, &[candidate], &no_used()),
-            MatchOutcome::Exact("tx-1".to_string())
+            MatchOutcome::NoMatch
         );
     }
 

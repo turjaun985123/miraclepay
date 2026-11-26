@@ -98,3 +98,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 
 ### Wave 7 — bKash tokenized checkout shaping (this commit)
 - New `gateways::bkash_tokenized`: grant-token / create-payment / execute-payment request specs + response parsers for bKash's documented tokenized API (sandbox default, live opt-in), credentials only from env (`BKASH_USERNAME/PASSWORD/APP_KEY/APP_SECRET`), missing credentials → `NotConfigured` naming them. No HTTP performed and no URL fabricated — transport stays with the caller, so the flow is fully unit-tested (6 new tests; 121 gateway tests pass locally).
+
+### Wave 7 — CI verdict ✅
+- Commit `03620b7`, CI run **45752907294**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 8 — Nagad/Rocket/Upay verification hardening + REAL BUG FIX (this commit)
+- New `sms_verify::bd_templates`: realistic Nagad/Rocket/Upay template tests end-to-end (parse all fields → Verified against matching pending payment; replay → Duplicate; promo → never settles).
+- **Bug found by those tests and fixed:** the matcher scored a provider-TrxID match alone as Exact (100 pts), so a Tk 999 payment auto-verified against a Tk 1,250 SMS with the same TrxID. `match_transaction` now refuses Exact whenever an SMS amount present contradicts the transaction amount (falls through to Probable/NoMatch rules). The old test that encoded the unsafe behaviour was rewritten to assert the safe one.
+- Local: 588 workspace tests pass (9 new template tests + matcher guard).

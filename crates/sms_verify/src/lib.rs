@@ -1,5 +1,6 @@
 //! MiraclePay SMS verification engine — parse payment SMS, match to
 //! pending transactions, verify. Original clean-room implementation.
+pub mod bd_templates;
 pub mod matcher;
 pub mod parser;
 pub mod patterns_bd;
