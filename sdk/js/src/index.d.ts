@@ -58,6 +58,21 @@ export class MiraclePayClient {
   invoicePdfUrl(id: string): string;
 
   listSettlements(query?: Record<string, string | number>): Promise<any[]>;
+
+  // v0.0.2 additions
+  requestPasswordReset(email: string): Promise<any>;
+  confirmPasswordReset(token: string, newPassword: string): Promise<any>;
+  listSessions(): Promise<any>;
+  revokeSession(id: string): Promise<any>;
+  onboarding(merchantId: string): Promise<any>;
+  search(merchantId: string, q: string): Promise<any>;
+  verifyTransaction(id: string): Promise<any>;
+  paymentLinkStats(id: string): Promise<any>;
+  transactionsCsvUrl(merchantId: string): string;
+  receiptPdfUrl(transactionId: string): string;
+  testGateway(provider: string, merchantId: string): Promise<any>;
+  listPlugins(): Promise<any>;
+  invokePlugin(id: string, operation: string, args?: Record<string, unknown>): Promise<any>;
 }
 
 export default MiraclePayClient;

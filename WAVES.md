@@ -617,3 +617,27 @@ v0.0.2 + GitHub Release.
   snapshot dirty-tracking hashes each collection (sorted,
   per-database cache) and skips rewriting unchanged ones, so
   the 15 s cadence is free while idle.
+
+## Delivered (2026-11-26) — quality completion + release prep
+
+- Wave 131 — RustSec audit — the CI Dependency audit job is
+  green on every 0.0.2 run (incl. the new psychoscript tree);
+  no advisories required action.
+- Wave 134 — Operator docs completion — handbook +
+  deployment guides cross-checked against the shipped surface
+  (plugins, persistence, production checklist); API changelog
+  lives in CHANGELOG.md (Wave 114).
+- Wave 138 — Release notes — `docs/releases/0.0.2.md` drafted
+  from this log, with the honest-limits section carried over.
+- Wave 140 — Security review — `docs/security-review-0.0.2.md`:
+  auth/session, API-key/plugin confinement, payment-integrity
+  and transport findings with their verification state, plus
+  accepted residuals.
+- Wave 141 — JS SDK parity — `@miraclepay/sdk` gains the
+  v0.0.2 surface (password reset, sessions, onboarding, search,
+  transaction verify, link stats, CSV/receipt URLs, gateway
+  test, plugin list/invoke) with TypeScript definitions and a
+  path-level test; SDK suite 8/8.
+- Waves 122–130 CI: run 45781265176 — all six jobs success
+  (the Rust job now also runs the restore drill, E2E smoke and
+  load smoke steps), job/step level, verified twice.

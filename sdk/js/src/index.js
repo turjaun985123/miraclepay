@@ -181,6 +181,83 @@ export class MiraclePayClient {
     return `${this.baseUrl}/api/v1/invoices/${encodeURIComponent(id)}/pdf`;
   }
 
+  // -- v0.0.2: auth completion -------------------------------------------
+  /** POST /api/v1/auth/password-reset/request — always succeeds silently. */
+  requestPasswordReset(email) {
+    return this.request('POST', '/api/v1/auth/password-reset/request', { email });
+  }
+
+  /** POST /api/v1/auth/password-reset/confirm */
+  confirmPasswordReset(token, newPassword) {
+    return this.request('POST', '/api/v1/auth/password-reset/confirm', {
+      token,
+      new_password: newPassword,
+    });
+  }
+
+  /** GET /api/v1/auth/sessions */
+  listSessions() {
+    return this.request('GET', '/api/v1/auth/sessions');
+  }
+
+  /** DELETE /api/v1/auth/sessions/:id */
+  revokeSession(id) {
+    return this.request('DELETE', `/api/v1/auth/sessions/${encodeURIComponent(id)}`);
+  }
+
+  // -- v0.0.2: product depth ----------------------------------------------
+  /** GET /api/v1/merchants/:id/onboarding */
+  onboarding(merchantId) {
+    return this.request('GET', `/api/v1/merchants/${encodeURIComponent(merchantId)}/onboarding`);
+  }
+
+  /** GET /api/v1/search?q=&merchant_id= */
+  search(merchantId, q) {
+    const qs = new URLSearchParams({ merchant_id: merchantId, q }).toString();
+    return this.request('GET', `/api/v1/search?${qs}`);
+  }
+
+  /** POST /api/v1/transactions/:id/verify — settle on gateway confirmation. */
+  verifyTransaction(id) {
+    return this.request('POST', `/api/v1/transactions/${encodeURIComponent(id)}/verify`);
+  }
+
+  /** GET /api/v1/payment-links/:id/stats */
+  paymentLinkStats(id) {
+    return this.request('GET', `/api/v1/payment-links/${encodeURIComponent(id)}/stats`);
+  }
+
+  /** Direct URL of the transactions CSV export. */
+  transactionsCsvUrl(merchantId) {
+    return `${this.baseUrl}/api/v1/transactions/export.csv?merchant_id=${encodeURIComponent(merchantId)}`;
+  }
+
+  /** Direct URL of a payment receipt PDF. */
+  receiptPdfUrl(transactionId) {
+    return `${this.baseUrl}/api/v1/transactions/${encodeURIComponent(transactionId)}/receipt.pdf`;
+  }
+
+  /** POST /api/v1/gateways/:provider/test */
+  testGateway(provider, merchantId) {
+    return this.request('POST', `/api/v1/gateways/${encodeURIComponent(provider)}/test`, {
+      merchant_id: merchantId,
+    });
+  }
+
+  // -- v0.0.2: plugins (admin) ----------------------------------------------
+  /** GET /api/v1/admin/plugins */
+  listPlugins() {
+    return this.request('GET', '/api/v1/admin/plugins');
+  }
+
+  /** POST /api/v1/admin/plugins/:id/invoke */
+  invokePlugin(id, operation, args = {}) {
+    return this.request('POST', `/api/v1/admin/plugins/${encodeURIComponent(id)}/invoke`, {
+      operation,
+      args,
+    });
+  }
+
   // -- Settlements -------------------------------------------------------
   /** GET /api/v1/settlements */
   listSettlements(query = {}) {

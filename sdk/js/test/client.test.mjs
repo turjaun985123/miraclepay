@@ -93,3 +93,24 @@ test('invoicePdfUrl points at the PDF endpoint', () => {
 test('constructor requires a baseUrl', () => {
   assert.throws(() => new MiraclePayClient({}), TypeError);
 });
+
+// v0.0.2 additions (Wave 141): the new methods hit the right paths.
+test('v0.0.2 methods call the documented paths', async () => {
+  const { impl, calls } = stubFetch(200, { ok: true });
+  const client = new MiraclePayClient({ baseUrl: 'http://api.test', token: 't', fetch: impl });
+  await client.verifyTransaction('txn 1');
+  await client.onboarding('mch_1');
+  await client.search('mch_1', 'abc');
+  await client.listPlugins();
+  await client.invokePlugin('manual-bank-transfer', 'confirm_payment', { provider_ref: 'MBT-1' });
+  const paths = calls.map((c) => `${c.init.method} ${c.url}`);
+  assert.ok(paths[0].endsWith('/api/v1/transactions/txn%201/verify'), paths[0]);
+  assert.ok(paths[1].endsWith('/api/v1/merchants/mch_1/onboarding'), paths[1]);
+  assert.ok(paths[2].includes('/api/v1/search?'), paths[2]);
+  assert.ok(paths[3].endsWith('/api/v1/admin/plugins'), paths[3]);
+  assert.ok(paths[4].endsWith('/api/v1/admin/plugins/manual-bank-transfer/invoke'), paths[4]);
+  assert.equal(
+    client.receiptPdfUrl('txn_9'),
+    'http://api.test/api/v1/transactions/txn_9/receipt.pdf',
+  );
+});
