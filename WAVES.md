@@ -300,3 +300,10 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - Notifications were recorded but never sent. New `worker::smtp_transport` implements the existing `NotificationTransport` trait: env-gated config (`SMTP_HOST`/`SMTP_FROM` required, port/user/pass/helo optional), RFC 5322 rendering with a header-injection guard, dot-stuffing, optional AUTH PLAIN, full SMTP dialogue over TCP. Scope stated in-module: plain TCP (no STARTTLS) — local relay/tunnel use.
 - Proven end-to-end in tests against a fake SMTP server on a real socket: the full EHLO→MAIL→RCPT→DATA dialogue and message content are asserted; unconfigured/missing variables produce named errors, never fake sends.
 - New admin endpoint `POST /api/v1/admin/notifications/dispatch` drains the queue through the transport via the existing `dispatch_batch` engine and reports `{sent, failed}` (409 when SMTP is not configured). OpenAPI now 78 operations. Workspace: 662 tests pass.
+
+### Wave 35 — CI verdict ✅
+- Commit `bbf2e8e`, CI run **45760958516**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 36 — SMS device management: real device presence (this commit)
+- Root cause found: `ApiKey.last_used_at` existed since the first build but was **never written**, so the dashboard's "Last used" column always said Never. Device authentication (`sms::authenticate_device`) now records successful use, throttled to one write per minute per key.
+- `ApiKeyView` gains a derived `device_status` (revoked / never_connected / online ≤5 min / idle ≤24 h / offline), unit-tested across the ladder; the dashboard API-keys page renders it as a presence badge ("Device online", "Never connected", …) with a fallback for older responses. Workspace: 663 tests pass, Astro build passes.

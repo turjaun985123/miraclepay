@@ -440,6 +440,8 @@ export interface ApiKey {
   last_used_at?: string | null;
   created_at?: string;
   revoked_at?: string | null;
+  /** Device presence (Wave 36): revoked | never_connected | online | idle | offline. */
+  device_status?: string;
   [key: string]: unknown;
 }
 

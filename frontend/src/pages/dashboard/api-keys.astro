@@ -443,13 +443,20 @@ x-device-key: mp_live_&hellip;your key&hellip;</code></pre>
 
       const statusCell = document.createElement('td');
       const statusBadge = document.createElement('span');
-      if (isRevoked(key)) {
-        statusBadge.className = 'badge badge-failed';
-        statusBadge.textContent = 'Revoked';
-      } else {
-        statusBadge.className = 'badge badge-success';
-        statusBadge.textContent = 'Active';
-      }
+      // Device presence (Wave 36) comes from the API's
+      // device_status; fall back to the revoked/active pair for
+      // older responses.
+      const presence = key.device_status ?? (isRevoked(key) ? 'revoked' : 'never_connected');
+      const presenceLabels: Record<string, { label: string; cls: string }> = {
+        revoked: { label: 'Revoked', cls: 'badge badge-failed' },
+        online: { label: 'Device online', cls: 'badge badge-success' },
+        idle: { label: 'Device idle', cls: 'badge badge-pending' },
+        offline: { label: 'Device offline', cls: 'badge badge-failed' },
+        never_connected: { label: 'Never connected', cls: 'badge badge-pending' },
+      };
+      const shown = presenceLabels[presence] ?? presenceLabels.never_connected;
+      statusBadge.className = shown.cls;
+      statusBadge.textContent = shown.label;
       statusCell.appendChild(statusBadge);
       row.appendChild(statusCell);
 

@@ -118,6 +118,21 @@ async fn authenticate_device(state: &AppState, headers: &HeaderMap) -> Result<Ap
         return Err(ApiError::Unauthorized);
     }
 
+    // Device presence (Wave 36): record successful use so the
+    // dashboard can show when a device last checked in. Throttled
+    // to one write per minute per key — presence granularity, not
+    // an audit trail (the audit log covers individual calls).
+    let now = chrono::Utc::now();
+    let stale = key
+        .last_used_at
+        .map(|last| (now - last).num_seconds() >= 60)
+        .unwrap_or(true);
+    if stale {
+        if let Some(stored) = state.api_keys.write().await.get_mut(&key_hash) {
+            stored.last_used_at = Some(now);
+        }
+    }
+
     Ok(key)
 }
 

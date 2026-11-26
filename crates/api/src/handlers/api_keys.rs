@@ -102,6 +102,30 @@ pub struct ApiKeyView {
     pub last_used_at: Option<DateTime<Utc>>,
     /// When the key record was created.
     pub created_at: DateTime<Utc>,
+    /// Device-presence status derived from `last_used_at`
+    /// (Wave 36): `revoked`, `never_connected`, `online`
+    /// (≤ 5 min), `idle` (≤ 24 h) or `offline`.
+    pub device_status: &'static str,
+}
+
+/// Derive the device-presence status for a key at `now`.
+pub fn device_status(key: &ApiKey, now: DateTime<Utc>) -> &'static str {
+    if key.revoked {
+        return "revoked";
+    }
+    match key.last_used_at {
+        None => "never_connected",
+        Some(last) => {
+            let age = now - last;
+            if age.num_minutes() <= 5 {
+                "online"
+            } else if age.num_hours() <= 24 {
+                "idle"
+            } else {
+                "offline"
+            }
+        }
+    }
 }
 
 impl From<&ApiKey> for ApiKeyView {
@@ -114,6 +138,7 @@ impl From<&ApiKey> for ApiKeyView {
             revoked: key.revoked,
             last_used_at: key.last_used_at,
             created_at: key.created_at,
+            device_status: device_status(key, chrono::Utc::now()),
         }
     }
 }
@@ -311,4 +336,34 @@ pub async fn revoke_api_key(
     );
 
     Ok(Json(view))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Duration;
+
+    fn key(last_used_at: Option<DateTime<Utc>>, revoked: bool) -> ApiKey {
+        ApiKey {
+            id: "key_1".to_string(),
+            merchant_id: "mch_1".to_string(),
+            name: "Phone".to_string(),
+            key_prefix: "mp_live_abcd".to_string(),
+            key_hash: "hash".to_string(),
+            scopes: vec![ApiScope::FullAccess],
+            last_used_at,
+            revoked,
+            created_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn device_status_covers_the_presence_ladder() {
+        let now = Utc::now();
+        assert_eq!(device_status(&key(None, false), now), "never_connected");
+        assert_eq!(device_status(&key(Some(now - Duration::minutes(2)), false), now), "online");
+        assert_eq!(device_status(&key(Some(now - Duration::hours(3)), false), now), "idle");
+        assert_eq!(device_status(&key(Some(now - Duration::days(2)), false), now), "offline");
+        assert_eq!(device_status(&key(Some(now), true), now), "revoked");
+    }
 }
