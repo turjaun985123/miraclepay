@@ -412,3 +412,10 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 
 ### Wave 49 — first CI run: audit job failed, fixed in this push
 - Run **45766034836**: Rust/Frontend/Android/Docker jobs passed, but the new RustSec audit job **failed** on two advisories — `rsa 0.9.10` (RUSTSEC-2023-0071, Marvin) and `libsqlite3-sys 0.30.1` (RUSTSEC-2026-0459, bundled-SQLite CVE). Investigation: both crates are **lockfile-only residue** of sqlx-macros-core's optional drivers — `cargo tree -i <crate> --edges all` shows neither (nor sqlx-mysql/sqlx-sqlite) in the compiled graph; this workspace enables sqlx for Postgres only, so neither crate is compiled, linked or shipped. Fix: `.cargo/audit.toml` ignores the two advisories with that verification recorded (and a revisit warning if the MySQL/SQLite drivers are ever enabled). The audit job also lacked `checks: write`, which produced a "Resource not accessible" error — permission added. (Informational only: chrono is flagged unmaintained; noted, not failing.)
+
+### Wave 49 — CI verdict ✅
+- Fix commit `068e5ae`, CI run **45766588765**: verified twice at job+step level — all 5 jobs success (0 failed steps), including the RustSec audit job and its published Security audit check.
+
+### Wave 50 — v0.0.1 release (this commit)
+- Tag `v0.0.1` on this commit; GitHub Release with the notes below and the CI-built Android APKs (debug + release) attached from this commit's run.
+- Release notes summary: MiraclePay v0.0.1 — Rust/Axum API (89 OpenAPI operations), Astro dashboard + hosted checkout, Android SMS forwarder; SMS auto-verification with the Wave 8/31 safety rules; webhooks with v1+v2 signing, retries and dead-letter; subscriptions, settlements, refunds, disputes, KYC, fraud signals, FX conversion, SMTP notifications, sandbox mode; Postgres wiring (pool + migrations; in-memory collections remain the v0.0.1 store of record — stated plainly), Docker + compose, Prometheus metrics, structured logs, error envelope, API v1 policy; 678 Rust tests + 7 SDK tests; fmt + clippy -D warnings + RustSec audit all gated in CI.
