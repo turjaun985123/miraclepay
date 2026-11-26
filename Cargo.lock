@@ -1331,7 +1331,7 @@ dependencies = [
 
 [[package]]
 name = "miraclepay-api"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "axum",
  "chrono",
@@ -1353,7 +1353,7 @@ dependencies = [
 
 [[package]]
 name = "miraclepay-domain"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "argon2",
  "chrono",
@@ -1368,7 +1368,7 @@ dependencies = [
 
 [[package]]
 name = "miraclepay-gateways"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1382,7 +1382,7 @@ dependencies = [
 
 [[package]]
 name = "miraclepay-plugin-spi"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "hmac",
  "psychoscript",
@@ -1397,7 +1397,7 @@ dependencies = [
 
 [[package]]
 name = "miraclepay-sms-verify"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "chrono",
  "miraclepay-domain",
@@ -1410,7 +1410,7 @@ dependencies = [
 
 [[package]]
 name = "miraclepay-worker"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "chrono",
  "hmac",

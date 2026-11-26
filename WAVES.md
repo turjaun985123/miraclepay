@@ -938,3 +938,23 @@ accessibility final pass (WCAG 2.2 AA) · 199 consistency sweep
   against the component source and was incorrect).
 - CI run **45810941967** (commit `f724f7e`): Android job SUCCESS
   (M3 redesign assembles after the attr fix); full verdict below.
+- CI run **45810941967** (commit `f724f7e`): verified twice at
+  job+step level — all 6 jobs success, 0 failed steps. ✅
+- CI run **45811404122** (commit `8224f0b`, polish group):
+  verified twice at job+step level — all 6 jobs success,
+  0 failed steps. ✅
+
+### Wave 200 — v0.0.3 design release
+- Version bump to 0.0.3: Cargo workspace (root + api, domain,
+  gateways, sms_verify, worker; plugin_spi inherits workspace),
+  Cargo.lock refreshed, frontend package.json + lock, JS SDK,
+  Android versionName "0.0.3" / versionCode 3, API banner +
+  /health version strings, landing copy.
+- CI now builds release-profile server binaries
+  (`cargo build --release -p miraclepay-api -p miraclepay-worker`)
+  and uploads them as artifacts — per the user requirement, the
+  GitHub Release ships the server binary next to the APKs:
+  `miraclepay-v0.0.3-linux-x86_64.tar.gz` (api + worker),
+  `miraclepay-v0.0.3-debug.apk`,
+  `miraclepay-v0.0.3-release-unsigned.apk`.
+- CI verdict + release read-back logged below.

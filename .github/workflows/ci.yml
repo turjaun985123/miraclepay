@@ -88,6 +88,21 @@ jobs:
       - name: Build the workspace
         run: cargo build --workspace
 
+      # Wave 200: release-profile server binaries as artifacts, so
+      # the GitHub Release ships the binary next to the APKs (user
+      # requirement, v0.0.3 onward).
+      - name: Build release server binaries
+        run: cargo build --release -p miraclepay-api -p miraclepay-worker
+
+      - name: Upload server binary artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: miraclepay-server-linux-x86_64
+          path: |
+            target/release/miraclepay-api
+            target/release/miraclepay-worker
+          if-no-files-found: error
+
   # Wave 49: dependency audit against the RustSec advisory DB.
   audit:
     name: Dependency audit (RustSec)
