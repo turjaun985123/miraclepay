@@ -1,0 +1,23 @@
+# cargo-audit configuration (Wave 49).
+#
+# Two advisories are ignored because the flagged crates are NOT
+# part of MiraclePay's compiled dependency graph — they sit in
+# Cargo.lock only as optional-dependency residue of
+# sqlx-macros-core (which names all sqlx drivers; this workspace
+# enables sqlx for Postgres only). Verified with:
+#   cargo tree -i rsa --edges all            → nothing to print
+#   cargo tree -i libsqlite3-sys --edges all → nothing to print
+#   cargo tree -i sqlx-mysql / sqlx-sqlite   → nothing to print
+# Neither crate is compiled, linked, or shipped. If sqlx's MySQL
+# or SQLite drivers are ever enabled, these ignores MUST be
+# revisited before the audit gate is trusted again.
+[advisories]
+ignore = [
+    # rsa 0.9.10 — Marvin timing attack (RUSTSEC-2023-0071).
+    # Present only via sqlx-mysql (never enabled/compiled).
+    "RUSTSEC-2023-0071",
+    # libsqlite3-sys 0.30.1 — bundled SQLite CVE-2026-119375
+    # (RUSTSEC-2026-0459). Present only via sqlx-sqlite
+    # (never enabled/compiled); the app uses Postgres.
+    "RUSTSEC-2026-0459",
+]

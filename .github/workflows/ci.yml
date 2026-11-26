@@ -48,6 +48,12 @@ jobs:
   audit:
     name: Dependency audit (RustSec)
     runs-on: ubuntu-latest
+    # audit-check publishes a check run; the workflow-level
+    # contents:read alone made it fail with "Resource not
+    # accessible by integration" on its first run (Wave 49).
+    permissions:
+      contents: read
+      checks: write
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
