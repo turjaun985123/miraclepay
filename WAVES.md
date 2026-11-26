@@ -723,17 +723,19 @@ that commit's CI run.
 
 ## Wave 149–150 — release (2026-11-26)
 
-- Wave 149 — Release candidate — commit `2a895a5`, CI run
-  45782252742: all six jobs success (Docker, Rust incl. PG
-  tests + restore drill + E2E/load smokes, Android, Frontend,
-  RustSec, Security audit), job/step level, verified twice.
-  The preceding docs/SDK commit `996eaa8` was likewise green
-  (run 45781960117, all jobs success).
-- Wave 150 — v0.0.2 RELEASED — tag `v0.0.2` at `2a895a5`;
+- Wave 149 — Release candidate — the first candidate
+  (`2a895a5`, run 45782252742, all six jobs success, verified
+  twice) was superseded by the post-RC correction above. The
+  final candidate is commit `c1fe45b`, CI run 45784259052:
+  all six jobs success (Docker, Rust incl. PG tests + restore
+  drill + E2E/load smokes, Android, Frontend, RustSec,
+  Security audit), job/step level, verified twice. Local:
+  717 workspace tests, clippy clean, frontend build 15 pages.
+- Wave 150 — v0.0.2 RELEASED — tag `v0.0.2` at `c1fe45b`;
   GitHub Release https://github.com/turjaun985123/miraclepay/releases/tag/v0.0.2
-  with the CI-built APKs from run 45782252742 attached and
+  with the CI-built APKs from run 45784259052 attached and
   verified by read-back: `miraclepay-v0.0.2-debug.apk`
-  (6,109,979 B) and `miraclepay-v0.0.2-release-unsigned.apk`
+  (6,109,977 B) and `miraclepay-v0.0.2-release-unsigned.apk`
   (4,905,889 B; unsigned — no keystore secrets configured,
   labelled as such). GitHub license API returns AGPL-3.0.
   Waves 51–150 complete.
