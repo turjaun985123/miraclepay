@@ -19,14 +19,17 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
 <BaseLayout title="Pay">
   <main class="container pay-page">
-    <p class="brand-line">MiraclePay</p>
+    <p class="brand-line">
+      MiraclePay
+      <button id="lang-toggle" class="btn btn-small" type="button" style="float:right">বাংলা</button>
+    </p>
 
-    <p id="pay-loading" class="card muted">Loading payment link…</p>
+    <p id="pay-loading" class="card muted" data-i18n="pay_loading">Loading payment link…</p>
 
     <section id="pay-error-card" class="card pay-error-card" hidden>
-      <h1>This payment link can&rsquo;t be used</h1>
+      <h1 data-i18n="pay_error_heading">This payment link can&rsquo;t be used</h1>
       <p id="pay-error-message" class="alert alert-error" role="alert"></p>
-      <p class="muted small">
+      <p class="muted small" data-i18n="pay_error_hint">
         The link may be inactive, expired, or fully used. Please ask the
         merchant for a fresh link.
       </p>
@@ -41,7 +44,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
       <form id="pay-form" novalidate>
         <div class="field" id="amount-field" hidden>
-          <label class="label" for="amount">Amount</label>
+          <label class="label" for="amount" data-i18n="pay_amount">Amount</label>
           <input
             class="input"
             id="amount"
@@ -56,7 +59,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         </div>
 
         <div class="field" id="phone-field" hidden>
-          <label class="label" for="customer-phone">Phone number</label>
+          <label class="label" for="customer-phone" data-i18n="pay_phone">Phone number</label>
           <input
             class="input"
             id="customer-phone"
@@ -68,7 +71,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         </div>
 
         <div class="field" id="email-field" hidden>
-          <label class="label" for="customer-email">Email address</label>
+          <label class="label" for="customer-email" data-i18n="pay_email">Email address</label>
           <input
             class="input"
             id="customer-email"
@@ -80,7 +83,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         </div>
 
         <div class="field">
-          <label class="label" for="gateway">Pay with</label>
+          <label class="label" for="gateway" data-i18n="pay_with">Pay with</label>
           <select class="input" id="gateway" name="gateway">
             <option value="bkash">bKash</option>
             <option value="nagad">Nagad</option>
@@ -93,38 +96,38 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
         <p id="pay-form-error" class="alert alert-error" role="alert" hidden></p>
 
-        <button id="pay-submit" class="btn pay-submit" type="submit">
+        <button id="pay-submit" class="btn pay-submit" type="submit" data-i18n="pay_now">
           Pay now
         </button>
       </form>
     </section>
 
     <section id="pay-success" class="card pay-success" hidden>
-      <h1>Payment started</h1>
-      <p class="alert alert-success">
+      <h1 data-i18n="pay_started">Payment started</h1>
+      <p class="alert alert-success" data-i18n="pay_started_body">
         Your payment has been created and is waiting for the money to arrive.
       </p>
       <dl class="pay-details">
         <div>
-          <dt>Transaction ID</dt>
+          <dt data-i18n="pay_transaction_id">Transaction ID</dt>
           <dd class="mono" id="success-transaction-id">—</dd>
         </div>
         <div>
-          <dt>Reference</dt>
+          <dt data-i18n="pay_reference">Reference</dt>
           <dd class="mono" id="success-reference">—</dd>
         </div>
         <div>
-          <dt>Amount</dt>
+          <dt data-i18n="pay_amount">Amount</dt>
           <dd id="success-amount">—</dd>
         </div>
       </dl>
-      <p>
+      <p data-i18n="pay_finish_body">
         To finish, send the money with your chosen payment app and use the
         reference above exactly as shown. Once the payment SMS reaches the
         merchant, MiraclePay verifies it automatically — you don&rsquo;t need
         to upload a screenshot or do anything else on this page.
       </p>
-      <p class="muted small">
+      <p class="muted small" data-i18n="pay_keep_note">
         Keep your transaction ID and reference until the payment is confirmed.
       </p>
     </section>
@@ -185,6 +188,26 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
 <script>
   import { formatMoney, payLink, publicLink } from '../../lib/api';
+  import { applyI18n, getLang, otherLang, setLang, t, toggleLabel } from '../../lib/i18n';
+
+  // Bangla/English toggle (Wave 22): static strings swap via
+  // data-i18n; strings set below use t() so they follow the choice.
+  const langToggle = document.getElementById('lang-toggle');
+  function syncToggle(): void {
+    if (langToggle) langToggle.textContent = toggleLabel(getLang());
+  }
+  langToggle?.addEventListener('click', () => {
+    setLang(otherLang(getLang()));
+    syncToggle();
+    // The submit button's fixed-amount label is script-set; refresh.
+    if (fixedAmountMinor !== null && submitButton) {
+      submitButton.textContent = t('pay_now_amount', {
+        amount: formatMoney(fixedAmountMinor, currency),
+      });
+    }
+  });
+  applyI18n();
+  syncToggle();
 
   // The public endpoint returns the fields this page needs, but the
   // exact serialisation can carry the fixed amount either flat
@@ -273,7 +296,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
   async function loadLink(): Promise<void> {
     if (!slug) {
-      showLoadError('No payment link was specified in this URL.');
+      showLoadError(t('pay_err_no_link'));
       return;
     }
 
@@ -291,7 +314,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       collectPhone = link.collect_phone === true;
       collectEmail = link.collect_email === true;
 
-      if (titleEl) titleEl.textContent = link.title ?? 'Payment';
+      if (titleEl) titleEl.textContent = link.title ?? t('pay_title_default');
       document.title = `MiraclePay — Pay — ${link.title ?? 'Payment'}`;
 
       if (merchantEl && link.merchant_name) {
@@ -311,7 +334,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           fixedAmountEl.hidden = false;
         }
         if (submitButton) {
-          submitButton.textContent = `Pay ${formatMoney(fixedAmountMinor, currency)}`;
+          submitButton.textContent = t('pay_now_amount', {
+            amount: formatMoney(fixedAmountMinor, currency),
+          });
         }
       } else {
         // Open-amount link: the customer types the amount in major
@@ -319,7 +344,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         if (amountFieldEl) amountFieldEl.hidden = false;
         if (amountInput) amountInput.required = true;
         if (amountHintEl) {
-          amountHintEl.textContent = `Enter the amount in ${currency}.`;
+          amountHintEl.textContent = t('pay_amount_hint', { currency });
         }
       }
 
@@ -338,11 +363,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     } catch (error) {
       // Inactive, expired, exhausted or unknown links surface here as
       // the API's error message (e.g. "link not available").
-      showLoadError(
-        error instanceof Error
-          ? error.message
-          : 'This payment link could not be loaded.',
-      );
+      showLoadError(error instanceof Error ? error.message : t('pay_err_load'));
     }
   }
 
@@ -354,7 +375,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     if (amountMinor === null) {
       const major = Number(amountInput?.value ?? '');
       if (!Number.isFinite(major) || major <= 0) {
-        showFormError('Please enter an amount greater than zero.');
+        showFormError(t('pay_err_amount'));
         return;
       }
       amountMinor = Math.round(major * 100);
@@ -362,19 +383,19 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     const customerPhone = phoneInput?.value.trim() ?? '';
     if (collectPhone && !customerPhone) {
-      showFormError('Please enter your phone number.');
+      showFormError(t('pay_err_phone'));
       return;
     }
 
     const customerEmail = emailInput?.value.trim() ?? '';
     if (collectEmail && !customerEmail) {
-      showFormError('Please enter your email address.');
+      showFormError(t('pay_err_email'));
       return;
     }
 
     const gateway = gatewaySelect?.value ?? '';
     if (!gateway) {
-      showFormError('Please choose how you want to pay.');
+      showFormError(t('pay_err_gateway'));
       return;
     }
 
@@ -401,11 +422,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       if (successEl) successEl.hidden = false;
       successEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (error) {
-      showFormError(
-        error instanceof Error
-          ? error.message
-          : 'The payment could not be started. Please try again.',
-      );
+      showFormError(error instanceof Error ? error.message : t('pay_err_start'));
       if (submitButton) submitButton.disabled = false;
     }
   });

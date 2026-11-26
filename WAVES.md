@@ -185,3 +185,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 ### Wave 21 — JavaScript SDK package (this commit)
 - New `sdk/js` package `@miraclepay/sdk` 0.0.1: zero-dependency ESM client (Node 18+/browser fetch), one method per API operation, JWT-or-API-key bearer auth, `MiraclePayError` carrying status + server message, hand-written TypeScript definitions, README.
 - 6 `node:test` tests with a stubbed fetch (request shape, auth precedence, login token storage, error mapping, query encoding) — all pass locally; the Frontend CI job now runs the SDK suite on every push.
+
+### Wave 21 — CI verdict ✅
+- Commit `4d64816`, CI run **45756395776**: verified twice at job+step level — all 4 jobs success (0 failed steps), including the new SDK test step in the Frontend job.
+
+### Wave 22 — Bangla i18n for customer-facing pages (this commit)
+- New `frontend/src/lib/i18n.ts`: en/bn dictionary (30+ strings), `t()` with `{placeholder}` substitution, `applyI18n()` over `data-i18n` attributes, localStorage persistence (`mp-lang`), `document.lang` sync for accessibility.
+- Public pay page fully wired (static + script-set strings, toggle button, fixed-amount button label follows the language); hosted checkout wired for its static strings + toggle.
+- Honest scope: dashboard/admin pages and checkout's script-generated messages remain English in v0.0.1.
