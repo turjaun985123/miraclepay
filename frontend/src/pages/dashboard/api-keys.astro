@@ -506,15 +506,17 @@ x-device-key: mp_live_&hellip;your key&hellip;</code></pre>
 
   async function revokeKey(key: ApiKeyRow, button: HTMLButtonElement): Promise<void> {
     const label = key.name ?? 'this key';
-    // Review 165: native <dialog> via the shared helper, not window.confirm.
+    // Review 165: native <dialog> via the shared helper, not
+    // window.confirm. Post-release fix (review panels 180/195):
+    // confirmAction's contract is (message: string, confirmLabel)
+    // — an earlier edit passed an options object, which rendered
+    // "[object Object]" in the dialog.
     const { confirmAction } = await import('../../lib/ui');
     if (
-      !(await confirmAction({
-        title: `Revoke "${label}"?`,
-        body: 'Anything using this key — servers and the Android app included — will stop working immediately. This cannot be undone.',
-        confirmLabel: 'Revoke key',
-        danger: true,
-      }))
+      !(await confirmAction(
+        `Revoke "${label}"? Anything using this key — servers and the Android app included — will stop working immediately. This cannot be undone.`,
+        'Revoke key',
+      ))
     ) {
       return;
     }

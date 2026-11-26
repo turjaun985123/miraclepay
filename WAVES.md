@@ -976,3 +976,16 @@ accessibility final pass (WCAG 2.2 AA) · 199 consistency sweep
   published release, extracted, and the api binary was run:
   GET /health → {"status":"ok","version":"0.0.3",…}. ✅
 - Design program Waves 151–200 complete.
+
+### Post-release fixes (same day, from the 180/195 review panels)
+Two defects shipped in v0.0.3 and are fixed on main (the v0.0.3
+tag/release is unchanged; a patch release is a separate call):
+- api-keys revoke dialog: the Wave 165 fix called
+  `confirmAction({…})` with an options object, but the helper's
+  contract is `(message: string, confirmLabel)` — the dialog
+  rendered "[object Object]". Three review roles flagged it;
+  verified firsthand against ui.ts:120 and fixed to the string
+  contract.
+- `Icon` had no `lock` entry, so both payer trust rows rendered
+  an empty SVG (silent `?? ""` fallback). Lock glyph added;
+  verified rendering in the built checkout/pay HTML.
