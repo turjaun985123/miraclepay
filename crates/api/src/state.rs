@@ -97,6 +97,16 @@ pub struct AppState {
     pub merchant_members: Arc<RwLock<HashMap<String, crate::handlers::product::TeamMember>>>,
     /// Public payment-link view counts (Wave 111), keyed by link id.
     pub link_views: Arc<RwLock<HashMap<String, u64>>>,
+    /// Loaded plugins (Waves 118-120), keyed by plugin id.
+    pub plugins: Arc<RwLock<HashMap<String, crate::plugins::LoadedPlugin>>>,
+    /// Per-plugin configuration set by admins (persisted),
+    /// keyed by plugin id.
+    pub plugin_configs: Arc<RwLock<HashMap<String, serde_json::Value>>>,
+    /// Per-plugin KV backing map (persisted); keys are scoped
+    /// `plugin_id \u{1} key` by the store in `crate::plugins`.
+    pub plugin_kv: Arc<std::sync::Mutex<HashMap<String, String>>>,
+    /// Per-plugin enabled flags set by admins (persisted).
+    pub plugin_enabled: Arc<RwLock<HashMap<String, bool>>>,
     /// Merchant KYC profiles (Wave 33), keyed by merchant id.
     pub kyc_profiles: Arc<RwLock<HashMap<String, miraclepay_domain::kyc::KycProfile>>>,
     /// Per-merchant settings incl. checkout branding (Wave 37).
@@ -155,6 +165,10 @@ impl AppState {
             auth_tokens: Arc::new(RwLock::new(HashMap::new())),
             merchant_members: Arc::new(RwLock::new(HashMap::new())),
             link_views: Arc::new(RwLock::new(HashMap::new())),
+            plugins: Arc::new(RwLock::new(HashMap::new())),
+            plugin_configs: Arc::new(RwLock::new(HashMap::new())),
+            plugin_kv: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            plugin_enabled: Arc::new(RwLock::new(HashMap::new())),
             kyc_profiles: Arc::new(RwLock::new(HashMap::new())),
             merchant_settings: Arc::new(RwLock::new(HashMap::new())),
             disputes: Arc::new(RwLock::new(HashMap::new())),

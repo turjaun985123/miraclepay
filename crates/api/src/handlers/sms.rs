@@ -278,16 +278,91 @@ pub async fn receive_sms(
             Ok((StatusCode::OK, Json(json!({ "outcome": "duplicate" }))))
         }
 
-        VerificationOutcome::Unmatched => Ok((
+        VerificationOutcome::Unmatched => {
+            plugin_fallback(&state, &merchant_id, &sms, &pending, &used_trx_snapshot).await
+        }
+
+        VerificationOutcome::NotPayment => {
+            plugin_fallback(&state, &merchant_id, &sms, &pending, &used_trx_snapshot).await
+        }
+    }
+}
+
+/// Wave 119: when the native parsers cannot match a message, try
+/// the enabled SMS-parser plugins. A plugin parse that matches a
+/// pending transaction exactly settles it through the same steps
+/// as the native path (complete, reserve the trx id, webhook);
+/// anything else keeps the native outcome's answer.
+async fn plugin_fallback(
+    state: &AppState,
+    merchant_id: &str,
+    sms: &IncomingSms,
+    pending: &[miraclepay_domain::transaction::Transaction],
+    used_trx_snapshot: &std::collections::HashSet<String>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    let unmatched = || {
+        Ok((
             StatusCode::ACCEPTED,
             Json(json!({ "outcome": "unmatched" })),
-        )),
-
-        VerificationOutcome::NotPayment => Ok((
-            StatusCode::ACCEPTED,
-            Json(json!({ "outcome": "not_payment" })),
-        )),
+        ))
+    };
+    let Some(parsed) = crate::plugins::plugin_parse_sms(state, sms).await else {
+        return unmatched();
+    };
+    use miraclepay_sms_verify::matcher::{match_transaction, MatchOutcome};
+    let tx_id = match match_transaction(&parsed, pending, used_trx_snapshot) {
+        MatchOutcome::Exact(tx_id) => tx_id,
+        _ => return unmatched(),
+    };
+    let completed = {
+        let mut transactions = state.transactions.write().await;
+        match transactions.get_mut(&tx_id) {
+            Some(tx) if tx.merchant_id == merchant_id => {
+                tx.status = TxStatus::Completed;
+                if let Some(trx_id) = parsed.trx_id.clone() {
+                    tx.provider_trx_id = Some(trx_id);
+                }
+                if let Some(sender_number) = parsed.sender_number.clone() {
+                    tx.sender_number = Some(sender_number);
+                }
+                tx.updated_at = Utc::now();
+                Some(tx.clone())
+            }
+            _ => None,
+        }
+    };
+    let Some(completed) = completed else {
+        return unmatched();
+    };
+    if let Some(trx_id) = parsed.trx_id {
+        state.used_trx.write().await.insert(trx_id);
     }
+    state.webhook_events.write().await.push(WebhookEvent {
+        id: ids::webhook_event_id(),
+        merchant_id: merchant_id.to_string(),
+        event_type: "payment.completed".to_string(),
+        payload: json!({
+            "transaction_id": completed.id,
+            "merchant_id": completed.merchant_id,
+            "gateway": completed.gateway,
+            "amount_minor": completed.amount.amount_minor,
+            "currency": completed.amount.currency.code(),
+            "status": completed.status,
+            "provider_trx_id": completed.provider_trx_id,
+            "sender_number": completed.sender_number,
+            "reference": completed.reference,
+            "via": "sms_plugin_parser",
+        }),
+        created_at: Utc::now(),
+    });
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "outcome": "verified",
+            "transaction_id": completed.id,
+            "via": "plugin_parser",
+        })),
+    ))
 }
 
 // ---------------------------------------------------------------------------

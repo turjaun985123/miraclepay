@@ -66,6 +66,9 @@ pub const COLLECTIONS: &[&str] = &[
     "auth_tokens",
     "merchant_members",
     "link_views",
+    "plugin_configs",
+    "plugin_enabled",
+    "plugin_kv",
 ];
 
 fn to_value<T: Serialize>(item: &T) -> serde_json::Value {
@@ -239,6 +242,24 @@ pub async fn collect(state: &AppState) -> Vec<(&'static str, CollectionData)> {
         map_entries(&state.merchant_members.read().await),
     ));
     out.push(("link_views", map_entries(&state.link_views.read().await)));
+    out.push((
+        "plugin_configs",
+        map_entries(&state.plugin_configs.read().await),
+    ));
+    out.push((
+        "plugin_enabled",
+        map_entries(&state.plugin_enabled.read().await),
+    ));
+    out.push((
+        "plugin_kv",
+        state
+            .plugin_kv
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+            .collect(),
+    ));
     out
 }
 
@@ -382,6 +403,17 @@ pub async fn apply(state: &AppState, collection: &str, entries: &CollectionData)
         "auth_tokens" => apply_map(&state.auth_tokens, entries).await,
         "merchant_members" => apply_map(&state.merchant_members, entries).await,
         "link_views" => apply_map(&state.link_views, entries).await,
+        "plugin_configs" => apply_map(&state.plugin_configs, entries).await,
+        "plugin_enabled" => apply_map(&state.plugin_enabled, entries).await,
+        "plugin_kv" => {
+            let mut map = state.plugin_kv.lock().unwrap();
+            map.clear();
+            for (key, value) in entries {
+                if let Some(text) = value.as_str() {
+                    map.insert(key.clone(), text.to_string());
+                }
+            }
+        }
         _ => {}
     }
 }

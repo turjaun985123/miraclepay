@@ -406,6 +406,55 @@ const ROUTES: &[(&str, &[&str], &str, &str, bool)] = &[
         true,
     ),
     (
+        "/api/v1/admin/plugins",
+        &["get"],
+        "List scanned plugins with load errors and enabled state",
+        "Admin",
+        true,
+    ),
+    (
+        "/api/v1/admin/plugins/{id}/enable",
+        &["post"],
+        "Enable a plugin",
+        "Admin",
+        true,
+    ),
+    (
+        "/api/v1/admin/plugins/{id}/disable",
+        &["post"],
+        "Disable a plugin",
+        "Admin",
+        true,
+    ),
+    (
+        "/api/v1/admin/plugins/{id}/config",
+        &["get", "put"],
+        "Read or replace a plugin's configuration",
+        "Admin",
+        true,
+    ),
+    (
+        "/api/v1/admin/plugins/{id}/invoke",
+        &["post"],
+        "Invoke an operation on a JS plugin (admin)",
+        "Admin",
+        true,
+    ),
+    (
+        "/api/v1/admin/plugins/{id}/logs",
+        &["get"],
+        "Drain a plugin's log lines",
+        "Admin",
+        true,
+    ),
+    (
+        "/api/v1/transactions/{id}/verify",
+        &["post"],
+        "Re-verify a transaction with its gateway and settle on confirmation",
+        "Transactions",
+        true,
+    ),
+    (
         "/api/v1/disputes/{id}/evidence/files",
         &["post"],
         "Attach an evidence file reference to a dispute",
@@ -787,7 +836,7 @@ mod tests {
         // user list counted once.
         // If you add a route, add it to ROUTES above and update
         // this number.
-        assert_eq!(operation_count(), 110);
+        assert_eq!(operation_count(), 118);
     }
 
     #[test]

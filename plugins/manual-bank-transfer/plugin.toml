@@ -1,0 +1,29 @@
+# Manual Bank Transfer — pilot gateway plugin (Wave 119).
+# Runs entirely through the plugin lane (psychoscript); there is
+# no native adapter for the gateway id it provides.
+id = "manual-bank-transfer"
+name = "Manual Bank Transfer (Plugin)"
+version = "1.0.0"
+kind = "gateway"
+provides = ["manual_bank_transfer"]
+min_api_version = "1.0"
+allowed_hosts = []
+
+[config_schema]
+type = "object"
+
+[config_schema.properties.bank_name]
+type = "string"
+title = "Bank name"
+
+[config_schema.properties.account_name]
+type = "string"
+title = "Account name"
+
+[config_schema.properties.account_number]
+type = "string"
+title = "Account number"
+
+[config_schema.properties.branch]
+type = "string"
+title = "Branch (optional)"

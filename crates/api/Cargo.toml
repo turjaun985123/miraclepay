@@ -7,6 +7,7 @@ license = "AGPL-3.0"
 [dependencies]
 miraclepay-domain = { path = "../domain" }
 miraclepay-gateways = { path = "../gateways" }
+miraclepay-plugin-spi = { path = "../plugin_spi" }
 miraclepay-sms-verify = { path = "../sms_verify" }
 miraclepay-worker = { path = "../worker" }
 axum = "0.7"

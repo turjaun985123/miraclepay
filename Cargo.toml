@@ -6,6 +6,7 @@ members = [
     "crates/sms_verify",
     "crates/api",
     "crates/worker",
+    "crates/plugin_spi",
 ]
 
 [workspace.package]

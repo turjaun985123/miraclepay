@@ -1,0 +1,10 @@
+# BRAC Bank SMS parser — pilot sms_parser plugin (Wave 119).
+# The native parsers cover the mobile-money wallets (bKash,
+# Nagad, Rocket, Upay, SureCash); bank credit alerts like this
+# one are exactly what parser plugins exist for.
+id = "brac-bank-sms"
+name = "BRAC Bank SMS Parser (Plugin)"
+version = "1.0.0"
+kind = "sms_parser"
+min_api_version = "1.0"
+allowed_hosts = []

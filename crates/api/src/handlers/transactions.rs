@@ -311,6 +311,19 @@ pub async fn create_refund(
     let registry = state.registry_for(&tx.merchant_id);
     let gateway = registry.get_by_str(&tx.gateway);
     let mut manual_processing = false;
+    // Waves 118-120: plugin-lane gateways refund through the
+    // plugin when the native registry does not know the id.
+    if gateway.is_none() && crate::plugins::plugin_provides_gateway(&state, &tx.gateway).await {
+        match crate::plugins::plugin_refund(&state, &tx.gateway, &gateway_request).await {
+            Ok(result) => {
+                refund.status = RefundStatus::Processing;
+                refund.provider_refund_id = Some(result.provider_refund_id);
+            }
+            Err(_) => {
+                manual_processing = true;
+            }
+        }
+    }
     match gateway {
         Some(gateway) => match gateway.refund(&gateway_request).await {
             Ok(result) => {

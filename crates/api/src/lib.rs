@@ -18,6 +18,7 @@ pub mod metrics;
 pub mod openapi;
 pub mod pagination;
 pub mod persist;
+pub mod plugins;
 pub mod rate_limit;
 pub mod refresh;
 pub mod routes;

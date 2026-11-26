@@ -43,6 +43,30 @@ async fn main() {
         let hash = miraclepay_domain::password::hash_password(&password);
         state.seed_admin(&email.to_lowercase(), hash).await;
     }
+    // Waves 118-120: load plugins (JS lane via psychoscript +
+    // HTTP lane) after hydration so persisted config/KV/enabled
+    // flags are in place. A missing directory simply means no
+    // plugins; a broken plugin is recorded with its load error.
+    let plugins_dir = std::env::var("PLUGINS_DIR").unwrap_or_else(|_| "plugins".to_string());
+    miraclepay_api::plugins::scan_plugins(&state, std::path::Path::new(&plugins_dir)).await;
+    {
+        let plugins = state.plugins.read().await;
+        for plugin in plugins.values() {
+            match &plugin.load_error {
+                Some(error) => {
+                    println!(
+                        "[miraclepay] plugin {} failed to load: {error}",
+                        plugin.id()
+                    )
+                }
+                None => println!(
+                    "[miraclepay] plugin {} loaded (enabled: {})",
+                    plugin.id(),
+                    plugin.enabled
+                ),
+            }
+        }
+    }
     let port: u16 = std::env::var("PORT")
         .ok()
         .and_then(|p| p.parse().ok())

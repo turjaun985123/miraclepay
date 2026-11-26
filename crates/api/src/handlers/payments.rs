@@ -192,10 +192,21 @@ pub async fn create_payment(
 
     // Resolve the gateway through this merchant's registry so a
     // merchant can only pay through gateways configured for them.
+    // Waves 118-120: ids the native registry does not know fall
+    // through to the plugin lane (an enabled plugin that provides
+    // the id); anything else is an unknown gateway.
     let registry = state.registry_for(&req.merchant_id);
-    let gateway = registry
-        .get_by_str(&req.gateway)
-        .ok_or_else(|| ApiError::BadRequest(format!("unknown gateway: {}", req.gateway)))?;
+    let gateway = registry.get_by_str(&req.gateway);
+    let plugin_lane = match &gateway {
+        Some(_) => false,
+        None => crate::plugins::plugin_provides_gateway(&state, &req.gateway).await,
+    };
+    if gateway.is_none() && !plugin_lane {
+        return Err(ApiError::BadRequest(format!(
+            "unknown gateway: {}",
+            req.gateway
+        )));
+    }
 
     let now = Utc::now();
     let mut transaction = Transaction {
@@ -228,13 +239,15 @@ pub async fn create_payment(
         metadata: Value::Null,
     };
 
-    let initiated = gateway.initiate(&payment_request).await.map_err(|err| {
-        match err {
-            // An unconfigured gateway is a fixable request-side
-            // problem, surfaced with the gateway's own message.
-            GatewayError::NotConfigured(message) => ApiError::BadRequest(message),
-            other => ApiError::BadRequest(other.to_string()),
-        }
+    let initiated = match &gateway {
+        Some(gateway) => gateway.initiate(&payment_request).await,
+        None => crate::plugins::plugin_initiate(&state, &req.gateway, &payment_request).await,
+    }
+    .map_err(|err| match err {
+        // An unconfigured gateway is a fixable request-side
+        // problem, surfaced with the gateway's own message.
+        GatewayError::NotConfigured(message) => ApiError::BadRequest(message),
+        other => ApiError::BadRequest(other.to_string()),
     })?;
 
     transaction.status = TxStatus::Processing;
