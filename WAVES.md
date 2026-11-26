@@ -354,3 +354,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - **Foreground execution:** `SmsForwardWorker` now promotes itself with `setForegroundAsync` using a typed (`dataSync`) foreground notification before the HTTP call, so Android 14 / aggressive OEM builds don't kill the process mid-forward; promotion failure falls back to background execution (retries still apply). Manifest re-declares WorkManager's `SystemForegroundService` with `android:foregroundServiceType="dataSync"` and adds `FOREGROUND_SERVICE_DATA_SYNC`. New `Notify` helper owns the low-importance channel.
 - **POST_NOTIFICATIONS:** declared but never requested at runtime — on Android 13+ the permission ask now includes it alongside the SMS pair.
 - **Battery exemption:** status line shows Battery Restricted/Unrestricted, with a button opening the system exemption dialog (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` declared) — the top cause of delayed forwards on BD devices. Verified by the CI Android job (assembleDebug + assembleRelease); no local Android SDK exists.
+
+### Wave 42 — CI verdict ✅
+- Commit `2148977`, CI run **45763209734**: verified twice at job+step level — all 4 jobs success (0 failed steps), including the Android job compiling the new foreground-service code.
+
+### Wave 43 — Android offline queue + retry UI (this commit)
+- WorkManager's queue was durable but invisible. New `OutboxStore` (SharedPreferences JSON, capped at 200 entries, oldest FAILED dropped first) mirrors every queued message with status/attempts/last-error.
+- `SmsReceiver` records each message in the outbox before enqueueing through the new shared `Forwarder` (single enqueue path: constraints, backoff, keys). `SmsForwardWorker` reports outcomes back: success removes the entry, 4xx/unconfigured marks it FAILED with the reason, transient errors bump the attempt count.
+- Main screen shows "Queue: N waiting · M failed" and a "Retry queued messages" button (visible only when the queue is non-empty) that re-enqueues everything and flips FAILED back to pending. Verified by the CI Android job; no local Android SDK exists.

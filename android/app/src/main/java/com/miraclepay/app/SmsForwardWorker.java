@@ -79,6 +79,9 @@ public class SmsForwardWorker extends Worker {
     /** Input-data key: zero-based SIM slot, or -1 if unknown (int). */
     public static final String KEY_SIM_SLOT = "sim_slot";
 
+    /** Input-data key: OutboxStore entry id (String, Wave 43). */
+    public static final String KEY_OUTBOX_ID = "outbox_id";
+
     /** SIM-slot value used when the input data carries none. */
     public static final int SIM_SLOT_UNKNOWN = -1;
 
@@ -113,6 +116,9 @@ public class SmsForwardWorker extends Worker {
         String body = input.getString(KEY_BODY);
         long receivedAt = input.getLong(KEY_RECEIVED_AT, 0L);
         int simSlot = input.getInt(KEY_SIM_SLOT, SIM_SLOT_UNKNOWN);
+        String outboxId = input.getString(KEY_OUTBOX_ID);
+        OutboxStore outbox = outboxId == null
+                ? null : new OutboxStore(getApplicationContext());
 
         // A forward with no sender or no body is not a real SMS and
         // the backend can only reject it; fail permanently instead of
@@ -138,6 +144,9 @@ public class SmsForwardWorker extends Worker {
             // received after setup is completed are enqueued afresh
             // by the receiver.
             Log.w(TAG, "Not configured; cannot forward SMS from " + sender);
+            if (outbox != null) {
+                outbox.markFailed(outboxId, "app not configured");
+            }
             return Result.failure();
         }
 
@@ -150,6 +159,9 @@ public class SmsForwardWorker extends Worker {
         if (result.success) {
             Log.i(TAG, "Forwarded SMS from " + sender
                     + " (HTTP " + status + ")");
+            if (outbox != null) {
+                outbox.markDone(outboxId);
+            }
             return Result.success();
         }
 
@@ -161,9 +173,17 @@ public class SmsForwardWorker extends Worker {
             Log.w(TAG, "Backend rejected SMS from " + sender
                     + " with client error HTTP " + status
                     + ": " + result.errorMessage + "; not retrying");
+            if (outbox != null) {
+                outbox.markFailed(outboxId, "HTTP " + status + ": " + result.errorMessage);
+            }
             return Result.failure();
         }
 
+        if (outbox != null) {
+            outbox.markAttempt(outboxId,
+                    status == ApiClient.NO_STATUS
+                            ? "network error" : "HTTP " + status);
+        }
         // Everything else is transient: a 5xx server error, an
         // unexpected status (e.g. a stray 3xx from a proxy in front of
         // the backend), or NO_STATUS, meaning the request never got an

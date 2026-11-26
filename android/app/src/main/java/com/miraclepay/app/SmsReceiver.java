@@ -10,16 +10,9 @@ import android.provider.Telephony;
 import android.telephony.SmsMessage;
 import android.util.Log;
 
-import androidx.work.BackoffPolicy;
-import androidx.work.Constraints;
-import androidx.work.Data;
-import androidx.work.NetworkType;
-import androidx.work.OneTimeWorkRequest;
-import androidx.work.WorkManager;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Receives incoming SMS broadcasts and hands each message off to
@@ -136,34 +129,16 @@ public final class SmsReceiver extends BroadcastReceiver {
 
         int simSlot = intent.getIntExtra(EXTRA_SLOT, SIM_SLOT_UNKNOWN);
 
-        Constraints constraints = new Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .build();
-
-        WorkManager workManager = WorkManager.getInstance(context);
+        // Wave 43: record each message in the visible outbox
+        // first, then enqueue through the shared Forwarder so the
+        // worker can report the outcome back onto the entry.
+        OutboxStore outbox = new OutboxStore(context);
         for (Map.Entry<String, MessageGroup> entry : bySender.entrySet()) {
-            Data input = new Data.Builder()
-                    .putString(KEY_SENDER, entry.getKey())
-                    .putString(KEY_BODY, entry.getValue().body.toString())
-                    .putLong(KEY_RECEIVED_AT, entry.getValue().receivedAtMillis)
-                    .putInt(KEY_SIM_SLOT, simSlot)
-                    .build();
-
-            OneTimeWorkRequest request =
-                    new OneTimeWorkRequest.Builder(SmsForwardWorker.class)
-                            .setInputData(input)
-                            .setConstraints(constraints)
-                            .setBackoffCriteria(
-                                    BackoffPolicy.EXPONENTIAL,
-                                    BACKOFF_SECONDS,
-                                    TimeUnit.SECONDS)
-                            .addTag(TAG_SMS_FORWARD)
-                            .build();
-
-            // Plain enqueue: every SMS is its own unit of work, so no
-            // unique-work name is needed (or wanted — a unique name
-            // could replace a still-pending forward of an earlier SMS).
-            workManager.enqueue(request);
+            String body = entry.getValue().body.toString();
+            String outboxId = outbox.add(
+                    entry.getKey(), body, entry.getValue().receivedAtMillis, simSlot);
+            Forwarder.enqueue(context, outboxId, entry.getKey(), body,
+                    entry.getValue().receivedAtMillis, simSlot);
             Log.d(TAG, "Queued SMS forward for sender " + entry.getKey());
         }
     }

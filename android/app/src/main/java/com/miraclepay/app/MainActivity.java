@@ -51,6 +51,7 @@ public class MainActivity extends AppCompatActivity {
     private Button testButton;
     private Button permissionButton;
     private Button batteryButton;
+    private Button retryButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -66,6 +67,7 @@ public class MainActivity extends AppCompatActivity {
         testButton = findViewById(R.id.testButton);
         permissionButton = findViewById(R.id.permissionButton);
         batteryButton = findViewById(R.id.batteryButton);
+        retryButton = findViewById(R.id.retryButton);
 
         settingsButton.setOnClickListener(v ->
                 startActivity(new Intent(this, SettingsActivity.class)));
@@ -74,6 +76,7 @@ public class MainActivity extends AppCompatActivity {
 
         permissionButton.setOnClickListener(v -> requestSmsPermissions());
         batteryButton.setOnClickListener(v -> requestBatteryExemption());
+        retryButton.setOnClickListener(v -> retryOutbox());
 
         // Reflect the saved forwarding state before attaching the listener,
         // so restoring the switch does not re-save the same value.
@@ -143,6 +146,32 @@ public class MainActivity extends AppCompatActivity {
         boolean batteryExempt = isBatteryExempt();
         batteryButton.setVisibility(batteryExempt ? View.GONE : View.VISIBLE);
         statusText.append("\nBattery: " + (batteryExempt ? "Unrestricted" : "Restricted"));
+
+        // Outbox (Wave 43): how many messages are waiting or
+        // failed, with a manual retry while any exist.
+        OutboxStore outbox = new OutboxStore(this);
+        int pending = outbox.countByStatus(OutboxStore.STATUS_PENDING);
+        int failed = outbox.countByStatus(OutboxStore.STATUS_FAILED);
+        statusText.append("\nQueue: " + pending + " waiting · " + failed + " failed");
+        retryButton.setVisibility(pending + failed > 0 ? View.VISIBLE : View.GONE);
+    }
+
+    /** Re-enqueue every waiting/failed outbox entry (Wave 43). */
+    private void retryOutbox() {
+        OutboxStore outbox = new OutboxStore(this);
+        int requeued = 0;
+        for (OutboxStore.Entry entry : outbox.list()) {
+            if (OutboxStore.STATUS_FAILED.equals(entry.status)) {
+                outbox.markRetrying(entry.id);
+            }
+            Forwarder.enqueue(this, entry.id, entry.sender, entry.body,
+                    entry.receivedAtMillis, entry.simSlot);
+            requeued++;
+        }
+        Toast.makeText(this,
+                requeued == 0 ? "Queue is empty." : "Retrying " + requeued + " message(s)…",
+                Toast.LENGTH_SHORT).show();
+        refreshStatus();
     }
 
     /** Runs ApiClient.testConnection off the UI thread and toasts the result. */
