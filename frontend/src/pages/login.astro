@@ -24,13 +24,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
         <div class="field">
           <label class="label" for="password" data-i18n="auth_password">Password</label>
-          <input class="input" id="password" name="password" type="password" autocomplete="current-password" placeholder="Your password" required />
-          <p class="field-hint"><a href="/forgot-password">Forgot your password?</a></p>
+          <input class="input" id="password" name="password" type="password" autocomplete="current-password" placeholder="Your password" aria-describedby="password-hint" required />
+          <p class="field-hint" id="password-hint"><a href="/forgot-password">Forgot your password?</a></p>
         </div>
 
         <div class="field" id="totp-field" hidden>
           <label class="label" for="totp-code" data-i18n="auth_totp">Two-factor code</label>
-          <input class="input" id="totp-code" name="totp_code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code from your authenticator app" />
+          <input class="input" id="totp-code" name="totp_code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code from your authenticator app" aria-describedby="totp-hint" />
+          <p class="field-hint" id="totp-hint">Enter the 6-digit code from your authenticator app if you enabled two-factor authentication.</p>
           <p class="field-hint">This account has two-factor authentication enabled.</p>
         </div>
 

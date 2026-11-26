@@ -44,9 +44,9 @@ import Icon from '../../components/Icon.astro';
     <!-- Loading state -->
     <section id="checkout-loading" class="card" aria-live="polite">
       <p class="muted" data-i18n="co_loading">Loading checkout…</p>
-      <div class="skeleton skeleton-line sk-55"></div>
-      <div class="skeleton skeleton-line sk-85"></div>
-      <div class="skeleton skeleton-line sk-70"></div>
+      <div class="skeleton skeleton-line sk-55" aria-hidden="true"></div>
+      <div class="skeleton skeleton-line sk-85" aria-hidden="true"></div>
+      <div class="skeleton skeleton-line sk-70" aria-hidden="true"></div>
     </section>
 
     <!-- Error state: invalid / expired checkout, or a failed load -->
@@ -687,7 +687,12 @@ import Icon from '../../components/Icon.astro';
     // surface only when white text on it keeps >= 3:1 contrast.
     const accent = brandAccent(branding?.brand_color ?? details.brand_color);
     if (accent) {
+      // --color-brand drives global components; the legacy --brand
+      // aliases drive this page's local styles (instructions panel,
+      // brand line) — set both so the tint actually lands (V-02).
       document.documentElement.style.setProperty('--color-brand', accent);
+      document.documentElement.style.setProperty('--brand', accent);
+      document.documentElement.style.setProperty('--brand-dark', accent);
       if (submitButton) submitButton.style.background = accent;
     }
 

@@ -54,7 +54,7 @@ final class Notify {
         return new NotificationCompat.Builder(context, CHANNEL_FORWARDING)
                 .setContentTitle("MiraclePay")
                 .setContentText("Forwarding payment SMS…")
-                .setSmallIcon(android.R.drawable.stat_notify_sync)
+                .setSmallIcon(R.drawable.ic_stat_miraclepay)
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build();

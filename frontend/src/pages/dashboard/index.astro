@@ -97,6 +97,11 @@ import DashboardNav from '../../components/DashboardNav.astro';
         <ul id="onboarding-steps" class="stack u-list-none"></ul>
       </section>
 
+      <p id="email-verify-banner" class="alert alert-warning" role="alert" hidden>
+        Your email is not verified yet — some features stay limited until you verify it.
+        <a href="/dashboard/settings">Verify in Settings</a>
+      </p>
+
       <section class="card" aria-labelledby="search-heading">
         <h2 id="search-heading">Search</h2>
         <form id="search-form" class="row" novalidate>
@@ -478,6 +483,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
         loadAnalytics(currentMerchantId),
       ]);
       void loadKyc();
+    void loadEmailBanner();
       void loadOnboarding(currentMerchantId);
     }
 
@@ -769,6 +775,16 @@ import DashboardNav from '../../components/DashboardNav.astro';
       if (!el) return;
       el.textContent = text;
       el.hidden = !text;
+    }
+
+    async function loadEmailBanner() {
+      try {
+        const user = await me();
+        const banner = document.getElementById('email-verify-banner');
+        if (banner && (user as { email_verified?: boolean }).email_verified === false) {
+          banner.hidden = false;
+        }
+      } catch { /* banner stays hidden */ }
     }
 
     async function loadTwoFa() {

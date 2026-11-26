@@ -183,6 +183,10 @@ const {
         :root:not([data-theme="light"]) .step-number { color: var(--p-gray-950); }
       }
       :root[data-theme="dark"] .btn-danger { color: var(--p-gray-950); }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) .btn-danger:hover { color: var(--p-gray-950); background: var(--color-danger); }
+      }
+      :root[data-theme="dark"] .btn-danger:hover { color: var(--p-gray-950); background: var(--color-danger); }
       :root[data-theme="dark"] .step-number { color: var(--p-gray-950); }
 
       /* Payer pages (Waves 181–188): shared top bar, gateway radio

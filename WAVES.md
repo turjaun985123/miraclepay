@@ -915,3 +915,26 @@ accessibility final pass (WCAG 2.2 AA) · 199 consistency sweep
   token names, danger-text token, alias removal moved to v0.0.4).
 - Bundle: dist 388K total, shared CSS 22.5K — no splitting work
   needed; pages ship per-page JS only.
+
+### Waves 180/195 — Team design reviews #2 + #3
+- Wave 180 panel (4 roles: Checkout UX, Motion, Dashboard UI,
+  QA) + Wave 195 panel (6 roles: Design Lead, UX, Design
+  Systems, Visual, Accessibility, Android) = **all 10 team roles**
+  reconvened across the two checkpoints; reports in
+  design-audit/review180-* and review195-*.
+- Fixes applied from reviews: checkout poll-after-submit + busy
+  labels + step aria-labels + BN field hints; pay success
+  deep-link to the checkout tracker + confirmation polling;
+  gateway radio-card check/focus affordance; motion CSS (button
+  press, dialog entrance, step transitions); toast adoption at
+  copy actions; dark danger hover; skeleton aria-hidden; login
+  describedby wiring; chart aria summary; email-verification
+  banner on the overview; gateway API key masked; merchant
+  accent now also drives legacy --brand aliases (V-02); Android
+  launcher + notification icons.
+- Adoption: PageHeader now used by transactions + plugins,
+  EmptyState by transactions (verified in built HTML — the
+  Design Systems review's prop-name claim was checked firsthand
+  against the component source and was incorrect).
+- CI run **45810941967** (commit `f724f7e`): Android job SUCCESS
+  (M3 redesign assembles after the attr fix); full verdict below.

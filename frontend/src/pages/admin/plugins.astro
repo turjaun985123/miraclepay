@@ -22,21 +22,16 @@
 // 403 from the API swaps in an "Admin access required" card.
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import DashboardNav from '../../components/DashboardNav.astro';
+import PageHeader from '../../components/PageHeader.astro';
 ---
 
 <BaseLayout title="Admin — Plugins">
   <DashboardNav active="admin" />
 
   <main id="main" class="container stack">
-    <header>
-      <h1>Plugins</h1>
-      <p class="muted">
-        Plugins scanned at startup — gateways, SMS parsers and other
-        extensions. Enable or disable them, edit their configuration,
-        invoke an operation, or read their recent log lines.
-        <a href="/admin">Back to admin panel</a>
-      </p>
-    </header>
+    <PageHeader title="Plugins" sub="Plugins scanned at startup — gateways, SMS parsers and other extensions. Enable or disable them, edit their configuration, invoke an operation, or read their recent log lines.">
+      <a class="btn btn-ghost btn-sm" href="/admin">Back to admin panel</a>
+    </PageHeader>
 
     <p id="plugins-loading" class="muted">Loading plugins…</p>
 

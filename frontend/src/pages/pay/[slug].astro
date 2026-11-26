@@ -479,6 +479,7 @@ import Icon from '../../components/Icon.astro';
         const accent = brandAccent(branding.brand_color);
         if (accent) {
           document.documentElement.style.setProperty('--color-brand', accent);
+          document.documentElement.style.setProperty('--brand', accent);
           if (submitButton) submitButton.style.background = accent;
         }
       }
