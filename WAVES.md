@@ -79,3 +79,8 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - New `domain::password`: Argon2id PHC hashes, per-password CSPRNG salt; register/login/seed-admin use it. Legacy SHA-256 placeholder hashes explicitly do not verify (tested).
 - `api_key::generate_key`: 16 bytes from OS CSPRNG (OsRng) — SplitMix64 time/counter derivation removed, key format unchanged.
 - Local: 568 workspace tests pass (6 new password tests).
+
+### Wave 4 — Dockerfile + docker-compose full stack ✅
+- Commit `53164fd`, CI run **45752150459**: verified twice at job+step level — Rust success, Frontend success, Android success, **Docker success** (new job builds both images; 0 failed steps).
+- Root `Dockerfile` (multi-stage, api+worker binaries, non-root, healthcheck), `Dockerfile.frontend` (Astro build → nginx), `.dockerignore`; compose now has 5 services (postgres, redis profile, api, worker with correct `miraclepay-worker` command, frontend) and the stale "Dockerfile does not exist" note is gone.
+- Local: compose YAML validated (5 services); no Docker on this VM, so image builds are verified in CI.

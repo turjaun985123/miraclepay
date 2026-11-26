@@ -97,3 +97,18 @@ jobs:
 
       - name: Build the debug APK
         run: gradle assembleDebug
+
+      # Wave 5: also build the release APK and publish both as run
+      # artifacts. The release APK is unsigned (no keystore in CI);
+      # it proves the release build compiles and packages.
+      - name: Build the release APK (unsigned)
+        run: gradle assembleRelease
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: miraclepay-apks
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
+            android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
