@@ -65,7 +65,7 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
 
 /// Liveness probe: `GET /health/live` — the process is up.
 async fn health_live() -> impl IntoResponse {
-    Json(serde_json::json!({"status": "ok", "version": "0.0.3.2"}))
+    Json(serde_json::json!({"status": "ok", "version": "0.0.3.3"}))
 }
 
 /// Readiness probe: `GET /health/ready` — dependencies are

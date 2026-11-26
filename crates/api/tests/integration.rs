@@ -284,7 +284,7 @@ async fn health_reports_ok_and_version_0_0_2() {
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["status"], json!("ok"));
-    assert_eq!(body["version"], json!("0.0.3.2"));
+    assert_eq!(body["version"], json!("0.0.3.3"));
     assert_eq!(body["name"], json!("MiraclePay"));
 }
 

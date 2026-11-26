@@ -781,7 +781,7 @@ pub fn spec() -> Value {
         "openapi": "3.1.0",
         "info": {
             "title": "MiraclePay API",
-            "version": "0.0.3.2",
+            "version": "0.0.3.3",
             "description": "Self-hosted payment automation: gateways, SMS verification, checkout, payment links, invoices, subscriptions, settlements, webhooks.",
             "license": { "name": "AGPL-3.0" }
         },
@@ -816,7 +816,7 @@ mod tests {
     fn spec_is_openapi_3_1_with_security_scheme() {
         let doc = spec();
         assert_eq!(doc["openapi"], "3.1.0");
-        assert_eq!(doc["info"]["version"], "0.0.3.2");
+        assert_eq!(doc["info"]["version"], "0.0.3.3");
         assert!(doc["components"]["securitySchemes"]["bearerAuth"].is_object());
     }
 
