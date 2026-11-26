@@ -109,3 +109,17 @@ Waves 151–200 as logged in WAVES.md: 151 audit (this document) ·
 181–188 checkout + pay · 189–194 Android · 195 team review #3 ·
 196–199 polish (responsive, motion, a11y, consistency) ·
 200 v0.0.3 release.
+
+## Amendments (Wave 165 review)
+- `--color-border-strong` is `#7d879c` (3.61:1 on surface), not the
+  `#d0d5dd` first specced — control boundaries need ≥3:1 (WCAG
+  1.4.11); the hex lives in the semantic layer deliberately and is
+  documented in tokens.css.
+- Motion tokens ship as `--motion-instant/fast/base/slow`
+  (75/120/200/320ms) + `--ease-out`/`--ease-in-out`; consumers use
+  these names consistently — the earlier `--duration-*` naming in
+  the Wave 151 spec is superseded.
+- `--color-danger-text` (`#b42318` family, 6.05:1 on danger-soft)
+  was added during implementation and is adopted.
+- Legacy token aliases (`--brand`, `--border`, …) are scheduled
+  for removal in v0.0.4, not v0.0.3.

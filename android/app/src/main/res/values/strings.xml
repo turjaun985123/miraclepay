@@ -21,15 +21,15 @@
     <string name="forward_switch_label">Forward payment SMS</string>
     <string name="forward_switch_support">Payment SMS are forwarded to your server as they arrive.</string>
     <string name="banner_permission_title">SMS permission needed</string>
-    <string name="banner_permission_body">MiraclePay can't see payment messages without it.</string>
-    <string name="banner_permission_denied">Denied — you can also enable it in Settings \u2192 Apps \u2192 MiraclePay \u2192 Permissions.</string>
+    <string name="banner_permission_body">MiraclePay can\'t see payment messages without it.</string>
+    <string name="banner_permission_denied">Denied — you can also enable it in Settings → Apps → MiraclePay → Permissions.</string>
     <string name="grant_sms_permission">Grant SMS permission</string>
     <string name="banner_battery_title">Background running restricted</string>
     <string name="banner_battery_body">Android may delay forwards for hours on this phone.</string>
     <string name="allow_background">Allow background running</string>
     <string name="queue_heading">Queue</string>
     <string name="queue_clear_title">Queue is clear</string>
-    <string name="queue_clear_body">Messages that can't be sent yet will appear here.</string>
+    <string name="queue_clear_body">Messages that can\'t be sent yet will appear here.</string>
     <string name="retry_all">Retry all</string>
     <string name="activity_heading">Activity</string>
     <string name="stat_forwarded">Forwarded</string>
@@ -45,8 +45,8 @@
     <string name="copied">Copied</string>
     <string name="queue_empty_toast">Queue is empty.</string>
     <plurals name="retrying_messages">
-        <item quantity="one">Retrying %d message\u2026</item>
-        <item quantity="other">Retrying %d messages\u2026</item>
+        <item quantity="one">Retrying %d message…</item>
+        <item quantity="other">Retrying %d messages…</item>
     </plurals>
 
     <!-- Settings screen (Waves 189-194) -->
@@ -59,7 +59,7 @@
     <string name="allowed_senders_hint">bKash</string>
     <string name="saved">Saved</string>
     <string name="test_uses_saved">Test connection uses the last saved settings.</string>
-    <string name="testing">Testing connection\u2026</string>
+    <string name="testing">Testing connection…</string>
     <string name="connection_ok">Connection OK</string>
     <string name="connection_failed">Connection failed</string>
 </resources>

@@ -32,10 +32,10 @@ import DashboardNav from '../../components/DashboardNav.astro';
   <DashboardNav active="webhooks" />
 
   <main id="main" class="container stack">
-    <header class="row" style="justify-content: space-between;">
+    <header class="row u-row-between">
       <div>
         <h1>Webhooks</h1>
-        <p class="muted" style="margin: 0;">
+        <p class="muted u-m0">
           Signed event notifications for
           <strong id="merchant-name">your merchant</strong>
           <span id="merchant-id" class="mono small"></span>
@@ -54,7 +54,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
     <section class="card stack" aria-labelledby="webhook-url-heading">
       <div>
         <h2 id="webhook-url-heading">Webhook endpoint</h2>
-        <p class="muted small" style="margin: 0;">
+        <p class="muted small u-m0">
           MiraclePay POSTs every event for this merchant to this URL,
           signed with an HMAC-SHA256 signature so you can verify it
           really came from MiraclePay. Leave it empty to disable
@@ -96,7 +96,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
     <section class="card stack" aria-labelledby="event-types-heading">
       <div>
         <h2 id="event-types-heading">Events this platform sends</h2>
-        <p class="muted small" style="margin: 0;">
+        <p class="muted small u-m0">
           There is no per-endpoint subscription filter — MiraclePay
           sends every event below for this merchant to the webhook URL
           above. Filter on the event type in your own handler if you
@@ -131,8 +131,8 @@ import DashboardNav from '../../components/DashboardNav.astro';
 
     <!-- ── Events ─────────────────────────────────────────────── -->
     <section class="card stack" aria-labelledby="events-heading">
-      <div class="row" style="justify-content: space-between;">
-        <h2 id="events-heading" style="margin: 0;">Events</h2>
+      <div class="row u-row-between">
+        <h2 id="events-heading" class="u-m0">Events</h2>
         <span id="events-count" class="badge"></span>
       </div>
 
@@ -158,8 +158,8 @@ import DashboardNav from '../../components/DashboardNav.astro';
 
     <!-- ── Deliveries ─────────────────────────────────────────── -->
     <section class="card stack" aria-labelledby="deliveries-heading">
-      <div class="row" style="justify-content: space-between;">
-        <h2 id="deliveries-heading" style="margin: 0;">Deliveries</h2>
+      <div class="row u-row-between">
+        <h2 id="deliveries-heading" class="u-m0">Deliveries</h2>
         <span id="deliveries-count" class="badge"></span>
       </div>
 
@@ -187,7 +187,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
     <section class="card stack" aria-labelledby="test-signature-heading">
       <div>
         <h2 id="test-signature-heading">Test signature</h2>
-        <p class="muted small" style="margin: 0;">
+        <p class="muted small u-m0">
           Check an HMAC-SHA256 webhook signature without delivering
           anything. Paste the signing secret, the exact raw payload
           that was signed, and the hex signature you received.

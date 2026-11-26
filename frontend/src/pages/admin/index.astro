@@ -79,8 +79,8 @@ import DashboardNav from '../../components/DashboardNav.astro';
       <section class="card" aria-labelledby="admin-analytics-heading">
         <h2 id="admin-analytics-heading">Analytics — last 30 days</h2>
         <p id="analytics-error" class="alert alert-error" role="alert" hidden></p>
-        <div id="analytics-daily" class="stack" style="gap:0.25rem"></div>
-        <h3 style="margin-top:1rem">By gateway</h3>
+        <div id="analytics-daily" class="stack u-gap-sm"></div>
+        <h3 class="u-mt">By gateway</h3>
         <div class="table-wrap">
           <table class="table">
             <thead>
@@ -246,7 +246,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
           The 50 most recent recorded actions. Filter by action prefix
           (e.g. <code>merchant.</code>) or entity type.
         </p>
-        <form id="audit-filter-form" class="row" style="gap:0.5rem;flex-wrap:wrap;margin-bottom:0.75rem">
+        <form id="audit-filter-form" class="row u-gap-md u-wrap u-mb">
           <input class="input" id="audit-filter-action" type="text" placeholder="Action prefix" aria-label="Filter by action prefix" autocomplete="off" />
           <input class="input" id="audit-filter-entity" type="text" placeholder="Entity type" aria-label="Filter by entity type" autocomplete="off" />
           <button class="btn btn-ghost" type="submit">Filter</button>
@@ -596,9 +596,9 @@ import DashboardNav from '../../components/DashboardNav.astro';
       if (dailyEl) {
         dailyEl.innerHTML = daily
           .map(
-            (d) => `<div style="display:flex;align-items:center;gap:0.5rem">
-              <span class="small muted" style="min-width:6.5rem">${esc(d.date)}</span>
-              <span style="display:inline-block;height:0.8rem;background:var(--color-chart-1);width:${Math.round((d.count / max) * 100)}%;min-width:${d.count > 0 ? 2 : 0}px"></span>
+            (d) => `<div class="u-chart-row">
+              <span class="small muted u-chart-label">${esc(d.date)}</span>
+              <span class="u-chart-bar" style="width:${Math.round((d.count / max) * 100)}%;min-width:${d.count > 0 ? 2 : 0}px"></span>
               <span class="small">${d.count} tx · ${esc(formatMoney(d.volume_minor, 'BDT'))}</span>
             </div>`,
           )
