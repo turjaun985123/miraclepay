@@ -7,6 +7,12 @@ use miraclepay_api::{build_router, AppState};
 async fn main() {
     let db = miraclepay_api::db::init_from_env().await;
     let state = AppState::from_env().with_db_pool(db.pool);
+    match miraclepay_api::persist::hydrate(&state).await {
+        Ok(0) => {}
+        Ok(n) => println!("[miraclepay] hydrated {n} persisted records from Postgres"),
+        Err(err) => eprintln!("[miraclepay] hydration failed ({err}) — starting empty"),
+    }
+    miraclepay_api::persist::spawn_snapshot_task(state.clone());
     if miraclepay_api::seed::sandbox_enabled() {
         // Wave 46: sandbox mode seeds a demo dataset into an empty
         // store. The demo password is published — local evaluation

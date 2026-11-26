@@ -551,3 +551,15 @@ v0.0.2 + GitHub Release.
 ### Wave 52 — Version bump to 0.0.2 (this commit)
 - Version fields only: root `Cargo.toml` + all 5 crates, `frontend/package.json`, `sdk/js/package.json`, Android `versionName "0.0.2"` / `versionCode 2`, health DTO + OpenAPI info version, API startup banner, CI/compose image tags (`miraclepay-api:0.0.2`, `miraclepay-frontend:0.0.2`), README title. Historical v0.0.1 references in docs/logs stay (they describe v0.0.1 accurately).
 - Local: 678 workspace tests pass (2 version assertions updated), fmt + clippy -D warnings clean.
+
+### Wave 52 — CI verdict ✅
+- Commit `65cca73`, CI run **45770243020**: verified twice at job+step level — all 5 jobs success (0 failed steps).
+
+### Waves 53–75 — Postgres persistence: handlers now persist (this commit)
+- **W53 infra:** migration `0005_persistence.sql` (`mp_records` JSONB record store) + new `api::persist` module — `collect`/`apply` own the per-collection mapping in one place; `snapshot` (one transaction, chunked upserts after per-collection delete), `hydrate`, `persisted_stats`, periodic snapshot task. Handlers untouched: they keep working on the in-memory collections, which are now a write-through cache of the database.
+- **W54–70, per collection:** users (W54 — via a persistence-only repr so `password_hash`/`totp_secret` survive without ever entering API serialization; the round-trip test proves the hash still verifies), merchants (W54), API keys/devices (W55), gateway configs (W56), platform settings + FX rates (W57), transactions (W58), payment links (W59), invoices (W60), webhook events + deliveries (W61), plans + subscriptions (W62), refunds + settlements (W63), disputes (W64), notifications (W65), audit log (W66), used_trx + risk assessments (W67), KYC profiles (W68), merchant settings (W69), refresh tokens (W70 — gained serde derives).
+- **W71 wiring:** `main` hydrates before serving and spawns the snapshot task (`PERSIST_SNAPSHOT_SECS`, default 15).
+- **W72–73 CI + proof:** the Rust CI job now runs a real Postgres 16 service with `TEST_DATABASE_URL`; new `crates/api/tests/persistence_pg.rs` — snapshot/hydrate round-trip against real Postgres **and** a full HTTP register → login → merchant flow that survives a simulated restart (fresh state hydrated from the DB; same credentials log in, merchant intact). Both tests use per-test databases and fail hard in CI if the URL is missing. **Verified locally against local Postgres 16: 2/2 pass.**
+- **W74 fallback:** in-memory mode unchanged — persist functions are no-ops without a pool (unit-tested); the existing suite passes with no database.
+- **W75 observability + docs:** `/health` gains `persisted_collections` / `persisted_records`; `docs/operations/persistence.md` documents the model, the ≤15 s crash window, and the verification path.
+- Local: 683 workspace tests pass (678 + 3 persist unit + 2 PG integration), fmt + clippy -D warnings clean.

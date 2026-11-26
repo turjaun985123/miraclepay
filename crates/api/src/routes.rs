@@ -37,6 +37,18 @@ use crate::state::AppState;
 /// the value produced by `crate::dto::health()`.
 async fn health(State(state): State<AppState>) -> impl IntoResponse {
     let base = crate::dto::health();
+    // Wave 75: persisted-store stats when Postgres is live, so an
+    // operator can see the record store is actually filling.
+    let (persisted_collections, persisted_records) = match &state.db_pool {
+        Some(pool) => match crate::persist::persisted_stats(pool).await {
+            Ok(stats) => (
+                serde_json::json!(stats.len()),
+                serde_json::json!(stats.iter().map(|(_, n)| n).sum::<i64>()),
+            ),
+            Err(_) => (serde_json::Value::Null, serde_json::Value::Null),
+        },
+        None => (serde_json::Value::Null, serde_json::Value::Null),
+    };
     Json(serde_json::json!({
         "status": base.status,
         "version": base.version,
@@ -44,6 +56,8 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
         "db": state.db_mode().as_str(),
         // Wave 46: sandbox deployments are discoverable, never stealthy.
         "sandbox": crate::seed::sandbox_enabled(),
+        "persisted_collections": persisted_collections,
+        "persisted_records": persisted_records,
     }))
 }
 

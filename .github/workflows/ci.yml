@@ -19,6 +19,26 @@ jobs:
   rust:
     name: Rust (test + build)
     runs-on: ubuntu-latest
+    # Waves 72-73: real Postgres for the persistence integration
+    # tests (crates/api/tests/persistence_pg.rs). TEST_DATABASE_URL
+    # is set for the whole job; the persistence tests fail hard if
+    # it is missing while CI=true, so they cannot silently skip.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: miraclepay
+          POSTGRES_PASSWORD: <redacted>
+          POSTGRES_DB: miraclepay
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U miraclepay"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://miraclepay:miraclepay@localhost:5432/miraclepay
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4

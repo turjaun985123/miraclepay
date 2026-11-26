@@ -21,7 +21,7 @@ use crate::state::AppState;
 pub const REFRESH_TTL_DAYS: i64 = 30;
 
 /// A stored refresh token, keyed in state by its SHA-256 hash.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RefreshRecord {
     pub user_id: String,
     pub expires_at: DateTime<Utc>,
