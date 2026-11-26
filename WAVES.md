@@ -989,3 +989,16 @@ tag/release is unchanged; a patch release is a separate call):
 - `Icon` had no `lock` entry, so both payer trust rows rendered
   an empty SVG (silent `?? ""` fallback). Lock glyph added;
   verified rendering in the built checkout/pay HTML.
+
+## Patch release v0.0.3.1 (2026-11-26, user-approved via options widget)
+
+Ships exactly the two post-release fixes already on main (`6ce16e2`) on top of the v0.0.3 tag — no other changes:
+1. API-key revoke dialog `confirmAction` string-contract fix (was rendering "[object Object]").
+2. Missing `lock` icon added to `Icon.astro` (payer trust rows rendered an empty SVG).
+
+- **Version bump commit `2d742e0`**: product version strings → 0.0.3.1 — health (routes.rs) + OpenAPI (openapi.rs) + dto.rs with pinned tests updated, integration test, frontend package.json + lockfile, landing page, JS SDK, Android versionName "0.0.3.1" / versionCode 4, docker-compose image tags. **Exception, technical:** Cargo crate versions remain `0.0.3` — cargo rejects four-part versions as invalid semver (parse error), so internal crate versions cannot carry 0.0.3.1; every user-visible version surface reports 0.0.3.1.
+- **Local checks:** cargo test --workspace 717 passed / 0 failed; JS SDK 8/8; Astro build 16 pages OK; token lint 0 hex literals outside tokens.css.
+- **CI run 45836221234** (bump commit): verified at job+step level TWICE — Docker ✅ · Rust (test + build) ✅ · Android ✅ · Frontend ✅ · Dependency audit (RustSec) ✅ · Security audit ✅ — 0 failed steps.
+- **Tag `v0.0.3.1`** at `2d742e0`. Release: https://github.com/turjaun985123/miraclepay/releases/tag/v0.0.3.1 (Latest, not draft).
+- **Assets (read-back via `gh release view`, sizes match CI artifacts):** `miraclepay-v0.0.3.1-linux-x86_64.tar.gz` 11,023,244 B (api 33,279,704 B + worker 918,232 B, ELF x86-64) · `miraclepay-v0.0.3.1-debug.apk` 6,167,231 B · `miraclepay-v0.0.3.1-release-unsigned.apk` 4,953,779 B.
+- **Binary proof:** tar.gz downloaded back from the release, extracted, `miraclepay-api` executed — `GET /health` returned `{"status":"ok","version":"0.0.3.1",…}` and the startup banner printed "MiraclePay API v0.0.3.1".
