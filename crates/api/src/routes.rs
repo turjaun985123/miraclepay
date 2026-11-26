@@ -26,8 +26,8 @@ use axum::{
 };
 
 use crate::handlers::{
-    admin, api_keys, auth, gateways, invoices, merchants, payment_links, payments, settlements, sms,
-    subscriptions, transactions, webhooks,
+    admin, api_keys, auth, gateways, invoices, kyc, merchants, payment_links, payments, settlements,
+    sms, subscriptions, transactions, webhooks,
 };
 use crate::state::AppState;
 
@@ -87,6 +87,16 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/v1/merchants/:id/balance",
             get(merchants::merchant_balance),
+        )
+        // Merchant KYC-lite (Wave 33)
+        .route(
+            "/api/v1/merchants/:id/kyc",
+            get(kyc::get_kyc).put(kyc::submit_kyc),
+        )
+        .route("/api/v1/admin/kyc/pending", get(kyc::list_pending_kyc))
+        .route(
+            "/api/v1/admin/merchants/:id/kyc/decision",
+            post(kyc::decide_kyc),
         )
         // ---------------------------------------------------------
         // Payments & checkout

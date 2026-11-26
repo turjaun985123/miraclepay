@@ -567,6 +567,50 @@ export function me(): Promise<User> {
   return apiFetch<User>('/api/v1/auth/me');
 }
 
+// Merchant KYC (Wave 33)
+
+export interface KycProfile {
+  merchant_id: string;
+  business_type?: string;
+  trade_license_no?: string | null;
+  nid_no?: string;
+  address?: string;
+  status: string;
+  decision_note?: string | null;
+  submitted_at?: string;
+  decided_at?: string | null;
+  [key: string]: unknown;
+}
+
+export function getKyc(merchantId: string): Promise<KycProfile> {
+  return apiFetch<KycProfile>(`/api/v1/merchants/${encodeURIComponent(merchantId)}/kyc`);
+}
+
+export function submitKyc(
+  merchantId: string,
+  data: { business_type: string; trade_license_no?: string; nid_no: string; address: string },
+): Promise<KycProfile> {
+  return apiFetch<KycProfile>(`/api/v1/merchants/${encodeURIComponent(merchantId)}/kyc`, {
+    method: 'PUT',
+    body: jsonBody(data),
+  });
+}
+
+export function listPendingKyc(): Promise<KycProfile[]> {
+  return apiFetch<KycProfile[]>('/api/v1/admin/kyc/pending');
+}
+
+export function decideKyc(
+  merchantId: string,
+  decision: 'verified' | 'rejected',
+  note?: string,
+): Promise<KycProfile> {
+  return apiFetch<KycProfile>(
+    `/api/v1/admin/merchants/${encodeURIComponent(merchantId)}/kyc/decision`,
+    { method: 'POST', body: jsonBody({ decision, note }) },
+  );
+}
+
 // Two-factor authentication (Wave 26)
 
 /** Start TOTP setup: returns the one-time secret + otpauth URI. */

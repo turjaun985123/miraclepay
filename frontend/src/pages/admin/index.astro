@@ -96,6 +96,27 @@ import DashboardNav from '../../components/DashboardNav.astro';
         <p id="analytics-empty" class="empty" hidden>No transactions yet.</p>
       </section>
 
+      <section class="card" aria-labelledby="admin-kyc-heading">
+        <h2 id="admin-kyc-heading">KYC review queue</h2>
+        <p id="kyc-queue-error" class="alert alert-error" role="alert" hidden></p>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th scope="col">Merchant</th>
+                <th scope="col">Type</th>
+                <th scope="col">Trade licence</th>
+                <th scope="col">NID</th>
+                <th scope="col">Address</th>
+                <th scope="col">Decision</th>
+              </tr>
+            </thead>
+            <tbody id="kyc-queue-body"></tbody>
+          </table>
+        </div>
+        <p id="kyc-queue-empty" class="empty" hidden>No KYC submissions are waiting for review.</p>
+      </section>
+
       <section class="card" aria-labelledby="admin-users-heading">
         <h2 id="admin-users-heading">Users</h2>
         <p id="users-error" class="alert alert-error" role="alert" hidden></p>
@@ -268,7 +289,10 @@ import DashboardNav from '../../components/DashboardNav.astro';
     formatMoney,
     getToken,
     listAudit,
+    listPendingKyc,
+    decideKyc,
     type AuditEntry,
+    type KycProfile,
     type DashboardStats,
     type Merchant,
     type User,
@@ -600,6 +624,63 @@ import DashboardNav from '../../components/DashboardNav.astro';
     }
   }
 
+  async function loadKycQueue(): Promise<void> {
+    try {
+      const pending: KycProfile[] = await listPendingKyc();
+      const empty = document.getElementById('kyc-queue-empty');
+      if (empty) empty.hidden = pending.length > 0;
+      const body = document.getElementById('kyc-queue-body');
+      if (!body) return;
+      body.innerHTML = '';
+      for (const profile of pending) {
+        const tr = document.createElement('tr');
+        const cells = [
+          profile.merchant_id,
+          profile.business_type ?? '—',
+          profile.trade_license_no ?? '—',
+          profile.nid_no ?? '—',
+          profile.address ?? '—',
+        ];
+        for (const text of cells) {
+          const td = document.createElement('td');
+          td.textContent = text;
+          tr.append(td);
+        }
+        const actions = document.createElement('td');
+        for (const decision of ['verified', 'rejected'] as const) {
+          const btn = document.createElement('button');
+          btn.className = 'btn btn-small';
+          btn.type = 'button';
+          btn.textContent = decision === 'verified' ? 'Verify' : 'Reject';
+          btn.addEventListener('click', async () => {
+            const note =
+              decision === 'rejected'
+                ? (window.prompt('Reason for rejection (sent to the merchant):') ?? '')
+                : '';
+            if (decision === 'rejected' && !note) return;
+            try {
+              await decideKyc(profile.merchant_id, decision, note || undefined);
+              await loadKycQueue();
+            } catch (error) {
+              showError(
+                document.getElementById('kyc-queue-error'),
+                errMessage(error, 'Could not record the decision.'),
+              );
+            }
+          });
+          actions.append(btn, document.createTextNode(' '));
+        }
+        tr.append(actions);
+        body.append(tr);
+      }
+    } catch (error) {
+      showError(
+        document.getElementById('kyc-queue-error'),
+        errMessage(error, 'Could not load the KYC queue.'),
+      );
+    }
+  }
+
   async function loadUsers(): Promise<void> {
     try {
       const payload = await apiFetch<unknown>('/api/v1/admin/users');
@@ -738,7 +819,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
     if (loadingEl) loadingEl.hidden = true;
     if (contentEl) contentEl.hidden = false;
 
-    await Promise.all([loadUsers(), loadMerchants(), loadAudit(), loadSettings(), loadAnalytics()]);
+    await Promise.all([loadUsers(), loadMerchants(), loadAudit(), loadSettings(), loadAnalytics(), loadKycQueue()]);
   }
 
   void init();

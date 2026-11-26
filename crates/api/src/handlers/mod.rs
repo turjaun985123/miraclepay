@@ -3,6 +3,7 @@ pub mod api_keys;
 pub mod auth;
 pub mod gateways;
 pub mod invoices;
+pub mod kyc;
 pub mod merchants;
 pub mod payment_links;
 pub mod payments;

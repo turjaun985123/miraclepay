@@ -275,3 +275,12 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - **Signing v2** (domain `webhook`): timestamped signatures `t=<unix>,v2=<HMAC(secret, "{t}.{body}")>` with a 300 s verification window — v1 signed only the body, so a captured delivery could be replayed forever. Worker deliveries now send both `x-miraclepay-signature` (v1) and `x-miraclepay-signature-v2`; v2 verify is constant-time and panic-free on malformed headers (roundtrip + replay-window tests).
 - **Catalogue gap closed:** subscription and settlement actions were audit-logged but never emitted webhooks. New `AppState::emit_webhook` helper; subscription created/cancelled/paused/resumed and settlement.paid now emit. Canonical list pinned in `webhook::EVENT_TYPES` (sorted/unique test).
 - `docs/webhooks.md`: delivery/retry behaviour, both verification schemes with steps, and the full 10-event catalogue with payload highlights. Workspace: 650 tests pass.
+
+### Wave 32 — CI verdict ✅
+- Commit `d0cd891`, CI run **45759770760**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 33 — Merchant onboarding / KYC-lite (this commit)
+- New `domain::kyc`: profile model (business type, trade licence, NID, address), BD NID validation (10/13/17 digits), submission validation collecting all errors, status flow NotSubmitted → Pending → Verified/Rejected.
+- Endpoints: `PUT/GET /merchants/:id/kyc` (owner submit/read, admin read), `GET /admin/kyc/pending` (review queue), `POST /admin/merchants/:id/kyc/decision`. OpenAPI now 75 operations.
+- Enforcement (narrow, documented in the module): a KYC-**rejected** merchant cannot be activated (409 at the admin status endpoint); no-profile merchants keep pre-KYC behaviour.
+- UI: dashboard KYC card (status + submit/resubmit form per merchant) and an admin review queue with Verify/Reject (rejection requires a note shown to the merchant). Workspace: 652 tests pass, Astro build passes.

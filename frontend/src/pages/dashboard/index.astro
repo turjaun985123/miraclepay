@@ -181,6 +181,41 @@ import DashboardNav from '../../components/DashboardNav.astro';
         <p id="tx-error" class="alert alert-error" role="alert" hidden></p>
       </section>
 
+      <section class="card" aria-labelledby="kyc-heading">
+        <h2 id="kyc-heading">Business verification (KYC)</h2>
+        <p id="kyc-status" class="muted">Loading…</p>
+        <form id="kyc-form" novalidate>
+          <div class="grid" style="grid-template-columns:1fr 1fr;gap:1rem">
+            <div class="field">
+              <label class="label" for="kyc-type">Business type</label>
+              <select id="kyc-type" class="input">
+                <option value="sole_proprietorship">Sole proprietorship</option>
+                <option value="partnership">Partnership</option>
+                <option value="limited">Limited company</option>
+                <option value="online_seller">Online seller</option>
+                <option value="freelancer">Freelancer</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="label" for="kyc-license">Trade licence no. (optional)</label>
+              <input id="kyc-license" class="input" type="text" placeholder="TRAD/DHAKA/2026-12345" />
+            </div>
+            <div class="field">
+              <label class="label" for="kyc-nid">Owner NID number</label>
+              <input id="kyc-nid" class="input" type="text" inputmode="numeric" placeholder="10, 13 or 17 digits" />
+            </div>
+            <div class="field">
+              <label class="label" for="kyc-address">Business address</label>
+              <input id="kyc-address" class="input" type="text" placeholder="House, Road, City" />
+            </div>
+          </div>
+          <p id="kyc-error" class="alert alert-error" role="alert" hidden></p>
+          <p id="kyc-ok" class="alert alert-success" role="status" hidden></p>
+          <button id="kyc-submit" class="btn" type="submit">Submit for review</button>
+        </form>
+      </section>
+
       <section class="card" aria-labelledby="twofa-heading">
         <h2 id="twofa-heading">Two-factor authentication (2FA)</h2>
         <p id="twofa-status" class="muted">Loading…</p>
@@ -236,6 +271,8 @@ import DashboardNav from '../../components/DashboardNav.astro';
       createPayment,
       formatMoney,
       me,
+      getKyc,
+      submitKyc,
       totpSetup,
       totpEnable,
       totpDisable,
@@ -390,6 +427,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
       if (!currentMerchantId) return;
       els.pageError.hidden = true;
       await Promise.all([loadBalance(currentMerchantId), loadTransactions(currentMerchantId)]);
+      void loadKyc();
     }
 
     function populateMerchantSelect() {
@@ -403,6 +441,68 @@ import DashboardNav from '../../components/DashboardNav.astro';
       if (currentMerchantId) els.merchantSelect.value = currentMerchantId;
       els.switcher.hidden = merchants.length === 0;
     }
+
+    // -- KYC panel (Wave 33) ---------------------------------------
+    const kycEls = {
+      status: $('kyc-status'),
+      form: $('kyc-form'),
+      type: $('kyc-type'),
+      license: $('kyc-license'),
+      nid: $('kyc-nid'),
+      address: $('kyc-address'),
+      error: $('kyc-error'),
+      ok: $('kyc-ok'),
+    };
+
+    async function loadKyc() {
+      if (!currentMerchantId) return;
+      try {
+        const profile = await getKyc(currentMerchantId);
+        const labels = {
+          not_submitted: 'Not submitted yet — complete the form to start verification.',
+          pending: 'Pending review by the MiraclePay team.',
+          verified: 'Verified ✓ — your business identity is confirmed.',
+          rejected: 'Rejected — read the note, correct the details, and resubmit.',
+        };
+        if (kycEls.status) {
+          kycEls.status.textContent =
+            (labels[profile.status] ?? profile.status) +
+            (profile.status === 'rejected' && profile.decision_note
+              ? ` Note: ${profile.decision_note}`
+              : '');
+        }
+        if (profile.business_type && kycEls.type) kycEls.type.value = profile.business_type;
+        if (profile.trade_license_no && kycEls.license) kycEls.license.value = profile.trade_license_no;
+        if (profile.nid_no && kycEls.nid) kycEls.nid.value = profile.nid_no;
+        if (profile.address && kycEls.address) kycEls.address.value = profile.address;
+      } catch {
+        if (kycEls.status) kycEls.status.textContent = 'Could not load verification status.';
+      }
+    }
+
+    kycEls.form?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (kycEls.error) kycEls.error.hidden = true;
+      if (kycEls.ok) kycEls.ok.hidden = true;
+      try {
+        await submitKyc(currentMerchantId, {
+          business_type: kycEls.type?.value ?? 'other',
+          trade_license_no: kycEls.license?.value.trim() || undefined,
+          nid_no: kycEls.nid?.value.trim() ?? '',
+          address: kycEls.address?.value.trim() ?? '',
+        });
+        if (kycEls.ok) {
+          kycEls.ok.textContent = 'Submitted — your profile is now pending review.';
+          kycEls.ok.hidden = false;
+        }
+        await loadKyc();
+      } catch (err) {
+        if (kycEls.error) {
+          kycEls.error.textContent = err instanceof Error ? err.message : 'Submission failed.';
+          kycEls.error.hidden = false;
+        }
+      }
+    });
 
     // -- Two-factor authentication panel (Wave 26) -----------------
     const twofa = {

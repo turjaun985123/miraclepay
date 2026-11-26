@@ -209,6 +209,19 @@ pub async fn set_merchant_status(
     require_admin(&auth)?;
     let new_status = parse_merchant_status(&req.status)?;
 
+    // Wave 33: a merchant whose KYC was rejected cannot be activated.
+    if new_status == miraclepay_domain::merchant::MerchantStatus::Active {
+        let profiles = state.kyc_profiles.read().await;
+        if let Some(profile) = profiles.get(&id) {
+            if profile.status == miraclepay_domain::kyc::KycStatus::Rejected {
+                return Err(ApiError::Conflict(
+                    "merchant KYC is rejected; the merchant must resubmit before activation"
+                        .to_string(),
+                ));
+            }
+        }
+    }
+
     let (previous_status, updated) = {
         let mut merchants = state.merchants.write().await;
         let merchant = merchants

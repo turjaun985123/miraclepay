@@ -24,6 +24,9 @@ const ROUTES: &[(&str, &[&str], &str, &str, bool)] = &[
     ("/api/v1/merchants", &["post", "get"], "Create / list my merchants", "Merchants", true),
     ("/api/v1/merchants/{id}", &["get", "patch"], "Get / update a merchant", "Merchants", true),
     ("/api/v1/merchants/{id}/balance", &["get"], "Merchant balance", "Merchants", true),
+    ("/api/v1/merchants/{id}/kyc", &["get", "put"], "Get / submit merchant KYC profile", "Merchants", true),
+    ("/api/v1/admin/kyc/pending", &["get"], "KYC review queue (admin)", "Admin", true),
+    ("/api/v1/admin/merchants/{id}/kyc/decision", &["post"], "Verify / reject a KYC profile (admin)", "Admin", true),
     ("/api/v1/merchants/{id}/gateways", &["get", "put"], "List / upsert gateway configs", "Gateways", true),
     ("/api/v1/merchants/{id}/gateways/{gateway}", &["delete"], "Remove a gateway config", "Gateways", true),
     ("/api/v1/merchants/{id}/gateways/status", &["get"], "Gateway configuration status", "Gateways", true),
@@ -183,11 +186,11 @@ mod tests {
 
     #[test]
     fn operation_count_matches_the_router_surface() {
-        // routes::build_router registers 72 method handlers as of
-        // Wave 26 — 71 in this table plus GET /openapi.json itself.
+        // routes::build_router registers 76 method handlers as of
+        // Wave 33 — 75 in this table plus GET /openapi.json itself.
         // If you add a route, add it to ROUTES above and update
         // this number.
-        assert_eq!(operation_count(), 71);
+        assert_eq!(operation_count(), 75);
     }
 
     #[test]
