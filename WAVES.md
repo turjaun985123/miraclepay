@@ -385,3 +385,10 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 ### Wave 46 — Seed / demo data + sandbox mode (this commit)
 - `SANDBOX_MODE=1` at startup seeds an empty store: demo owner (`demo@miraclepay.local` / `demo1234`, published on purpose), one active merchant, 14 days of demo transactions (chart-ready, `"demo": true` metadata), a ৳500 payment link and a sent invoice. Seeding is startup-only, empty-store-only, and idempotent (unit-tested: second run is a no-op).
 - Safety rails: no HTTP seed trigger; `/health` reports `"sandbox": true`; the startup log warns loudly; `docs/operations/sandbox.md` documents the flow and the never-in-production rule. Workspace: 678 tests pass.
+
+### Wave 46 — CI verdict ✅
+- Commit `21e9ff8`, CI run **45764156568**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 47 — Upgrade/migration guide + ops runbook (this commit)
+- `docs/operations/runbook.md`: 30-second deployment check (/health db + sandbox fields, /api/versions, /metrics), the full env reference (core, gateways, SMTP — grepped from the code, not remembered), and incident playbooks: webhook dead letters → redeliver endpoint, SMTP-not-configured 409, stuck-Pending payments (device presence + Android outbox), 429 budgets, fraud-flag review, rollback pointer, and daily/weekly routines.
+- `docs/operations/upgrade-guide.md`: compatibility promises (API v1 additive-only; append-only migrations 0001–0004; in-memory = nothing to migrate), pre-upgrade checklist, compose upgrade steps, and the two rollback shapes (no-migration vs migration-ran → restore, never hand-edit bookkeeping). Every endpoint/env claim in both docs was verified against the code while writing.
