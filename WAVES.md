@@ -106,3 +106,6 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - New `sms_verify::bd_templates`: realistic Nagad/Rocket/Upay template tests end-to-end (parse all fields → Verified against matching pending payment; replay → Duplicate; promo → never settles).
 - **Bug found by those tests and fixed:** the matcher scored a provider-TrxID match alone as Exact (100 pts), so a Tk 999 payment auto-verified against a Tk 1,250 SMS with the same TrxID. `match_transaction` now refuses Exact whenever an SMS amount present contradicts the transaction amount (falls through to Probable/NoMatch rules). The old test that encoded the unsafe behaviour was rewritten to assert the safe one.
 - Local: 588 workspace tests pass (9 new template tests + matcher guard).
+
+### Wave 8 — CI verdict ✅
+- Commit `e0876b0`, CI run **45753217844**: verified twice at job+step level — all 4 jobs success (0 failed steps). The matcher amount-contradiction fix is green in CI.

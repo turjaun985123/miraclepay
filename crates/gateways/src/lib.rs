@@ -13,6 +13,7 @@ pub mod razorpay;
 pub mod registry;
 pub mod rocket;
 pub mod stripe;
+pub mod stripe_checkout;
 pub mod surecash;
 pub mod traits;
 pub mod types;
