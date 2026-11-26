@@ -958,3 +958,21 @@ accessibility final pass (WCAG 2.2 AA) · 199 consistency sweep
   `miraclepay-v0.0.3-debug.apk`,
   `miraclepay-v0.0.3-release-unsigned.apk`.
 - CI verdict + release read-back logged below.
+- CI run **45812207774** (commit `6874ab4`): all 6 jobs success,
+  verified twice — BUT the downloaded binary's /health still
+  reported 0.0.2: the health/OpenAPI version strings live in
+  dto.rs/openapi.rs (with pinned tests), not routes.rs. Fixed in
+  `c499214`; final release run **45813096914**: verified twice at
+  job+step level — all 6 jobs success, 0 failed steps. ✅
+- **v0.0.3 RELEASED**: tag `v0.0.3` at `c499214`,
+  https://github.com/turjaun985123/miraclepay/releases/tag/v0.0.3
+  Assets (read-back verified via gh release view, sizes exact):
+  `miraclepay-v0.0.3-linux-x86_64.tar.gz` (11,023,610 B — new
+  asset class per user requirement: release-profile
+  miraclepay-api 33,279,968 B + miraclepay-worker 918,232 B,
+  both ELF 64-bit x86-64), `miraclepay-v0.0.3-debug.apk`
+  (6,167,230 B), `miraclepay-v0.0.3-release-unsigned.apk`
+  (4,953,779 B). The tar.gz was downloaded back from the
+  published release, extracted, and the api binary was run:
+  GET /health → {"status":"ok","version":"0.0.3",…}. ✅
+- Design program Waves 151–200 complete.
