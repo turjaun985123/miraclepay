@@ -15,6 +15,7 @@ pub mod stats;
 pub mod subscription;
 pub mod transaction;
 pub mod user;
+pub mod analytics;
 pub mod api_key;
 pub mod password;
 pub mod webhook;

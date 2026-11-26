@@ -75,6 +75,27 @@ import DashboardNav from '../../components/DashboardNav.astro';
         </div>
       </section>
 
+      <section class="card" aria-labelledby="admin-analytics-heading">
+        <h2 id="admin-analytics-heading">Analytics — last 30 days</h2>
+        <p id="analytics-error" class="alert alert-error" role="alert" hidden></p>
+        <div id="analytics-daily" class="stack" style="gap:0.25rem"></div>
+        <h3 style="margin-top:1rem">By gateway</h3>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th scope="col">Gateway</th>
+                <th scope="col">Transactions</th>
+                <th scope="col">Completed</th>
+                <th scope="col">Volume (BDT)</th>
+              </tr>
+            </thead>
+            <tbody id="analytics-gateways-body"></tbody>
+          </table>
+        </div>
+        <p id="analytics-empty" class="empty" hidden>No transactions yet.</p>
+      </section>
+
       <section class="card" aria-labelledby="admin-users-heading">
         <h2 id="admin-users-heading">Users</h2>
         <p id="users-error" class="alert alert-error" role="alert" hidden></p>
@@ -523,6 +544,62 @@ import DashboardNav from '../../components/DashboardNav.astro';
     }
   }
 
+  interface AnalyticsDay {
+    date: string;
+    count: number;
+    completed: number;
+    volume_minor: number;
+  }
+  interface AnalyticsGateway {
+    gateway: string;
+    count: number;
+    completed: number;
+    volume_minor: number;
+  }
+
+  async function loadAnalytics(): Promise<void> {
+    try {
+      const payload = await apiFetch<{ daily?: AnalyticsDay[]; gateways?: AnalyticsGateway[] }>(
+        '/api/v1/admin/analytics?days=30',
+      );
+      const daily = payload.daily ?? [];
+      const gateways = payload.gateways ?? [];
+      const empty = document.getElementById('analytics-empty');
+      if (empty) empty.hidden = daily.some((d) => d.count > 0);
+      const max = Math.max(1, ...daily.map((d) => d.count));
+      const dailyEl = document.getElementById('analytics-daily');
+      if (dailyEl) {
+        dailyEl.innerHTML = daily
+          .map(
+            (d) => `<div style="display:flex;align-items:center;gap:0.5rem">
+              <span class="small muted" style="min-width:6.5rem">${esc(d.date)}</span>
+              <span style="display:inline-block;height:0.8rem;background:var(--accent,#2563eb);width:${Math.round((d.count / max) * 100)}%;min-width:${d.count > 0 ? 2 : 0}px"></span>
+              <span class="small">${d.count} tx · ${esc(formatMoney(d.volume_minor, 'BDT'))}</span>
+            </div>`,
+          )
+          .join('');
+      }
+      const body = document.getElementById('analytics-gateways-body');
+      if (body) {
+        body.innerHTML = gateways
+          .map(
+            (g) => `<tr>
+              <td>${esc(g.gateway)}</td>
+              <td>${g.count}</td>
+              <td>${g.completed}</td>
+              <td>${esc(formatMoney(g.volume_minor, 'BDT'))}</td>
+            </tr>`,
+          )
+          .join('');
+      }
+    } catch (error) {
+      showError(
+        document.getElementById('analytics-error'),
+        errMessage(error, 'Could not load analytics.'),
+      );
+    }
+  }
+
   async function loadUsers(): Promise<void> {
     try {
       const payload = await apiFetch<unknown>('/api/v1/admin/users');
@@ -661,7 +738,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
     if (loadingEl) loadingEl.hidden = true;
     if (contentEl) contentEl.hidden = false;
 
-    await Promise.all([loadUsers(), loadMerchants(), loadAudit(), loadSettings()]);
+    await Promise.all([loadUsers(), loadMerchants(), loadAudit(), loadSettings(), loadAnalytics()]);
   }
 
   void init();

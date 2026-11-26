@@ -163,3 +163,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 ### Waves 17+18 — Refunds end-to-end + Settlements API (this commit, one CI run)
 - **W17 Refunds:** refunds could be created but never settled, and creation alone flipped the transaction to Refunded. Now: `POST /refunds/:id/settle {outcome}` records the terminal verdict, transaction status is recomputed from *settled* refunds only (`recompute_tx_refund_status`), creation no longer flips status, webhook `refund.succeeded`/`refund.failed` + audit emitted.
 - **W18 Settlements:** settlements existed only as a worker job. New API: `GET /settlements` (owner-scoped, paging), `POST /settlements/run` (worker `collect_candidates`+`build_settlements` over a period; earlier settlement periods excluded so a period never pays twice; fee defaults to platform setting), `POST /settlements/:id/pay` (worker `mark_paid` with payout reference). API crate now depends on the worker crate for the job engines.
+
+### Waves 17+18 — CI verdict ✅
+- Commit `0709c61`, CI run **45755583567**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 19 — Admin analytics (this commit)
+- New `domain::analytics`: zero-filled daily series (counts + completed BDT volume, reporting-currency convention shared with `compute_stats`) and per-gateway breakdown; 2 aggregation tests.
+- New endpoint `GET /api/v1/admin/analytics?days=30` (admin-only, days clamped 1..=90).
+- Admin page gains an Analytics section: daily bars + per-gateway table. Local: 620 workspace tests pass, Astro build passes.

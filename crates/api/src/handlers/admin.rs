@@ -109,6 +109,36 @@ pub async fn platform_stats(
     }))
 }
 
+/// Query for [`platform_analytics`].
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct AnalyticsQuery {
+    /// Days of daily series to return (clamped to 1..=90, default 30).
+    pub days: Option<u32>,
+}
+
+/// `GET /admin/analytics` — platform analytics for administrators
+/// (Wave 19): a zero-filled daily series (counts + completed BDT
+/// volume) and a per-gateway breakdown, computed by
+/// `miraclepay_domain::analytics`.
+pub async fn platform_analytics(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Query(query): Query<AnalyticsQuery>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_admin(&auth)?;
+    let days = query.days.unwrap_or(30).clamp(1, 90);
+    let transactions = state.transactions.read().await;
+    let txs: Vec<_> = transactions.values().cloned().collect();
+    drop(transactions);
+    let daily = miraclepay_domain::analytics::daily_series(&txs, days, Utc::now());
+    let gateways = miraclepay_domain::analytics::gateway_breakdown(&txs);
+    Ok(Json(serde_json::json!({
+        "days": days,
+        "daily": daily,
+        "gateways": gateways,
+    })))
+}
+
 /// `GET /admin/users` — list user accounts, most of the platform's
 /// users up to `limit`.
 ///
