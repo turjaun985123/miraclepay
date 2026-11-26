@@ -84,3 +84,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - Commit `53164fd`, CI run **45752150459**: verified twice at job+step level — Rust success, Frontend success, Android success, **Docker success** (new job builds both images; 0 failed steps).
 - Root `Dockerfile` (multi-stage, api+worker binaries, non-root, healthcheck), `Dockerfile.frontend` (Astro build → nginx), `.dockerignore`; compose now has 5 services (postgres, redis profile, api, worker with correct `miraclepay-worker` command, frontend) and the stale "Dockerfile does not exist" note is gone.
 - Local: compose YAML validated (5 services); no Docker on this VM, so image builds are verified in CI.
+
+### Wave 5 — Android release APK + CI artifacts ✅
+- Commit `3ac7ddd`, CI run **45752388388**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+- Android job now also runs `assembleRelease` (unsigned, proves release packaging) and uploads `miraclepay-apks` artifact — confirmed present on the run: 9,088,472 bytes (debug + release APKs).
+
+### Wave 6 — Webhook delivery persistence + dead-letter (this commit)
+- New `worker::delivery_store::FileDeliveryStore`: JSON-file persistence (atomic tmp+rename), automatic dead-letter separation, `due(now)` scheduling query, dead-letter requeue. Retry/backoff policy itself already lived in domain (8 attempts, exponential backoff to 24h cap) and is reused unchanged.
+- Local: 573 workspace tests pass (5 new store tests; one parallel-test temp-file race found and fixed during the wave).
