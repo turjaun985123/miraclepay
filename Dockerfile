@@ -4,11 +4,25 @@
 #   api    → `miraclepay-api`    (default CMD)
 #   worker → `miraclepay-worker` (compose overrides the command)
 
+# v0.0.3.2: the api binary embeds the frontend bundle, so build
+# the Astro site first and hand dist/ to the Rust build.
+# PUBLIC_API_URL is emptied: the embedded UI calls the API
+# relative to its own origin. (The separate frontend image in
+# Dockerfile.frontend is unchanged for compose deployments.)
+FROM node:24-alpine AS web
+WORKDIR /web
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+ENV PUBLIC_API_URL=
+RUN npm run build
+
 FROM rust:1-slim-bookworm AS builder
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY migrations ./migrations
+COPY --from=web /web/dist ./frontend/dist
 RUN cargo build --release -p miraclepay-api -p miraclepay-worker \
     && strip target/release/miraclepay-api target/release/miraclepay-worker
 

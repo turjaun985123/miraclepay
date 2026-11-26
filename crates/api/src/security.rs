@@ -6,9 +6,14 @@
 //!
 //! - `X-Content-Type-Options: nosniff`
 //! - `X-Frame-Options: DENY` + CSP `frame-ancestors 'none'` (the API
-//!   serves JSON only; it must never be framed)
-//! - `Content-Security-Policy: default-src 'none'` (JSON API: no
-//!   scripts, styles, or subresources of its own)
+//!   must never be framed)
+//! - `Content-Security-Policy: default-src 'none'` **on API
+//!   responses** (JSON API: no scripts, styles, or subresources of
+//!   its own). Since v0.0.3.2 the binary also serves the embedded
+//!   frontend; non-API responses instead get a same-origin CSP
+//!   (`default-src 'self'`, inline script/style allowed because
+//!   Astro ships small inline bootstrap blocks) — see
+//!   [`is_api_path`] and [`apply_security_headers`].
 //! - `Referrer-Policy: no-referrer`
 //! - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
 //!   (browsers ignore it over plain HTTP, so local dev is unaffected)
@@ -62,7 +67,30 @@ const ALLOW_HEADERS: &str = "authorization, content-type, x-device-key";
 
 /// Outermost middleware: CORS preflight handling + security headers
 /// on every response.
+/// Whether a path belongs to the JSON API surface (including the
+/// health probes, metrics and the OpenAPI document) as opposed to
+/// the embedded frontend. Decides which CSP a response carries:
+/// API responses stay locked to `default-src 'none'`; frontend
+/// responses get the same-origin policy the site's own assets need.
+pub fn is_api_path(path: &str) -> bool {
+    path.starts_with("/api/")
+        || path == "/health"
+        || path.starts_with("/health/")
+        || path == "/metrics"
+        || path == "/openapi.json"
+}
+
+/// CSP for API responses: nothing loads, nothing frames.
+const API_CSP: &str = "default-src 'none'; frame-ancestors 'none'";
+/// CSP for the embedded frontend: same-origin assets, inline
+/// script/style (Astro bootstrap), data: images/fonts, API calls
+/// to the same origin only, never framed.
+const STATIC_CSP: &str = "default-src 'self'; script-src 'self' 'unsafe-inline'; \
+style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; \
+connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+
 pub async fn security_middleware(request: Request, next: Next) -> Response {
+    let api_path = is_api_path(request.uri().path());
     let origins = allowed_origins();
     let origin = request
         .headers()
@@ -85,7 +113,7 @@ pub async fn security_middleware(request: Request, next: Next) -> Response {
         if let Some(origin) = &allowed_origin {
             apply_cors_headers(&mut response, origin, true);
         }
-        apply_security_headers(&mut response);
+        apply_security_headers(&mut response, true);
         return response;
     }
 
@@ -93,7 +121,7 @@ pub async fn security_middleware(request: Request, next: Next) -> Response {
     if let Some(origin) = &allowed_origin {
         apply_cors_headers(&mut response, origin, false);
     }
-    apply_security_headers(&mut response);
+    apply_security_headers(&mut response, api_path);
     response
 }
 
@@ -119,7 +147,7 @@ fn apply_cors_headers(response: &mut Response, origin: &str, preflight: bool) {
     }
 }
 
-fn apply_security_headers(response: &mut Response) {
+fn apply_security_headers(response: &mut Response, api: bool) {
     let headers = response.headers_mut();
     headers.insert(
         header::X_CONTENT_TYPE_OPTIONS,
@@ -132,7 +160,7 @@ fn apply_security_headers(response: &mut Response) {
     );
     headers.insert(
         header::CONTENT_SECURITY_POLICY,
-        HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'"),
+        HeaderValue::from_static(if api { API_CSP } else { STATIC_CSP }),
     );
     headers.insert(
         header::STRICT_TRANSPORT_SECURITY,
@@ -151,6 +179,23 @@ mod tests {
             vec!["https://a.test".to_string(), "https://b.test".to_string()]
         );
         assert!(parse_origins("").is_empty());
+    }
+
+    #[test]
+    fn api_paths_are_classified_for_csp_scoping() {
+        for api in [
+            "/api/v1/payments",
+            "/api/versions",
+            "/health",
+            "/health/ready",
+            "/metrics",
+            "/openapi.json",
+        ] {
+            assert!(is_api_path(api), "{api} should be an API path");
+        }
+        for web in ["/", "/login/", "/dashboard/", "/_astro/app.js", "/pay/abc"] {
+            assert!(!is_api_path(web), "{web} should be a frontend path");
+        }
     }
 
     #[test]

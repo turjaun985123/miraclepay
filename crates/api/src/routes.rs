@@ -443,7 +443,10 @@ pub fn build_router(state: AppState) -> Router {
         )
         // Wave 40: structured fallback for unmatched paths
         // (unsupported API versions get a named error).
-        .fallback(crate::versioning::api_fallback)
+        // v0.0.3.2: the fallback now serves the embedded frontend
+        // for browser paths first (see `static_files`); API paths
+        // still land in the Wave 40 structured JSON 404.
+        .fallback(crate::static_files::static_fallback)
         // Wave 40: API-Version response header on /api/v1 calls.
         .layer(axum::middleware::from_fn(
             crate::versioning::version_middleware,

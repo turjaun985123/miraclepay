@@ -53,6 +53,23 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      # v0.0.3.2: the api binary embeds the built frontend
+      # (crates/api/src/static_files.rs), so the bundle must exist
+      # BEFORE any cargo step — otherwise the tests and the release
+      # binary would embed the build.rs placeholder page.
+      # PUBLIC_API_URL is emptied so the embedded bundle calls the
+      # API relative to its own origin (same-origin serving).
+      - name: Set up Node.js (for the embedded frontend build)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build the frontend for embedding
+        working-directory: frontend
+        run: |
+          npm install
+          PUBLIC_API_URL= npm run build
+
       - name: Cache Cargo dependencies and build artifacts
         uses: Swatinem/rust-cache@v2
 
@@ -93,6 +110,12 @@ jobs:
       # requirement, v0.0.3 onward).
       - name: Build release server binaries
         run: cargo build --release -p miraclepay-api -p miraclepay-worker
+
+      # v0.0.3.2: prove the release binary actually serves the UI
+      # it embedded (landing, a page route, a hashed asset), while
+      # /health and unknown API paths stay JSON.
+      - name: Embedded UI smoke (release binary serves the frontend)
+        run: bash scripts/embedded-ui-smoke.sh target/release/miraclepay-api
 
       - name: Upload server binary artifacts
         uses: actions/upload-artifact@v4

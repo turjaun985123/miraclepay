@@ -25,6 +25,7 @@ pub mod routes;
 pub mod security;
 pub mod seed;
 pub mod state;
+pub mod static_files;
 pub mod validation;
 pub mod versioning;
 
