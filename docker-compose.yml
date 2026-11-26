@@ -89,6 +89,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+      args:
+        # The API origin visitors' browsers should call; set
+        # PUBLIC_API_URL in .env for any non-localhost deployment.
+        PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8080}
     image: miraclepay-frontend:0.0.2
     ports:
       - "${FRONTEND_PORT:-4321}:80"

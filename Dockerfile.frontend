@@ -1,4 +1,4 @@
-# MiraclePay v0.0.1 — frontend image (Wave 4)
+# MiraclePay v0.0.2 — frontend image (Wave 4, PUBLIC_API_URL build arg Wave 136)
 # Builds the Astro 7 static site and serves it with nginx.
 
 FROM node:24-alpine AS builder
@@ -6,6 +6,12 @@ WORKDIR /web
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
+# PUBLIC_API_URL is baked into the static bundle at build time:
+# it must be the API origin the *visitor's browser* can reach.
+# Compose passes it from the environment (default: same-host
+# :8080). Building without it falls back to localhost:8080.
+ARG PUBLIC_API_URL=http://localhost:8080
+ENV PUBLIC_API_URL=$PUBLIC_API_URL
 RUN npm run build
 
 FROM nginx:alpine AS runtime

@@ -273,12 +273,47 @@ pub async fn snapshot(state: &AppState) -> Result<usize, sqlx::Error> {
     snapshot_to(pool, state).await
 }
 
+/// Hashes of the collections written by the last successful
+/// snapshot, per (database, collection) — Wave 144 dirty
+/// tracking: an unchanged collection is not rewritten, so the
+/// 15-second snapshot cadence costs nothing while idle.
+static SNAPSHOT_HASHES: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashMap<(String, String), u64>>,
+> = std::sync::OnceLock::new();
+
+fn collection_hash(entries: &[(String, serde_json::Value)]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut sorted: Vec<&(String, serde_json::Value)> = entries.iter().collect();
+    sorted.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for (id, data) in sorted {
+        id.hash(&mut hasher);
+        data.to_string().hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
 /// [`snapshot`] against an explicit pool (used by tests).
 pub async fn snapshot_to(pool: &PgPool, state: &AppState) -> Result<usize, sqlx::Error> {
     let collections = collect(state).await;
+    let database = pool
+        .connect_options()
+        .get_database()
+        .unwrap_or("postgres")
+        .to_string();
+    let hashes = SNAPSHOT_HASHES.get_or_init(Default::default);
     let mut tx = pool.begin().await?;
     let mut written = 0usize;
     for (name, entries) in &collections {
+        // Wave 144: skip collections whose content is unchanged
+        // since the last successful snapshot to this database.
+        let hash = collection_hash(entries);
+        {
+            let cache = hashes.lock().unwrap();
+            if cache.get(&(database.clone(), name.to_string())) == Some(&hash) {
+                continue;
+            }
+        }
         sqlx::query("DELETE FROM mp_records WHERE collection = $1")
             .bind(name)
             .execute(&mut *tx)
@@ -292,6 +327,10 @@ pub async fn snapshot_to(pool: &PgPool, state: &AppState) -> Result<usize, sqlx:
             builder.build().execute(&mut *tx).await?;
             written += chunk.len();
         }
+        hashes
+            .lock()
+            .unwrap()
+            .insert((database.clone(), name.to_string()), hash);
     }
     tx.commit().await?;
     Ok(written)

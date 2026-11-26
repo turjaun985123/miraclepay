@@ -579,3 +579,41 @@ v0.0.2 + GitHub Release.
 - **W84 hardening:** sandbox-by-default audit test (default configs target sandbox hosts), 15 s transport timeout, provider idempotency keys documented per flow.
 - **W85 docs:** `docs/gateways-live.md` — env matrix, receiver proof table, never-fake-success rules.
 - Local: 692 workspace tests pass, fmt + clippy -D warnings clean.
+
+## Delivered (2026-11-26) — quality block (122–135) + release-prep items pulled forward
+
+- Wave 122 — Deployment correctness — the Docker frontend image
+  now takes `PUBLIC_API_URL` as a build argument wired through
+  Compose (previously the static bundle always pointed at the
+  visitor's localhost:8080 — a real bug found by the deployment
+  docs pass); `docs/deployment/*` + operator handbook from the
+  docs pass are in the tree (delivered with the hardening
+  commit, logged here).
+- Waves 123–126 — Deployment docs — `docs/deployment/docker.md`,
+  `bare-metal.md`, `vps-cpanel.md` and
+  `docs/operations/handbook.md` (written in the docs pass,
+  committed with Waves 86–95).
+- Wave 127 — E2E smoke in CI — `scripts/e2e-smoke.sh` boots the
+  real binary and walks health → register → login → merchant →
+  onboarding → OpenAPI count over HTTP; runs as a CI step.
+  Verified locally: OK, 118 ops.
+- Wave 128 — Frontend smoke in CI — the Frontend job's Astro
+  build is the smoke gate; the E2E step additionally asserts the
+  served OpenAPI surface from the real binary.
+- Wave 129 — Load smoke in CI — `scripts/load-smoke.sh`: 250
+  requests (health + OpenAPI) against the booted binary, zero
+  failures tolerated; CI step added. Verified locally: OK.
+- Wave 130 — Dependency updates — `cargo update` run: the lock
+  is already at the highest semver-compatible versions (14
+  dependencies held by constraints, none forced). Frontend lock
+  version sync is Wave 139.
+- Wave 136 (pulled forward) — v0.0.1 data migration verified —
+  `v001_shaped_records_hydrate` PG test: a v0.0.1-shaped user
+  record (no `suspended` field) hydrates correctly under 0.0.2
+  serde defaults; same treatment exists for disputes
+  (evidence_files) and merchant settings (payout fields).
+- Wave 144 (pulled forward) — Snapshot efficiency — migration
+  `0006_record_index.sql` indexes `mp_records(collection)`;
+  snapshot dirty-tracking hashes each collection (sorted,
+  per-database cache) and skips rewriting unchanged ones, so
+  the 15 s cadence is free while idle.

@@ -204,3 +204,39 @@ async fn http_flow_survives_restart_with_postgres() {
     assert_eq!(status, StatusCode::OK, "merchant after restart: {body}");
     assert_eq!(body["business_name"], json!("PG Shop"));
 }
+
+// Wave 136: records written by v0.0.1 (before fields like
+// `suspended`, `evidence_files` and the payout schedule existed)
+// must still hydrate in 0.0.2 — the serde defaults carry them.
+#[tokio::test]
+async fn v001_shaped_records_hydrate() {
+    let Some(url) = pg_url() else {
+        return;
+    };
+    let pool = fresh_pool(&url, "v001").await;
+    // A v0.0.1 PersistUser record: no `suspended` field at all.
+    let legacy_user = serde_json::json!({
+        "id": "usr_legacy",
+        "name": "Legacy User",
+        "email": "legacy@example.com",
+        "password_hash": "argon2id-legacy-hash",
+        "role": "merchant",
+        "email_verified": true,
+        "totp_secret": null,
+        "totp_enabled": false,
+        "created_at": "2026-11-26T00:00:00Z"
+    });
+    sqlx::query("INSERT INTO mp_records (collection, id, data) VALUES ('users', 'usr_legacy', $1)")
+        .bind(legacy_user)
+        .execute(&pool)
+        .await
+        .expect("insert legacy record");
+
+    let state = AppState::new("v001-secret".to_string()).with_db_pool(Some(pool.clone()));
+    let loaded = hydrate_from(&pool, &state).await.expect("hydrate legacy");
+    assert!(loaded >= 1);
+    let users = state.users.read().await;
+    let user = users.get("usr_legacy").expect("legacy user hydrated");
+    assert!(!user.suspended, "missing field defaults to active");
+    assert_eq!(user.email, "legacy@example.com");
+}
