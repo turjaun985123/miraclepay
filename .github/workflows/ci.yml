@@ -59,6 +59,19 @@ jobs:
       - name: Build the frontend
         run: npm run build
 
+  docker:
+    name: Docker (api + frontend images)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Build the API/worker image
+        run: docker build -t miraclepay-api:0.0.1 .
+
+      - name: Build the frontend image
+        run: docker build -f Dockerfile.frontend -t miraclepay-frontend:0.0.1 .
+
   android:
     name: Android (assembleDebug)
     runs-on: ubuntu-latest

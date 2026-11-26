@@ -1,0 +1,13 @@
+# MiraclePay v0.0.1 — frontend image (Wave 4)
+# Builds the Astro 7 static site and serves it with nginx.
+
+FROM node:24-alpine AS builder
+WORKDIR /web
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+FROM nginx:alpine AS runtime
+COPY --from=builder /web/dist /usr/share/nginx/html
+EXPOSE 80

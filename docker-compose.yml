@@ -6,16 +6,13 @@
 #   api       — Rust (Axum) backend API
 #   worker    — background worker (SMS verification, webhooks, jobs)
 #
-# NOTE: api and worker use `build: .` below, which expects a Dockerfile at the
-# repository root. That Dockerfile is a follow-up task — it does not exist yet.
-# Until it lands, `docker compose up postgres redis` works on its own, and the
-# API/worker can be run natively with cargo (see .env.example for the env vars).
+# Wave 4: the root Dockerfile (API + worker image) and Dockerfile.frontend
+# (Astro static site on nginx) both exist, so the full stack builds:
 #
 # Usage:
 #   cp .env.example .env   # then edit the secrets
-#   docker compose up -d postgres
+#   docker compose up -d --build                  # everything
 #   docker compose --profile redis up -d          # add Redis
-#   docker compose up -d                          # everything (needs Dockerfile)
 
 services:
   postgres:
@@ -74,9 +71,8 @@ services:
       context: .
       dockerfile: Dockerfile
     image: miraclepay-api:0.0.1
-    # The worker entrypoint/flag is set by the follow-up Dockerfile/binary;
-    # adjust this command if the worker ships as a separate binary.
-    command: ["worker"]
+    # Same image as the api service; the worker is its own binary.
+    command: ["miraclepay-worker"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://miraclepay:change-me@postgres:5432/miraclepay}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
@@ -87,6 +83,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    image: miraclepay-frontend:0.0.1
+    ports:
+      - "${FRONTEND_PORT:-4321}:80"
+    depends_on:
+      - api
     restart: unless-stopped
 
 volumes:
