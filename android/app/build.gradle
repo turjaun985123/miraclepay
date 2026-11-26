@@ -1,4 +1,4 @@
-// MiraclePay v0.0.3 — Android application module build configuration.
+// MiraclePay v0.0.3.1 — Android application module build configuration.
 // Clean-room implementation.
 
 plugins {
@@ -13,8 +13,8 @@ android {
         applicationId "com.miraclepay.app"
         minSdk 23
         targetSdk 34
-        versionCode 3
-        versionName "0.0.3"
+        versionCode 4
+        versionName "0.0.3.1"
     }
 
     // Wave 87: release signing from the environment only. CI
