@@ -82,6 +82,11 @@ const STRINGS: Record<string, { en: string; bn: string }> = {
   },
   // Hosted checkout
   co_loading: { en: 'Loading checkout…', bn: 'চেকআউট লোড হচ্ছে…' },
+  step_review: { en: 'Review', bn: 'পর্যালোচনা' },
+  step_pay: { en: 'Pay', bn: 'পেমেন্ট' },
+  step_done: { en: 'Confirmed', bn: 'নিশ্চিত হয়েছে' },
+  co_check_status: { en: 'Check status', bn: 'অবস্থা দেখুন' },
+  co_reference: { en: 'Reference', bn: 'রেফারেন্স' },
   co_unavailable: { en: 'Checkout unavailable', bn: 'চেকআউট পাওয়া যাচ্ছে না' },
   co_pay: { en: 'Pay', bn: 'পেমেন্ট' },
   co_amount_due: { en: 'Amount due', bn: 'প্রদেয় পরিমাণ' },

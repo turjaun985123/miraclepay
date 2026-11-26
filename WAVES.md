@@ -840,3 +840,34 @@ accessibility final pass (WCAG 2.2 AA) · 199 consistency sweep
 - Wave 165 review #1: 5-role panel (Design Lead, Design Systems,
   Accessibility, QA, UX Research) — reviews in design-audit/review165-*.
 - CI verdict logged below.
+- CI run **45808569203** (commit `509fef5`): verified twice at
+  job+step level — all 6 jobs success, 0 failed steps. ✅
+
+### Wave 165 fixes applied (from the 5-role review)
+- Dark mode: `.btn-danger` + landing `.step-number` get ink
+  foregrounds in dark (white on dark fills was 2.79:1 / 2.72:1).
+- `.table-wrap` regions are keyboard-focusable + named via a
+  BaseLayout enhancer (WCAG 2.1.1/4.1.2).
+- api-keys revoke uses the shared `confirmAction` <dialog>
+  (window.confirm retired); admin chart uses `--color-chart-1`.
+- .gitignore screenshot/visual-regression guards added (QA FAIL).
+
+### Waves 181–188 — Checkout + pay redesign
+- Shared payer shell: wordmark top bar (float hack removed),
+  3-step indicator (Review → Pay → Confirmed, EN+BN), trust row
+  with lock icon, skeleton loading state.
+- Checkout: status via shared taxonomy; copyable transaction
+  reference (copy-field); **status polling** while processing
+  (6s × 30 + manual "Check status"); field-level validation
+  (BD wallet 01[3-9]…, TrxID 6–20 alnum) via fieldError;
+  merchant brand colour passes the **contrast gate**
+  (brandAccent ≥3:1 vs white, else platform default).
+- Pay: gateway **radio cards** replace the <select>; success
+  receipt with copyable TrxID/reference; phone/email field
+  validation; same brand gate; steps advance on success.
+- Honest limit (P0 carried from Wave 151): the public checkout
+  API does not expose the merchant's receiving wallet number or
+  per-gateway instructions, so the copyable recipient-number
+  field can only render when a future API change exposes it —
+  flagged for a backend decision, out of design-program scope.
+- CI verdict logged below.

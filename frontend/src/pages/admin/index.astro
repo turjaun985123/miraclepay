@@ -598,7 +598,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
           .map(
             (d) => `<div style="display:flex;align-items:center;gap:0.5rem">
               <span class="small muted" style="min-width:6.5rem">${esc(d.date)}</span>
-              <span style="display:inline-block;height:0.8rem;background:var(--color-info);width:${Math.round((d.count / max) * 100)}%;min-width:${d.count > 0 ? 2 : 0}px"></span>
+              <span style="display:inline-block;height:0.8rem;background:var(--color-chart-1);width:${Math.round((d.count / max) * 100)}%;min-width:${d.count > 0 ? 2 : 0}px"></span>
               <span class="small">${d.count} tx · ${esc(formatMoney(d.volume_minor, 'BDT'))}</span>
             </div>`,
           )

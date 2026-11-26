@@ -15,14 +15,20 @@ export function getStaticPaths() {
 }
 
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import Icon from '../../components/Icon.astro';
 ---
 
 <BaseLayout title="Pay">
   <main id="main" class="container pay-page">
-    <p class="brand-line">
-      MiraclePay
-      <button id="lang-toggle" class="btn btn-small" type="button" style="float:right">বাংলা</button>
-    </p>
+    <div class="payer-top">
+      <p class="wordmark">MiraclePay</p>
+      <button id="lang-toggle" class="btn btn-small btn-ghost" type="button">বাংলা</button>
+    </div>
+    <ol class="steps" id="pay-steps" aria-label="Progress">
+      <li data-step="1" aria-current="step"><span class="step-dot">1</span><span data-i18n="step_review">Review</span></li>
+      <li data-step="2"><span class="step-dot">2</span><span data-i18n="step_pay">Pay</span></li>
+      <li data-step="3"><span class="step-dot">3</span><span data-i18n="step_done">Confirmed</span></li>
+    </ol>
 
     <p id="pay-loading" class="card muted" data-i18n="pay_loading">Loading payment link…</p>
 
@@ -90,17 +96,17 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           />
         </div>
 
-        <div class="field">
-          <label class="label" for="gateway" data-i18n="pay_with">Pay with</label>
-          <select class="input" id="gateway" name="gateway">
-            <option value="bkash">bKash</option>
-            <option value="nagad">Nagad</option>
-            <option value="rocket">Rocket</option>
-            <option value="upay">Upay</option>
-            <option value="surecash">SureCash</option>
-            <option value="manual">Manual transfer</option>
-          </select>
-        </div>
+        <fieldset class="field">
+          <legend class="label" data-i18n="pay_with">Pay with</legend>
+          <div class="gateway-grid">
+            <label class="gateway-card"><input type="radio" name="gateway" value="bkash" checked /><span class="gateway-name">bKash</span><span class="gateway-hint">Send money</span></label>
+            <label class="gateway-card"><input type="radio" name="gateway" value="nagad" /><span class="gateway-name">Nagad</span><span class="gateway-hint">Send money</span></label>
+            <label class="gateway-card"><input type="radio" name="gateway" value="rocket" /><span class="gateway-name">Rocket</span><span class="gateway-hint">Send money</span></label>
+            <label class="gateway-card"><input type="radio" name="gateway" value="upay" /><span class="gateway-name">Upay</span><span class="gateway-hint">Send money</span></label>
+            <label class="gateway-card"><input type="radio" name="gateway" value="surecash" /><span class="gateway-name">SureCash</span><span class="gateway-hint">Send money</span></label>
+            <label class="gateway-card"><input type="radio" name="gateway" value="manual" /><span class="gateway-name">Manual transfer</span><span class="gateway-hint">Bank or cash</span></label>
+          </div>
+        </fieldset>
 
         <p id="pay-form-error" class="alert alert-error" role="alert" hidden></p>
 
@@ -110,6 +116,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       </form>
     </section>
 
+    <p class="trust-row">
+      <Icon name="lock" size={15} />
+      <span>Secure payment by MiraclePay. Never share your wallet PIN.</span>
+    </p>
+
     <section id="pay-success" class="card pay-success" hidden>
       <h1 data-i18n="pay_started">Payment started</h1>
       <p class="alert alert-success" data-i18n="pay_started_body">
@@ -118,11 +129,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <dl class="pay-details">
         <div>
           <dt data-i18n="pay_transaction_id">Transaction ID</dt>
-          <dd class="mono" id="success-transaction-id">—</dd>
+          <dd><span class="copy-field"><code class="copy-value" id="success-transaction-id">—</code><button type="button" class="btn btn-small btn-ghost" id="copy-tx">Copy</button></span></dd>
         </div>
         <div>
           <dt data-i18n="pay_reference">Reference</dt>
-          <dd class="mono" id="success-reference">—</dd>
+          <dd><span class="copy-field"><code class="copy-value" id="success-reference">—</code><button type="button" class="btn btn-small btn-ghost" id="copy-ref2">Copy</button></span></dd>
         </div>
         <div>
           <dt data-i18n="pay_amount">Amount</dt>
@@ -207,6 +218,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 <script>
   import { apiFetch, formatMoney, payLink, publicLink } from '../../lib/api';
   import { applyI18n, getLang, otherLang, setLang, t, toggleLabel } from '../../lib/i18n';
+  import { brandAccent, clearFieldError, copyText, fieldError } from '../../lib/ui';
 
   // Bangla/English toggle (Wave 22): static strings swap via
   // data-i18n; strings set below use t() so they follow the choice.
@@ -278,9 +290,25 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   const emailInput = document.getElementById(
     'customer-email',
   ) as HTMLInputElement | null;
-  const gatewaySelect = document.getElementById(
-    'gateway',
-  ) as HTMLSelectElement | null;
+  const gatewayValue = (): string =>
+    (document.querySelector('input[name="gateway"]:checked') as HTMLInputElement | null)?.value ?? '';
+  const stepEls = document.querySelectorAll('#pay-steps li');
+  function setSteps(current: number): void {
+    stepEls.forEach((li) => {
+      const n = Number(li.getAttribute('data-step'));
+      li.classList.toggle('done', n < current);
+      if (n === current) li.setAttribute('aria-current', 'step');
+      else li.removeAttribute('aria-current');
+    });
+  }
+  document.getElementById('copy-tx')?.addEventListener('click', () => {
+    const v = document.getElementById('success-transaction-id')?.textContent;
+    if (v && v !== '—') void copyText(v);
+  });
+  document.getElementById('copy-ref2')?.addEventListener('click', () => {
+    const v = document.getElementById('success-reference')?.textContent;
+    if (v && v !== '—') void copyText(v);
+  });
   const formErrorEl = document.getElementById('pay-form-error');
   const submitButton = document.getElementById(
     'pay-submit',
@@ -445,9 +473,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           brandMsgEl.textContent = branding.checkout_message;
           brandMsgEl.hidden = false;
         }
-        if (branding.brand_color && /^#[0-9a-fA-F]{6}$/.test(branding.brand_color)) {
-          document.documentElement.style.setProperty('--brand', branding.brand_color);
-          if (submitButton) submitButton.style.background = branding.brand_color;
+        const accent = brandAccent(branding.brand_color);
+        if (accent) {
+          document.documentElement.style.setProperty('--color-brand', accent);
+          if (submitButton) submitButton.style.background = accent;
         }
       }
 
@@ -512,18 +541,23 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     }
 
     const customerPhone = phoneInput?.value.trim() ?? '';
-    if (collectPhone && !customerPhone) {
-      showFormError(t('pay_err_phone'));
-      return;
+    if (collectPhone) {
+      const digits = customerPhone.replace(/[\s-]/g, '');
+      if (!/^(\+?880|0)1[3-9]\d{8}$/.test(digits) && !/^\d{6,15}$/.test(digits)) {
+        if (phoneInput) fieldError(phoneInput, t('pay_err_phone'));
+        phoneInput?.focus();
+        return;
+      }
     }
 
     const customerEmail = emailInput?.value.trim() ?? '';
-    if (collectEmail && !customerEmail) {
-      showFormError(t('pay_err_email'));
+    if (collectEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(customerEmail)) {
+      if (emailInput) fieldError(emailInput, t('pay_err_email'));
+      emailInput?.focus();
       return;
     }
 
-    const gateway = gatewaySelect?.value ?? '';
+    const gateway = gatewayValue();
     if (!gateway) {
       showFormError(t('pay_err_gateway'));
       return;
@@ -548,6 +582,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         successAmountEl.textContent = formatMoney(amountMinor, currency);
       }
 
+      setSteps(3);
       if (cardEl) cardEl.hidden = true;
       if (successEl) successEl.hidden = false;
       // Respect reduced-motion preferences (Wave 23).
@@ -558,6 +593,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       if (submitButton) submitButton.disabled = false;
     }
   });
+
+  phoneInput?.addEventListener('input', () => clearFieldError(phoneInput));
+  emailInput?.addEventListener('input', () => clearFieldError(emailInput));
+  amountInput?.addEventListener('input', () => clearFieldError(amountInput));
 
   void loadLink();
 </script>

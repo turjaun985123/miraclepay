@@ -506,10 +506,15 @@ x-device-key: mp_live_&hellip;your key&hellip;</code></pre>
 
   async function revokeKey(key: ApiKeyRow, button: HTMLButtonElement): Promise<void> {
     const label = key.name ?? 'this key';
+    // Review 165: native <dialog> via the shared helper, not window.confirm.
+    const { confirmAction } = await import('../../lib/ui');
     if (
-      !window.confirm(
-        `Revoke "${label}"? Anything using this key — servers and the Android app included — will stop working immediately. This cannot be undone.`,
-      )
+      !(await confirmAction({
+        title: `Revoke "${label}"?`,
+        body: 'Anything using this key — servers and the Android app included — will stop working immediately. This cannot be undone.',
+        confirmLabel: 'Revoke key',
+        danger: true,
+      }))
     ) {
       return;
     }

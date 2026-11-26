@@ -16,3 +16,11 @@ android/build/
 local.properties
 *.apk
 *.aab
+
+# Design program guard (Wave 165 QA): no screenshots or visual
+# regression artefacts in the repo — images go to chat zips.
+**/__screenshots__/
+**/*.snapshot.*
+test-results/
+playwright-report/
+frontend/screenshots/

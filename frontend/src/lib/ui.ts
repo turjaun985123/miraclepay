@@ -162,3 +162,29 @@ export function scrollToEl(el: Element): void {
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
 }
+
+/** WCAG relative luminance + contrast for a #rrggbb colour. */
+export function luminanceOf(hex: string): number {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const f = (v: number): number => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * f((n >> 16) & 255) + 0.7152 * f((n >> 8) & 255) + 0.0722 * f(n & 255);
+}
+
+export function contrastRatio(hexA: string, hexB: string): number {
+  const [hi, lo] = [luminanceOf(hexA), luminanceOf(hexB)].sort((a, b) => b - a);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * Merchant brand accent gate (Wave 187): a merchant colour may theme
+ * the payer button only when white text on it keeps >= 3:1 contrast
+ * (large/bold control text); otherwise null -> platform default.
+ */
+export function brandAccent(hex: string | null | undefined): string | null {
+  if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return null;
+  // Pure white has luminance 1: contrast = 1.05 / (lum + 0.05).
+  return 1.05 / (luminanceOf(hex) + 0.05) >= 3 ? hex : null;
+}
