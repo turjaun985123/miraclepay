@@ -92,6 +92,18 @@ import DashboardNav from '../../components/DashboardNav.astro';
         </div>
       </section>
 
+      <section class="card" aria-labelledby="chart-heading">
+        <h2 id="chart-heading">Sales — last 14 days</h2>
+        <p class="muted small">
+          Completed volume (BDT) per day.
+          <span id="chart-total"></span>
+          <span id="live-indicator" class="badge badge-success">Live · auto-refresh 30s</span>
+          <span id="chart-updated" class="muted"></span>
+        </p>
+        <div id="volume-chart" role="img" aria-label="Bar chart of daily completed sales volume"></div>
+        <p id="chart-error" class="alert alert-error" role="alert" hidden></p>
+      </section>
+
       <section class="card">
         <h2>Create payment</h2>
         <form id="create-payment-form" novalidate>
@@ -273,6 +285,7 @@ import DashboardNav from '../../components/DashboardNav.astro';
       me,
       getKyc,
       submitKyc,
+      getMerchantAnalytics,
       totpSetup,
       totpEnable,
       totpDisable,
@@ -426,9 +439,75 @@ import DashboardNav from '../../components/DashboardNav.astro';
     async function loadDashboard() {
       if (!currentMerchantId) return;
       els.pageError.hidden = true;
-      await Promise.all([loadBalance(currentMerchantId), loadTransactions(currentMerchantId)]);
+      await Promise.all([
+        loadBalance(currentMerchantId),
+        loadTransactions(currentMerchantId),
+        loadAnalytics(currentMerchantId),
+      ]);
       void loadKyc();
     }
+
+    // -- Volume chart + live polling (Wave 41) ---------------------
+    // Dependency-free inline SVG bars from the merchant analytics
+    // endpoint. Polling refreshes the whole dashboard every 30 s
+    // while the tab is visible; it pauses automatically when the
+    // tab is hidden (visibility check inside the tick).
+    function renderChart(analytics) {
+      const host = $('volume-chart');
+      if (!host) return;
+      const days = analytics.daily ?? [];
+      const max = Math.max(1, ...days.map((d) => d.volume_minor));
+      const width = 700;
+      const height = 160;
+      const barW = Math.floor(width / Math.max(1, days.length));
+      const NS = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      svg.setAttribute('width', '100%');
+      days.forEach((day, i) => {
+        const h = Math.round((day.volume_minor / max) * (height - 28));
+        const rect = document.createElementNS(NS, 'rect');
+        rect.setAttribute('x', String(i * barW + 2));
+        rect.setAttribute('y', String(height - 18 - h));
+        rect.setAttribute('width', String(Math.max(1, barW - 4)));
+        rect.setAttribute('height', String(Math.max(0, h)));
+        rect.setAttribute('fill', '#0b7a55');
+        const title = document.createElementNS(NS, 'title');
+        title.textContent = `${day.date}: ${formatMoney(day.volume_minor, 'BDT')} (${day.completed} completed)`;
+        rect.appendChild(title);
+        svg.appendChild(rect);
+        const label = document.createElementNS(NS, 'text');
+        label.setAttribute('x', String(i * barW + barW / 2));
+        label.setAttribute('y', String(height - 4));
+        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('font-size', '9');
+        label.setAttribute('fill', 'currentColor');
+        label.textContent = day.date.slice(5);
+        svg.appendChild(label);
+      });
+      host.replaceChildren(svg);
+      const total = $('chart-total');
+      if (total) {
+        total.textContent = `Total: ${formatMoney(analytics.total_volume_minor ?? 0, 'BDT')} · ${analytics.total_completed ?? 0} completed payments.`;
+      }
+      const updated = $('chart-updated');
+      if (updated) updated.textContent = `Updated ${new Date().toLocaleTimeString()}.`;
+    }
+
+    async function loadAnalytics(merchantId) {
+      const errorEl = $('chart-error');
+      try {
+        const analytics = await getMerchantAnalytics(merchantId, 14);
+        if (errorEl) errorEl.hidden = true;
+        renderChart(analytics);
+      } catch (err) {
+        if (errorEl) showError(errorEl, err);
+      }
+    }
+
+    setInterval(() => {
+      if (!document.hidden && currentMerchantId) void loadDashboard();
+    }, 30_000);
 
     function populateMerchantSelect() {
       els.merchantSelect.replaceChildren();

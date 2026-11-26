@@ -599,6 +599,30 @@ export interface MerchantSettings {
   [key: string]: unknown;
 }
 
+/** One day of merchant analytics (Wave 41). */
+export interface AnalyticsDay {
+  date: string;
+  count: number;
+  completed: number;
+  volume_minor: number;
+}
+
+export interface MerchantAnalytics {
+  days: number;
+  daily: AnalyticsDay[];
+  total_volume_minor: number;
+  total_completed: number;
+}
+
+export function getMerchantAnalytics(
+  merchantId: string,
+  days = 14,
+): Promise<MerchantAnalytics> {
+  return apiFetch<MerchantAnalytics>(
+    `/api/v1/merchants/${encodeURIComponent(merchantId)}/analytics?days=${days}`,
+  );
+}
+
 export function getMerchantSettings(merchantId: string): Promise<MerchantSettings> {
   return apiFetch<MerchantSettings>(
     `/api/v1/merchants/${encodeURIComponent(merchantId)}/settings`,

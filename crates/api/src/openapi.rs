@@ -26,6 +26,7 @@ const ROUTES: &[(&str, &[&str], &str, &str, bool)] = &[
     ("/api/v1/merchants/{id}", &["get", "patch"], "Get / update a merchant", "Merchants", true),
     ("/api/v1/merchants/{id}/balance", &["get"], "Merchant balance", "Merchants", true),
     ("/api/v1/merchants/{id}/settings", &["get", "put"], "Merchant settings incl. checkout branding", "Merchants", true),
+    ("/api/v1/merchants/{id}/analytics", &["get"], "Merchant daily analytics series", "Merchants", true),
     ("/api/v1/merchants/{id}/kyc", &["get", "put"], "Get / submit merchant KYC profile", "Merchants", true),
     ("/api/v1/admin/kyc/pending", &["get"], "KYC review queue (admin)", "Admin", true),
     ("/api/v1/admin/merchants/{id}/kyc/decision", &["post"], "Verify / reject a KYC profile (admin)", "Admin", true),
@@ -196,11 +197,11 @@ mod tests {
 
     #[test]
     fn operation_count_matches_the_router_surface() {
-        // routes::build_router registers 88 method handlers as of
-        // Wave 40 — 87 in this table plus GET /openapi.json itself.
+        // routes::build_router registers 89 method handlers as of
+        // Wave 41 — 88 in this table plus GET /openapi.json itself.
         // If you add a route, add it to ROUTES above and update
         // this number.
-        assert_eq!(operation_count(), 87);
+        assert_eq!(operation_count(), 88);
     }
 
     #[test]

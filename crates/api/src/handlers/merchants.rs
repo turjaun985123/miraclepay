@@ -343,3 +343,49 @@ pub async fn update_merchant_settings(
     );
     Ok(Json(body))
 }
+
+// ---------------------------------------------------------------------------
+// Merchant analytics (Wave 41) — feeds the dashboard chart
+// ---------------------------------------------------------------------------
+
+/// Query for [`merchant_analytics`].
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct MerchantAnalyticsQuery {
+    /// Days of daily series (clamped 1..=90, default 14).
+    pub days: Option<u32>,
+}
+
+/// `GET /merchants/:id/analytics` — the merchant's own daily
+/// series (same aggregation as the admin platform analytics,
+/// scoped to one merchant). Owner or admin.
+pub async fn merchant_analytics(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    axum::extract::Query(query): axum::extract::Query<MerchantAnalyticsQuery>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    {
+        let merchants = state.merchants.read().await;
+        merchants
+            .get(&id)
+            .filter(|merchant| can_view(&auth, &merchant.owner_user_id))
+            .ok_or_else(|| ApiError::NotFound(format!("merchant {id} not found")))?;
+    }
+    let days = query.days.unwrap_or(14).clamp(1, 90);
+    let transactions = state.transactions.read().await;
+    let txs: Vec<_> = transactions
+        .values()
+        .filter(|tx| tx.merchant_id == id)
+        .cloned()
+        .collect();
+    drop(transactions);
+    let daily = miraclepay_domain::analytics::daily_series(&txs, days, Utc::now());
+    let total_volume: i64 = daily.iter().map(|day| day.volume_minor).sum();
+    let total_completed: u64 = daily.iter().map(|day| day.completed).sum();
+    Ok(Json(serde_json::json!({
+        "days": days,
+        "daily": daily,
+        "total_volume_minor": total_volume,
+        "total_completed": total_completed,
+    })))
+}

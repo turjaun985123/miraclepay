@@ -338,3 +338,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 ### Wave 40 — API versioning formalised (this commit)
 - New `api::versioning`: `GET /api/versions` (public discovery: current/supported/deprecated), `API-Version: v1` header stamped on every `/api/v1` response, and a router fallback that answers unsupported-version paths (`/api/v2/...`) with a structured `unsupported_api_version` 404 naming the supported versions — while typo'd v1 paths stay plain 404s (path classification is unit-tested, incl. the `/api/vendors` false-positive case).
 - Policy written down in `docs/api-versioning.md`: additive changes within v1, breaking changes as a new version with a ≥6-month overlap and Sunset headers, app version (0.0.1) explicitly decoupled from API version (v1). OpenAPI now 87 operations. Workspace: 674 tests pass.
+
+### Wave 40 — CI verdict ✅
+- Commit `3d3f676`, CI run **45762735197**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 41 — Dashboard charts + live polling (this commit)
+- New `GET /merchants/:id/analytics` (owner/admin): the Wave-19 daily-series aggregation scoped to one merchant (14 days default, clamped 1..=90) with period totals. OpenAPI now 88 operations.
+- Dashboard home gains a "Sales — last 14 days" card: a dependency-free inline-SVG bar chart (per-day completed BDT volume, hover titles with amounts/counts, accessible `role="img"` label) plus totals.
+- Live polling: the dashboard refreshes balance, transactions and the chart every 30 s while the tab is visible (pauses when hidden), with a Live badge and an "Updated HH:MM:SS" stamp. Workspace: 674 tests pass, Astro build passes.
