@@ -1002,3 +1002,81 @@ Ships exactly the two post-release fixes already on main (`6ce16e2`) on top of t
 - **Tag `v0.0.3.1`** at `2d742e0`. Release: https://github.com/turjaun985123/miraclepay/releases/tag/v0.0.3.1 (Latest, not draft).
 - **Assets (read-back via `gh release view`, sizes match CI artifacts):** `miraclepay-v0.0.3.1-linux-x86_64.tar.gz` 11,023,244 B (api 33,279,704 B + worker 918,232 B, ELF x86-64) · `miraclepay-v0.0.3.1-debug.apk` 6,167,231 B · `miraclepay-v0.0.3.1-release-unsigned.apk` 4,953,779 B.
 - **Binary proof:** tar.gz downloaded back from the release, extracted, `miraclepay-api` executed — `GET /health` returned `{"status":"ok","version":"0.0.3.1",…}` and the startup banner printed "MiraclePay API v0.0.3.1".
+
+## Patch release v0.0.3.2 (2026-11-26 — the binary serves the frontend)
+
+**Defect fixed:** the released `miraclepay-api` binary served no
+frontend at all — `crates/api` had no static serving, so the UI
+only existed as the separate frontend container/site. A user who
+downloaded the binary (the asset class added in v0.0.3 at the
+user's order) got a JSON API and no product. Now the single
+binary serves the full product.
+
+- **Approach — rust-embed** (`crates/api/src/static_files.rs`,
+  new `crates/api/build.rs`): the built Astro bundle
+  (`frontend/dist`) is embedded into the api binary and served by
+  the router fallback. Chosen over shipping `dist/` beside the
+  binary + ServeDir because the release is one self-contained
+  binary: no asset folder to lose, UI version-locked to the API,
+  no path configuration. Cost: rebuild to change the UI.
+  Resolution: exact file → `<path>/index.html` → `/` serves
+  `index.html`; traversal paths rejected. Content types per
+  extension; `_astro/` hashed assets `immutable` for a year,
+  HTML `no-cache`, other files 1 h.
+- **Fresh-clone safety:** `frontend/dist` is gitignored, so
+  build.rs creates it with a placeholder `index.html` when the
+  frontend was never built — `cargo test` on a fresh clone stays
+  green; CI builds the real bundle BEFORE cargo, so shipped
+  binaries always embed the real UI (the integration tests relax
+  page assertions only when the placeholder is embedded).
+- **Same-origin bundle:** CI and the Docker api image build the
+  embedded frontend with `PUBLIC_API_URL` emptied, so the bundle
+  calls the API relative to its own origin — the UI works on any
+  port the binary runs on. `Dockerfile` gained a node stage for
+  this; `Dockerfile.frontend` and the compose frontend service
+  are unchanged.
+- **Security headers scoped:** the strict API CSP
+  (`default-src 'none'`) now applies to API-class paths only
+  (`/api/*`, `/health*`, `/metrics`, `/openapi.json`); frontend
+  responses get a same-origin CSP (`default-src 'self'`, inline
+  script/style for Astro bootstrap, `frame-ancestors 'none'`).
+  All other headers and all API behaviour unchanged.
+- **Tests:** resolution/content-type/cache unit tests (fixture
+  tree), CSP-classification unit tests, and
+  `crates/api/tests/static_ui.rs` router integration tests
+  (`/` 200 HTML + MiraclePay, `/login/` HTML, `/health` JSON +
+  strict CSP, unknown `/api/v1/*` JSON 404, hashed `_astro`
+  asset type + immutable, browser 404 page). CI also runs
+  `scripts/embedded-ui-smoke.sh` against the release binary.
+- **Commits:** feature `fe4ec53` (CI run 45839671785 — all 6 jobs
+  success, verified twice at job+step level, incl. the new
+  "Build the frontend for embedding" and "Embedded UI smoke"
+  steps); version bump `40d7c38` (user-visible surfaces →
+  0.0.3.2; Android versionName "0.0.3.2" / versionCode 5; Cargo
+  crate versions stay 0.0.3 — four-part semver rejected, same
+  note as 0.0.3.1).
+- **CI run 45840714135** (bump commit): verified at job+step
+  level TWICE — Rust ✅ · Frontend ✅ · Docker ✅ · Android ✅ ·
+  RustSec ✅ · Security audit ✅ — 0 failed steps.
+- **Tag `v0.0.3.2`** at `40d7c38`. Release:
+  https://github.com/turjaun985123/miraclepay/releases/tag/v0.0.3.2
+  (Latest, not draft).
+- **Assets (read-back via `gh release view`):**
+  `miraclepay-v0.0.3.2-linux-x86_64.tar.gz` 11,120,520 B
+  (api 33,729,736 B + worker 918,232 B, ELF x86-64) ·
+  `miraclepay-v0.0.3.2-debug.apk` 6,167,164 B ·
+  `miraclepay-v0.0.3.2-release-unsigned.apk` 4,953,779 B.
+- **Read-back proof (published tarball, downloaded fresh,
+  extracted, binary executed):**
+  `GET /health` → 200 application/json
+  `{"status":"ok","version":"0.0.3.2","name":"MiraclePay",…}`;
+  `GET /` → 200 text/html, 15,565 B, title "MiraclePay —
+  Payments that verify themselves";
+  `GET /dashboard/` → 200 text/html, 22,456 B, title
+  "MiraclePay — Dashboard"; `GET /login/` → 200 text/html;
+  `GET /_astro/BaseLayout.BA8FsztI.css` (referenced by the
+  landing page) → 200 text/css, `cache-control: public,
+  max-age=31536000, immutable`, 23,897 B;
+  `GET /api/v1/definitely-not-a-route` → 404 application/json
+  `{"error":"not_found"}`; CSP on `/` is the same-origin policy,
+  on `/health` still `default-src 'none'`.
