@@ -370,3 +370,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - New `GET /metrics`: Prometheus text exposition rendered by hand (no new deps) from the live collections on each scrape — uptime, users/merchants, db mode, transactions by status, webhook deliveries by status, open disputes, queued notifications. Label escaping is unit-tested.
 - Structured request logs: one JSON line per request on stdout (ts, request_id, method, path, status, latency_ms — no bodies or headers logged), with `x-request-id` generated/propagated and echoed on the response.
 - Live-smoke-verified locally before push: metrics render, request-id header present, JSON log lines emitted, and the Wave-40 `/api/v2/...` structured error confirmed working end-to-end. OpenAPI now 89 operations. Workspace: 676 tests pass.
+
+### Wave 44 — CI verdict ✅
+- Commit `7b50556`, CI run **45763609368**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 45 — Error catalogue + envelope (this commit)
+- Every `ApiError` response now uses one envelope: `{error, code, status}` — `error` (human message) is byte-identical to before for compatibility; `code` is a new stable machine-readable field (`bad_request`, `unauthorized`, `totp_required`, `totp_invalid`, `forbidden`, `not_found`, `conflict`, `internal_error`) that never changes within API v1, and `status` mirrors the HTTP status. The rate-limit 429 body is aligned to the same shape.
+- `docs/errors.md` catalogues every code with meaning + retry guidance (including `rate_limited` and `unsupported_api_version`), and notes the owner-scoping convention (invisible resources answer 404, not 403).
+- The JS SDK's `MiraclePayError` now exposes `.code` (typed in the .d.ts, covered by a new SDK test — 7/7 pass); Rust envelope mapping is unit-tested per variant. Workspace: 677 tests pass.

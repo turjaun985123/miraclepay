@@ -22,6 +22,16 @@ export class MiraclePayError extends Error {
     this.name = 'MiraclePayError';
     this.status = status;
     this.body = body;
+    /**
+     * Stable machine-readable error code from the API's error
+     * envelope (Wave 45; see docs/errors.md). `undefined` for
+     * responses that predate the envelope.
+     * @type {string | undefined}
+     */
+    this.code =
+      body && typeof body === 'object' && typeof body.code === 'string'
+        ? body.code
+        : undefined;
   }
 }
 

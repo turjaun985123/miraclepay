@@ -56,6 +56,25 @@ test('non-2xx responses raise MiraclePayError with the server message', async ()
   );
 });
 
+test('the Wave 45 error envelope exposes a stable code', async () => {
+  const { impl } = stubFetch(409, {
+    error: 'merchant already exists',
+    code: 'conflict',
+    status: 409,
+  });
+  const client = new MiraclePayClient({ baseUrl: 'https://pay.test', token: 't', fetch: impl });
+  await assert.rejects(
+    () => client.createPayment({ merchant_id: 'm', gateway: 'bkash', amount_minor: 100 }),
+    (error) => {
+      assert.ok(error instanceof MiraclePayError);
+      assert.equal(error.status, 409);
+      assert.equal(error.code, 'conflict');
+      assert.equal(error.message, 'merchant already exists');
+      return true;
+    },
+  );
+});
+
 test('listTransactions encodes the query string', async () => {
   const { impl, calls } = stubFetch(200, []);
   const client = new MiraclePayClient({ baseUrl: 'https://pay.test', token: 't', fetch: impl });

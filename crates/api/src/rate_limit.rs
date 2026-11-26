@@ -124,7 +124,12 @@ pub async fn rate_limit_middleware(
         (
             axum::http::StatusCode::TOO_MANY_REQUESTS,
             axum::Json(serde_json::json!({
+                // Wave 45 envelope: `error` keeps its historical
+                // value for this response; `code`/`status` align it
+                // with the standard error shape.
                 "error": "rate_limited",
+                "code": "rate_limited",
+                "status": 429,
                 "message": "Too many requests; retry after the current minute window.",
                 "class": class,
             })),

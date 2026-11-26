@@ -3,6 +3,8 @@
 export class MiraclePayError extends Error {
   status: number;
   body: unknown;
+  /** Stable error code from the API error envelope (Wave 45). */
+  code?: string;
   constructor(status: number, message: string, body?: unknown);
 }
 

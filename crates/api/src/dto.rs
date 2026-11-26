@@ -48,8 +48,42 @@ pub enum ApiError {
     Internal(String),
 }
 
+impl ApiError {
+    /// The stable machine-readable error code for this variant
+    /// (Wave 45). Codes never change within API v1; the human
+    /// message in `error` may be reworded. The full catalogue is
+    /// `docs/errors.md`.
+    pub fn code(&self) -> &'static str {
+        match self {
+            ApiError::BadRequest(_) => "bad_request",
+            ApiError::Unauthorized => "unauthorized",
+            ApiError::TotpRequired => "totp_required",
+            ApiError::TotpInvalid => "totp_invalid",
+            ApiError::Forbidden(_) => "forbidden",
+            ApiError::NotFound(_) => "not_found",
+            ApiError::Conflict(_) => "conflict",
+            ApiError::Internal(_) => "internal_error",
+        }
+    }
+
+    /// The HTTP status this variant maps to.
+    pub fn status(&self) -> StatusCode {
+        match self {
+            ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
+            ApiError::Unauthorized | ApiError::TotpRequired | ApiError::TotpInvalid => {
+                StatusCode::UNAUTHORIZED
+            }
+            ApiError::Forbidden(_) => StatusCode::FORBIDDEN,
+            ApiError::NotFound(_) => StatusCode::NOT_FOUND,
+            ApiError::Conflict(_) => StatusCode::CONFLICT,
+            ApiError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
+        let code = self.code();
         let (status, message) = match self {
             ApiError::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             ApiError::Unauthorized => {
@@ -75,7 +109,18 @@ impl IntoResponse for ApiError {
             }
         };
 
-        (status, Json(serde_json::json!({ "error": message }))).into_response()
+        // Wave 45 envelope: `error` (human message) stays exactly
+        // as before for compatibility; `code` (stable) and
+        // `status` are additive.
+        (
+            status,
+            Json(serde_json::json!({
+                "error": message,
+                "code": code,
+                "status": status.as_u16(),
+            })),
+        )
+            .into_response()
     }
 }
 
@@ -254,6 +299,29 @@ mod tests {
         for (error, expected) in cases {
             let response = ApiError::from(error).into_response();
             assert_eq!(response.status(), expected);
+        }
+    }
+}
+
+#[cfg(test)]
+mod envelope_tests {
+    use super::*;
+
+    #[test]
+    fn every_variant_has_a_stable_code_and_status() {
+        let cases = [
+            (ApiError::BadRequest("x".into()), "bad_request", 400),
+            (ApiError::Unauthorized, "unauthorized", 401),
+            (ApiError::TotpRequired, "totp_required", 401),
+            (ApiError::TotpInvalid, "totp_invalid", 401),
+            (ApiError::Forbidden("x".into()), "forbidden", 403),
+            (ApiError::NotFound("x".into()), "not_found", 404),
+            (ApiError::Conflict("x".into()), "conflict", 409),
+            (ApiError::Internal("x".into()), "internal_error", 500),
+        ];
+        for (error, code, status) in cases {
+            assert_eq!(error.code(), code);
+            assert_eq!(error.status().as_u16(), status);
         }
     }
 }
