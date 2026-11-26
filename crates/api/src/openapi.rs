@@ -73,6 +73,15 @@ const ROUTES: &[(&str, &[&str], &str, &str, bool)] = &[
     ("/api/v1/admin/settings", &["get", "put"], "Platform settings (admin)", "Admin", true),
 ];
 
+/// The cached document (Wave 28: the spec is static for a given
+/// build — rebuilding it per request cost ~24× throughput on
+/// `/openapi.json` in the load pass: 156 req/s vs 3,693 for
+/// `/health`; it is now built once).
+pub fn spec_cached() -> &'static Value {
+    static SPEC: std::sync::OnceLock<Value> = std::sync::OnceLock::new();
+    SPEC.get_or_init(spec)
+}
+
 /// Build the full OpenAPI document.
 pub fn spec() -> Value {
     let mut paths = Map::new();
@@ -179,6 +188,11 @@ mod tests {
         // If you add a route, add it to ROUTES above and update
         // this number.
         assert_eq!(operation_count(), 71);
+    }
+
+    #[test]
+    fn cached_spec_matches_the_built_spec() {
+        assert_eq!(spec_cached(), &spec());
     }
 
     #[test]

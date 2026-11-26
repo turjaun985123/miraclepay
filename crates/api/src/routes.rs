@@ -45,9 +45,10 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
     }))
 }
 
-/// OpenAPI document: `GET /openapi.json` (Wave 20).
+/// OpenAPI document: `GET /openapi.json` (Wave 20; served from a
+/// once-built cache since Wave 28).
 async fn openapi_spec() -> impl IntoResponse {
-    Json(crate::openapi::spec())
+    Json(crate::openapi::spec_cached().clone())
 }
 
 /// Build the complete MiraclePay API router.

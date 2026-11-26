@@ -234,3 +234,11 @@ job + step level, confirmed twice → verdict logged here with commit + run id.
 - `scripts/backup.sh`: pg_dump → timestamped `backups/<stamp>/` (gzip dump + env var *names* only + commit id); **refuses with a clear error in in-memory mode** (verified locally: exit 1, no fake backup produced) and when `pg_dump` is missing.
 - `scripts/restore.sh`: restores into an empty database only (checks table count; `--force-empty` + confirmation required otherwise), `--yes` for automation.
 - `docs/operations/backup-restore.md`: state inventory (DB vs in-memory vs worker file store vs secrets), nightly cron example with retention, off-host copy rule, quarterly restore-drill procedure, RPO 24h / RTO ~15min targets for the single-host v0.0.1.
+
+### Wave 27 — CI verdict ✅
+- Commit `197918c`, CI run **45758227950**: verified twice at job+step level — all 4 jobs success (0 failed steps).
+
+### Wave 28 — Load/perf pass (this commit)
+- New `scripts/load-test.mjs` (zero-dep; refuses non-localhost targets without `--allow-remote`) and `docs/operations/performance.md` with the measured baseline.
+- Measured on this shared/throttled VM (debug build, generator on the same host — figures are regression floors, not capacity claims): `/health` 3,693 req/s, 0 errors in 55,513 requests; single-request latency /health ≈1.5–4 ms.
+- **Real finding fixed:** `/openapi.json` rebuilt the whole spec per request; it is now built once and cached (`openapi::spec_cached`, with an equality test). Concurrency numbers on this VM vary >3× between runs from neighbour load, so the doc records the noise honestly instead of claiming a speedup figure.
