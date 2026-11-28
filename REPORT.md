@@ -140,3 +140,43 @@ Final numbers at the v0.0.2 tag: 118 OpenAPI operations,
 714+ Rust tests + 8 JS SDK tests, six CI jobs green
 (Docker, Rust, Android, Frontend, RustSec, Security audit).
 Honest limits are listed in `docs/releases/0.0.2.md`.
+
+# Addendum — v0.0.4 (30-agent wave, 2026-11-28)
+
+Built by exactly **30 worker agents** in 5 workstreams × 6 seats
+(spec/builder/tester/reviewer mix; every stream reviewed before
+landing), coordinated and integrated by the parent agent. Full
+roster, stream results and reviewer sign-offs: `WAVES.md`.
+
+- **A — Checkout receiving number (P0):** the merchant's receiving
+  wallet number is exposed on the public checkout/pay surfaces
+  under one strict predicate (manual gateways only, enabled,
+  valid, non-blank); credentials never appear in public responses
+  (field-audited). Reviewer BLOCK (disabled/credential-gateway
+  exposure) fixed before landing.
+- **B — Checkout gateway picker:** payers choose among offered
+  gateways; settlement follows the chosen gateway. A
+  channel-binding matcher guard (from the tester's unsafe
+  finding) stops cross-channel SMS from exact-matching a switched
+  transaction.
+- **C — Disputes + Payouts UIs:** new dashboard pages plus three
+  security fixes (fee admin-only, payout-marking admin-only,
+  status-filter spellings) and a reviewer-BLOCK fix round
+  (balance-endpoint summary cards, merchant fee-override
+  resolution).
+- **D — Plugin dispatch:** notification plugins receive
+  payment.completed/payment.failed in the pipeline
+  (fire-and-forget, confined, timed out safely); webhook
+  transformers rewrite outbound payloads per merchant opt-in.
+- **E — Android Bangla:** complete `values-bn` (71/71 keys,
+  specifiers exact), hard-coded strings moved to resources.
+
+Final numbers at the v0.0.4 tag (`80a92fc`): **787 Rust tests**
+(733 at v0.0.3.3) + 8 JS SDK tests, 119 OpenAPI operations, six
+CI jobs green at every landing — each run verified at job/step
+level twice (runs 46159063041, 46159659825, 46160030745,
+46160353543, 46160972938). Release assets (binary tarball + both
+APKs) read-back verified; the downloaded binary passed the full
+sandbox loop — pay → checkout picker → receiving number in the
+public API → submit on the chosen gateway → SMS → completed.
+Honest limits are listed in `WAVES.md` (v0.0.4 section).

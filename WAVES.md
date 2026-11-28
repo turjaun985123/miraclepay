@@ -1135,3 +1135,170 @@ proxy. Both are now fixed in the product; no proxy is needed.
   merchant; `POST /api/v1/sms` with the matching bKash SMS →
   {"outcome":"verified"}; `GET /api/v1/checkout/<id>` →
   status "completed". The proof instance was stopped afterwards.
+
+## v0.0.4 build wave (2026-11-28 — 30 agents, 5 workstreams × 6 seats)
+
+Ordered by the user ("Assign 30 agents"). Exactly 30 worker seats;
+the coordinator integrates, pushes per stream, verifies CI at
+job/step level twice per run, and cuts the release. Baseline before
+the wave: v0.0.3.3, 733 Rust + 8 SDK tests green.
+
+| Seat | Stream | Role |
+|---|---|---|
+| A1 | A Checkout P0 | Architect — receiving-number exposure spec + field-audit rules |
+| A2 | A | Backend builder — checkout_details + PublicLinkView receiving number |
+| A3 | A | Frontend builder — receiving-number rendering (copy field) on pay/checkout |
+| A4 | A | Tester — field-audit + integration tests |
+| A5 | A | OpenAPI/docs — public contract documentation |
+| A6 | A | Reviewer — diff review + sign-off (pre-landing) |
+| B1 | B Gateway picker | Architect — picker + settlement-matching spec |
+| B2 | B | Backend builder — checkout gateways list + submit gateway switch |
+| B3 | B | Frontend builder — gateway radio cards on /checkout |
+| B4 | B | Tester — multi-gateway settle-on-chosen-gateway tests |
+| B5 | B | Edge/validation — gateway-switch validation + abuse cases |
+| B6 | B | Reviewer — diff review + sign-off (pre-landing) |
+| C1 | C Disputes/Payouts UI | Architect — API-gap analysis + page specs |
+| C2 | C | Backend builder — minimal API gaps (disputes/settlements) |
+| C3 | C | Frontend builder — dashboard Disputes + Payouts pages |
+| C4 | C | Frontend builder — nav entries + dispute detail/evidence UI |
+| C5 | C | Tester — API contract tests for UI-consumed endpoints |
+| C6 | C | Reviewer — diff review + sign-off (pre-landing) |
+| D1 | D Plugin dispatch | Architect — dispatch wiring spec (events, opt-in, fire-and-forget) |
+| D2 | D | Builder — plugin dispatch functions in plugins.rs |
+| D3 | D | Builder — settle/webhook hook points |
+| D4 | D | Builder — example notification + transformer plugins, docs/plugins.md |
+| D5 | D | Tester — confinement/timeout-in-pipeline tests |
+| D6 | D | Reviewer — diff review + sign-off (pre-landing) |
+| E1 | E Android Bangla | Translator — values-bn strings (52 strings, specifiers exact) |
+| E2 | E | Builder — hard-coded strings in Java → resources |
+| E3 | E | Builder — hard-coded strings in layouts → resources |
+| E4 | E | Verifier — specifier parity + build validation |
+| E5 | E | Docs/CI — locale notes + verification report |
+| E6 | E | Reviewer — diff review + sign-off (pre-landing) |
+
+Stream results and reviewer sign-offs are recorded below as each
+stream lands.
+
+### v0.0.4 — stream results, reviewer sign-offs, coordinator fix round
+
+All 30 seats ran (29 spawned in 3 batches + E6 after E1/E2 landed).
+Local gate before landing: fmt clean, clippy clean, **787 Rust
+tests passed / 0 failed** (baseline 733 → +54), SDK 8/8, frontend
+build 18 pages.
+
+- **Stream A — CLOSED.** Contract: `receiving_number` scalar on
+  checkout + `receiving_numbers: [{gateway, number}]` on checkout
+  and the public link view. A1 spec deviations adjudicated by A6:
+  entry key `number` accepted; no `receiving_number_available`
+  flag accepted (contract change, recorded); the missing
+  `enabled` check REJECTED. **A6 verdict: BLOCK** → coordinator
+  fix round landed one shared §2.2 predicate
+  (`exposed_receiving_number`: EXPOSED set only — stripe/paypal/
+  razorpay never; enabled; non-blank; adapter-valid identifier;
+  trimmed) at all three call sites, spec tests T3/T5/T6/T8, docs
+  corrected (F5), IN/PK gateways added to the checkout manual set
+  (F7). receiving_number.rs: 9 tests green.
+- **Stream B — CLOSED.** Picker + submit gateway switch; B5's
+  FINDING-1 (plugin gateways not offered) fixed by folding usable
+  plugins' `provides` into both offered lists; FINDING-2 (unsafe:
+  cross-channel SMS could Exact-match a switched transaction)
+  fixed with the sms_verify channel-binding guard (cross-channel
+  ⇒ Probable at most). **B6 verdict: SIGN OFF WITH NOTES** →
+  coordinator round: F1 stored gateway prepended as "Current
+  method" card (no silent gateways[0] substitution), F2 full
+  14-id card map, F3 instructions name the selected gateway, F4
+  plugin switch targets restricted to non-native ids + spec §2.3
+  amendment, F5/F6 pins added + duplicate test renamed. Edges: 10
+  tests, picker: 5 tests.
+- **Stream C — CLOSED.** Disputes + Payouts pages; backend
+  enrichment + `GET /settlements/:id`; C1 security fixes S3
+  (snake_case status filter), S4 (fee_bps admin-only), S5 (pay
+  admin-only) landed by C2. **C6 verdict: BLOCK** → coordinator
+  round: F1 payouts summary rebuilt as balance-endpoint +
+  schedule cards (window sums removed — spec §6.2), F2 run
+  resolves the merchant's `effective_fee_bps` (+ override test),
+  F3 https-only evidence link rendering, F4 note prefill +
+  replacement warning, F5 merchant column/detail enrichment +
+  reason filter (client) and reason/transaction_id filters
+  (server), F6 server-provided net + method label, F7 admin
+  positive controls + scoping pins, F9 OpenAPI entry (+ op-count
+  pin 118→119), F10/F11 stale comments/Actions column removed.
+  Contract tests: 11 green.
+- **Stream D — CLOSED.** Notification dispatch at S1 (SMS match),
+  S2 (plugin fallback), S3 (provider webhook), S4 (admin verify)
+  for payment.completed; F1 (verify-unverified ⇒ payment.failed,
+  reason `provider_unverified`, no status mutation — D1 found no
+  production TxStatus::Failed transitions exist). Transformer
+  applied per merchant opt-in (`webhook_transformer_plugin_id`)
+  before storage at the same sites; legacy alias field removed.
+  **D6 verdict: SIGN OFF WITH NOTES** → coordinator round: dead
+  alias fn removed, stale test comment fixed, docs latency
+  wording corrected, T-7 payment.failed test added (new
+  verify-fail fixture). S3 deviation RATIFIED here: provider
+  webhooks push the event directly (known event_id for
+  notification correlation) instead of emit_webhook's try_write
+  skip. plugin_dispatch: 8 tests green.
+- **Stream E — CLOSED.** values-bn full translation; E2 moved 12
+  Java strings, E3 2 layout hints. **E4: ship-with-fixes** (the 12
+  E2 strings initially untranslated), **E6: SIGN OFF WITH NOTES**
+  (no blockers; that gap the one Major) → coordinator round:
+  Bangla top-up for all 12 + Notify.java's 3 notification strings
+  extracted and translated. Final parity machine-verified:
+  71/71 keys both locales, 0 specifier mismatches; bn strings
+  confirmed inside both shipped APKs (resources.arsc UTF-8 pool).
+
+### v0.0.4 — landings, CI, release, proof
+
+Commits were restructured once before landing: the first Stream A
+commit (57fb25f) failed CI (Docker + clippy jobs) because
+payments.rs references `plugin_gateway_ids` in plugins.rs — the
+streams share files, so the backend landed as one A+B+D commit.
+57fb25f was replaced by force-with-lease before any other landing
+(disclosed here; it was live for ~25 minutes).
+
+| Commit | Content | CI run | Verdict |
+|---|---|---|---|
+| 289ded2 | A+B+D backend | 46159063041 | all 6 jobs success, verified twice |
+| 16dad5e | Stream C | 46159659825 | all 6 jobs success, verified twice |
+| 5dfd5b0 | A+B frontend | 46160030745 | all 6 jobs success, verified twice |
+| 0649e8a | Stream E | 46160353543 | all 6 jobs success, verified twice |
+| 80a92fc | version bump 0.0.4 | 46160972938 | all 6 jobs success, verified twice |
+
+(Failed run 46158692066 at 57fb25f is the pre-restructure attempt.)
+
+Version sweep: Cargo workspace + all six crates 0.0.4 (valid
+semver — no 0.0.3-line carry-over), health/OpenAPI literals,
+frontend + SDK packages, compose tags, Android versionName
+"0.0.4" / versionCode 7. Tag `v0.0.4` at 80a92fc.
+
+**Release:** https://github.com/turjaun985123/miraclepay/releases/tag/v0.0.4
+(Latest, not draft) — assets read-back verified:
+`miraclepay-v0.0.4-linux-x86_64.tar.gz` 11,229,053 B;
+`miraclepay-v0.0.4-debug.apk` 6,180,188 B;
+`miraclepay-v0.0.4-release-unsigned.apk` 4,966,619 B. Assets were
+built by CI run 46160972938 at the tagged commit.
+
+**Binary proof** (downloaded tarball, SANDBOX_MODE=1, no proxy):
+`/health` → `{"status":"ok","version":"0.0.4",...,"sandbox":true}`;
+demo login OK; gateway configs upserted (bkash 01711111111,
+nagad 01822222222); public link view shows
+`receiving_numbers: [{bkash, 01711111111}, {nagad, 01822222222}]`;
+pay (bkash) → checkout shows picker gateways [bkash, nagad] +
+`receiving_number: 01711111111`; submit with `gateway: "nagad"`
+→ processing as nagad; Nagad SMS (TrxID NAG7X2K9P1) → outcome
+`verified`; final read-back: **completed, gateway nagad** — the
+payment settled on the CHOSEN gateway, not gateways[0].
+
+**Honest limits:** (1) A1-spec deviations recorded above (entry
+key `number`; no availability flag). (2) B5 Case-3: an
+unconfigured merchant may submit any supported gateway and settle
+on SMS evidence alone — pinned as actual semantics; a product
+decision, not a code fix. (3) Stream D spec tests T-8 (S3
+dedupe), T-14, T-16, T-17, T-18 not landed — S3/S4 wiring is
+covered by code review (D3/D6) and T-7 now covers F1; the rest
+are follow-ups. (4) Android verified via CI assemble (debug +
+release) + static parity checks; no device run; ApiClient.java's
+5 error strings remain English (Context-less client — needs an
+API change, flagged by E2/E4); no per-app locale registration
+(system locale only). (5) Dispute evidence "files" are HTTPS
+references, not uploads — the UI says so plainly.
