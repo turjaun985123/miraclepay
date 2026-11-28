@@ -30,6 +30,7 @@
 use std::collections::HashSet;
 
 use miraclepay_domain::transaction::{Transaction, TxStatus};
+use miraclepay_gateways::types::GatewayId;
 
 use crate::types::ParsedSms;
 
@@ -139,6 +140,54 @@ pub fn score_candidate(parsed: &ParsedSms, tx: &Transaction) -> u32 {
     score
 }
 
+/// Whether `id` names a concrete SMS payment channel — a wallet /
+/// rail whose confirmation SMS the native parsers can attribute to
+/// that channel. API-credential gateways (Stripe, PayPal, Razorpay)
+/// and the channel-agnostic `Manual` gateway are not channels: an
+/// SMS can never be "from" them, so they take no part in the
+/// channel-binding guard below.
+fn is_channel_gateway(id: GatewayId) -> bool {
+    matches!(
+        id,
+        GatewayId::Bkash
+            | GatewayId::Nagad
+            | GatewayId::Rocket
+            | GatewayId::Upay
+            | GatewayId::Surecash
+            | GatewayId::Upi
+            | GatewayId::Paytm
+            | GatewayId::Phonepe
+            | GatewayId::Easypaisa
+            | GatewayId::Jazzcash
+    )
+}
+
+/// v0.0.4 channel-binding guard: the SMS's detected channel and the
+/// transaction's gateway are both concrete channels (see
+/// [`is_channel_gateway`]) and they differ. Such a candidate can
+/// never be an *exact* match, however strong the other signals are:
+/// with the checkout gateway picker (v0.0.4) the payer's chosen
+/// gateway is a first-class fact, and a bKash confirmation must not
+/// silently settle a payment the payer recorded as Nagad (the
+/// wrong-channel settlement class fixed in Wave 8 for amounts).
+/// The candidate may still be *probable* — reported for a human to
+/// settle — because the money evidence (TrxID + amount + sender)
+/// can be genuine even when the payer picked the wrong card.
+/// Unknown on either side (unattributed SMS, plugin/manual/API
+/// gateway) never triggers the guard.
+fn channel_contradicted(parsed: &ParsedSms, tx: &Transaction) -> bool {
+    let Some(sms_gateway) = parsed.gateway else {
+        return false;
+    };
+    if !is_channel_gateway(sms_gateway) {
+        return false;
+    }
+    match GatewayId::from_str(tx.gateway.trim()) {
+        Some(tx_gateway) => is_channel_gateway(tx_gateway) && tx_gateway != sms_gateway,
+        None => false,
+    }
+}
+
 /// Match `parsed` against `pending`, honouring `already_used_trx`
 /// (the provider transaction ids already consumed by earlier SMS
 /// verifications).
@@ -153,9 +202,14 @@ pub fn score_candidate(parsed: &ParsedSms, tx: &Transaction) -> u32 {
 /// 3. A candidate is *exact* when its score (see
 ///    [`score_candidate`]) is at least 80 — in practice a matching
 ///    provider transaction id, or a matching amount together with a
-///    matching sender number. If several candidates are exact, the
-///    oldest one by `created_at` wins, so a repeated payment settles
-///    the longest-waiting transaction first.
+///    matching sender number — and neither the Wave 8 amount guard
+///    nor the v0.0.4 channel guard contradicts it: when the SMS's
+///    detected channel and the transaction's gateway are two
+///    different concrete channels (e.g. a bKash SMS against a Nagad
+///    transaction), the candidate is at most probable, never exact.
+///    If several candidates are exact, the oldest one by
+///    `created_at` wins, so a repeated payment settles the
+///    longest-waiting transaction first.
 /// 4. Otherwise a candidate is *probable* when its score is at
 ///    least 50 and both its amount and its currency match the SMS
 ///    (the sender differing or being absent is exactly what keeps
@@ -189,7 +243,11 @@ pub fn match_transaction(
     let mut exact: Vec<&Transaction> = candidates
         .iter()
         .copied()
-        .filter(|tx| score_candidate(parsed, tx) >= EXACT_THRESHOLD && !amount_contradicted(tx))
+        .filter(|tx| {
+            score_candidate(parsed, tx) >= EXACT_THRESHOLD
+                && !amount_contradicted(tx)
+                && !channel_contradicted(parsed, tx)
+        })
         .collect();
     exact.sort_by_key(|tx| tx.created_at);
     if let Some(tx) = exact.first() {
@@ -291,6 +349,68 @@ mod tests {
         assert_eq!(
             match_transaction(&parsed, &[candidate], &no_used()),
             MatchOutcome::NoMatch
+        );
+    }
+
+    #[test]
+    fn cross_channel_sms_is_probable_never_exact() {
+        // v0.0.4 channel binding: every money signal matches (TrxID,
+        // amount, sender, receiver) but the SMS is a bKash
+        // confirmation and the transaction's gateway is Nagad.
+        // Scoring is unchanged (200); the outcome must be Probable —
+        // reported for a human — never an automatic Exact settle.
+        let mut candidate = tx("tx-cc-1", 150_000, 9);
+        candidate.gateway = "nagad".to_string();
+        candidate.provider_trx_id = Some("TRX-ABC123".to_string());
+        let parsed = sms();
+
+        assert_eq!(score_candidate(&parsed, &candidate), 200);
+        assert_eq!(
+            match_transaction(&parsed, &[candidate], &no_used()),
+            MatchOutcome::Probable("tx-cc-1".to_string())
+        );
+    }
+
+    #[test]
+    fn same_channel_sms_still_exact() {
+        let mut candidate = tx("tx-cc-2", 150_000, 9);
+        candidate.provider_trx_id = Some("TRX-ABC123".to_string());
+        let parsed = sms();
+
+        assert_eq!(
+            match_transaction(&parsed, &[candidate], &no_used()),
+            MatchOutcome::Exact("tx-cc-2".to_string())
+        );
+    }
+
+    #[test]
+    fn channel_guard_ignores_unattributed_sms() {
+        // A plugin-parsed SMS carries no channel; the guard must not
+        // fire and the TrxID match settles as before.
+        let mut candidate = tx("tx-cc-3", 150_000, 9);
+        candidate.gateway = "nagad".to_string();
+        candidate.provider_trx_id = Some("TRX-ABC123".to_string());
+        let mut parsed = sms();
+        parsed.gateway = None;
+
+        assert_eq!(
+            match_transaction(&parsed, &[candidate], &no_used()),
+            MatchOutcome::Exact("tx-cc-3".to_string())
+        );
+    }
+
+    #[test]
+    fn channel_guard_ignores_non_channel_tx_gateway() {
+        // `manual` is channel-agnostic: a bKash SMS may settle a
+        // manual transaction on the strength of the other signals.
+        let mut candidate = tx("tx-cc-4", 150_000, 9);
+        candidate.gateway = "manual".to_string();
+        candidate.provider_trx_id = Some("TRX-ABC123".to_string());
+        let parsed = sms();
+
+        assert_eq!(
+            match_transaction(&parsed, &[candidate], &no_used()),
+            MatchOutcome::Exact("tx-cc-4".to_string())
         );
     }
 

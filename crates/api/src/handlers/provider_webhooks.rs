@@ -136,7 +136,14 @@ pub async fn settle_by_reference(
         "transaction",
         Some(settled.id.clone()),
     );
-    state.emit_webhook(
+    // v0.0.4 Stream D (site S3): the merchant's opted-in webhook
+    // transformer runs over the payload before the event is
+    // stored (bounded, original kept on any failure), and
+    // notification plugins are told about the completion
+    // (fire-and-forget). The already-Completed early return above
+    // is the dedupe: a duplicate provider webhook fires neither.
+    let payload = crate::plugins::apply_webhook_transformer(
+        state,
         &settled.merchant_id,
         "payment.completed",
         json!({
@@ -146,7 +153,25 @@ pub async fn settle_by_reference(
             "reference": settled.reference,
             "provider_trx_id": settled.provider_trx_id,
         }),
-    );
+    )
+    .await;
+    let event_id = miraclepay_domain::ids::webhook_event_id();
+    state
+        .webhook_events
+        .write()
+        .await
+        .push(miraclepay_domain::webhook::WebhookEvent {
+            id: event_id.clone(),
+            merchant_id: settled.merchant_id.clone(),
+            event_type: "payment.completed".to_string(),
+            payload,
+            created_at: Utc::now(),
+        });
+    crate::plugins::dispatch_notification(
+        state,
+        crate::plugins::notification_arg("payment.completed", &event_id, &settled, None),
+    )
+    .await;
     Some(settled.id)
 }
 

@@ -134,8 +134,31 @@ pub struct PublicLinkView {
     /// every supported gateway (the merchant has not restricted the
     /// choice). Ids only — never credentials or config values.
     pub gateways: Vec<String>,
+    /// Receiving numbers for the offered gateways, so the pay page
+    /// can tell the payer which account number to send money to
+    /// once they pick a gateway. Only gateways that actually have a
+    /// merchant number configured appear here. Payer-safe by
+    /// design: a receiving number is the account the merchant
+    /// publicly asks payers to pay into, and each entry carries
+    /// ONLY the gateway id and that number — never `api_key`,
+    /// `api_secret`, or any other config value.
+    pub receiving_numbers: Vec<ReceivingNumber>,
     /// Per-merchant checkout branding (Wave 37).
     pub branding: PublicBranding,
+}
+
+/// One gateway's receiving (merchant / agent) account number, as
+/// exposed on the public pay page. See
+/// [`PublicLinkView::receiving_numbers`] for the payer-safety
+/// rationale.
+#[derive(Debug, Serialize)]
+pub struct ReceivingNumber {
+    /// Gateway id, e.g. `"bkash"` — matches an entry of
+    /// [`PublicLinkView::gateways`].
+    pub gateway: String,
+    /// The merchant's account number at that gateway, taken solely
+    /// from `GatewayConfig::merchant_number`.
+    pub number: String,
 }
 
 /// The branding slice of [`PublicLinkView`]: everything optional —
@@ -444,7 +467,40 @@ pub async fn public_link(
     } else {
         configured
     };
-    let gateways: Vec<String> = offered.iter().map(|id| id.as_str().to_string()).collect();
+    let mut gateways: Vec<String> = offered.iter().map(|id| id.as_str().to_string()).collect();
+    // Plugin-lane gateways (platform-level) are offered too, so the
+    // pay page never hides a gateway the platform would accept —
+    // same rule as `checkout_details` (v0.0.4 Stream B FINDING-1).
+    for id in crate::plugins::plugin_gateway_ids(&state).await {
+        if !gateways.iter().any(|g| g.eq_ignore_ascii_case(&id)) {
+            gateways.push(id);
+        }
+    }
+
+    // Receiving numbers for the offered gateways, in `gateways`
+    // order, through the shared Stream A spec §2.2 predicate
+    // (`exposed_receiving_number` in payments.rs): EXPOSED
+    // gateways only, enabled config, non-blank, adapter-valid
+    // identifier. Only the gateway id and the number cross to the
+    // public view — credentials and `extra` config never leave the
+    // server.
+    let receiving_numbers: Vec<ReceivingNumber> = {
+        let all_configs = state.gateway_configs.read().await;
+        match all_configs.get(&link.merchant_id) {
+            Some(configs) => offered
+                .iter()
+                .filter_map(|gateway| {
+                    super::payments::exposed_receiving_number(configs, *gateway).map(|number| {
+                        ReceivingNumber {
+                            gateway: gateway.as_str().to_string(),
+                            number,
+                        }
+                    })
+                })
+                .collect(),
+            None => Vec::new(),
+        }
+    };
 
     Ok(Json(PublicLinkView {
         title: link.title.clone(),
@@ -454,6 +510,7 @@ pub async fn public_link(
         collect_phone: link.collect_phone,
         collect_email: link.collect_email,
         gateways,
+        receiving_numbers,
         branding,
     }))
 }

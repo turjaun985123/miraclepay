@@ -1,0 +1,7 @@
+# Test fixture (seat D5): notification plugin that records every
+# event it receives into its own KV, counted by event type.
+id = "notify-recorder"
+name = "Notify Recorder (test fixture)"
+version = "1.0.0"
+kind = "notification"
+min_api_version = "1.0"

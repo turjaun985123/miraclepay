@@ -225,7 +225,7 @@ const ROUTES: &[(&str, &[&str], &str, &str, bool)] = &[
     (
         "/api/v1/checkout/{id}",
         &["get"],
-        "Hosted checkout details",
+        "Hosted checkout details (incl. payer-safe receiving_number)",
         "Payments",
         false,
     ),
@@ -260,7 +260,7 @@ const ROUTES: &[(&str, &[&str], &str, &str, bool)] = &[
     (
         "/api/v1/payment-links/public/{slug}",
         &["get"],
-        "Public payment link view (payer-safe fields only)",
+        "Public payment link view (payer-safe fields only, incl. receiving_numbers)",
         "Payment Links",
         false,
     ),
@@ -353,6 +353,13 @@ const ROUTES: &[(&str, &[&str], &str, &str, bool)] = &[
         "/api/v1/settlements/run",
         &["post"],
         "Run settlements for a period",
+        "Settlements",
+        true,
+    ),
+    (
+        "/api/v1/settlements/{id}",
+        &["get"],
+        "Get one settlement",
         "Settlements",
         true,
     ),
@@ -772,6 +779,20 @@ pub fn spec() -> Value {
                     "429": { "description": "Rate limited" }
                 }),
             );
+            // Operations whose public response shape is part of the
+            // canonical contract carry a fuller description and a
+            // 200-response schema (see `operation_detail`).
+            if let Some((description, schema)) = operation_detail(path, method) {
+                op.insert("description".to_string(), json!(description));
+                if let Some(responses) = op.get_mut("responses") {
+                    responses["200"] = json!({
+                        "description": "OK",
+                        "content": {
+                            "application/json": { "schema": schema }
+                        }
+                    });
+                }
+            }
             operations.insert(method.to_string(), Value::Object(op));
         }
         paths.insert(path.to_string(), Value::Object(operations));
@@ -788,6 +809,20 @@ pub fn spec() -> Value {
         "servers": [{ "url": "http://localhost:8080", "description": "Local / self-hosted" }],
         "paths": Value::Object(paths),
         "components": {
+            "schemas": {
+                "ReceivingNumber": {
+                    "type": ["string", "null"],
+                    "description": "Payer-safe public data: the merchant's receiving wallet number for a gateway (sourced from the gateway config's merchant_number) — the number the merchant publicly asks payers to send money to. null when the merchant has not configured a receiving number for that gateway. Gateway credentials (api_key, api_secret, extra config) are never exposed in any public response."
+                },
+                "GatewayReceivingNumber": {
+                    "type": "object",
+                    "required": ["gateway", "number"],
+                    "properties": {
+                        "gateway": { "type": "string", "description": "Gateway id, for example bkash." },
+                        "number": { "type": "string", "description": "Payer-safe public data: the merchant's receiving wallet number for this gateway — the number the merchant publicly asks payers to send money to." }
+                    }
+                }
+            },
             "securitySchemes": {
                 "bearerAuth": {
                     "type": "http",
@@ -798,6 +833,70 @@ pub fn spec() -> Value {
             }
         }
     })
+}
+
+/// Fuller description + 200-response schema for the operations
+/// whose public response shape is part of the canonical contract.
+/// Returns `None` for every other operation (summary-only, as
+/// before). The schemas are additive views: `additionalProperties`
+/// stays `true` because these endpoints return more fields than
+/// the contract fields pinned here.
+fn operation_detail(path: &str, method: &str) -> Option<(&'static str, Value)> {
+    match (path, method) {
+        ("/api/v1/checkout/{id}", "get") => Some((
+            "Hosted checkout details for a payment, for rendering the checkout page. \
+             The response includes `receiving_number`: payer-safe public data — the \
+             merchant's receiving wallet number for the transaction's gateway \
+             (sourced from the gateway config's merchant_number), i.e. the number \
+             the merchant publicly asks payers to send money to. It is `null` when \
+             the merchant has not configured an exposable receiving number for \
+             that gateway. The response also includes `gateways` (the offered \
+             gateway ids, powering the checkout picker) and `receiving_numbers` \
+             (the offered gateways' exposable numbers). A number is exposable \
+             only for enabled configs on number-based manual gateways passing \
+             the adapter's identifier validation; credential gateways (stripe, \
+             paypal, razorpay) never expose one. Gateway credentials (api_key, \
+             api_secret, extra config) are never part of this or any other \
+             public response.",
+            json!({
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "receiving_number": { "$ref": "#/components/schemas/ReceivingNumber" },
+                    "receiving_numbers": {
+                        "type": "array",
+                        "items": { "$ref": "#/components/schemas/GatewayReceivingNumber" }
+                    },
+                    "gateways": { "type": "array", "items": { "type": "string" } }
+                }
+            }),
+        )),
+        ("/api/v1/payment-links/public/{slug}", "get") => Some((
+            "Public pay page data for a payment link. Payer-safe fields only — no \
+             merchant id, credentials, or config. The response includes \
+             `receiving_numbers`: an array of {gateway, number} entries, one for \
+             each gateway offered by the link for which the merchant has \
+             configured a receiving wallet number (sourced from the gateway \
+             config's merchant_number) — the numbers the merchant publicly asks \
+             payers to send money to. Offered gateways without a configured \
+             receiving number are omitted from the array (never listed with a \
+             null number); the array is empty when no offered gateway has one. \
+             Gateway credentials (api_key, api_secret, extra config) are never \
+             part of this or any other public response.",
+            json!({
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "receiving_numbers": {
+                        "type": "array",
+                        "description": "Payer-safe public data: receiving wallet numbers for the gateways offered by this link that have one configured. Gateways without a configured receiving number are omitted.",
+                        "items": { "$ref": "#/components/schemas/GatewayReceivingNumber" }
+                    }
+                }
+            }),
+        )),
+        _ => None,
+    }
 }
 
 /// Total number of operations in the spec (drift guard for tests).
@@ -840,10 +939,11 @@ mod tests {
         // routes::build_router registers 114 method handlers as of
         // Wave 113 — 111 operations in this table plus
         // GET /openapi.json itself and the pre-existing admin
-        // user list counted once.
+        // user list counted once. v0.0.4 Stream C added one route
+        // (GET /settlements/{id}) and its table entry.
         // If you add a route, add it to ROUTES above and update
         // this number.
-        assert_eq!(operation_count(), 118);
+        assert_eq!(operation_count(), 119);
     }
 
     #[test]

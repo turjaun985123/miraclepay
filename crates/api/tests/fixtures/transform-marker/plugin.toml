@@ -1,0 +1,8 @@
+# Test fixture (seat D5): webhook transformer that stamps a marker
+# field onto the payload it is given.
+id = "transform-marker"
+name = "Transform Marker (test fixture)"
+version = "1.0.0"
+kind = "webhook_transformer"
+min_api_version = "1.0"
+timeout_ms = 2000

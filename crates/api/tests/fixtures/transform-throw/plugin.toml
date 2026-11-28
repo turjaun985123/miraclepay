@@ -1,0 +1,8 @@
+# Test fixture (seat D5): webhook transformer that always throws.
+# Dispatch must fall back to the original payload.
+id = "transform-throw"
+name = "Transform Throw (test fixture)"
+version = "1.0.0"
+kind = "webhook_transformer"
+min_api_version = "1.0"
+timeout_ms = 1000

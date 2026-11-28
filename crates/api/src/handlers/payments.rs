@@ -35,7 +35,7 @@ use miraclepay_domain::ids;
 use miraclepay_domain::money::{Currency, Money};
 use miraclepay_domain::transaction::{Transaction, TxStatus};
 use miraclepay_domain::webhook::WebhookEvent;
-use miraclepay_gateways::types::{GatewayError, PaymentRequest};
+use miraclepay_gateways::types::{GatewayConfig, GatewayError, GatewayId, PaymentRequest};
 
 use crate::auth_middleware::AuthUser;
 use crate::key_auth::authenticate_api_key;
@@ -100,6 +100,14 @@ pub struct SubmitReq {
     /// Transaction identifier assigned by the provider, as shown on
     /// the customer's confirmation.
     pub provider_trx_id: String,
+    /// Optional gateway the customer chose to pay through, e.g.
+    /// `"bkash"`. When present and non-blank it is validated
+    /// against the gateways the merchant actually offers (see
+    /// [`submit_checkout`]) and, when valid, replaces the
+    /// transaction's gateway before the transaction moves to
+    /// `Processing`. When absent, `null`, or blank, the gateway
+    /// recorded at creation is kept unchanged.
+    pub gateway: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +133,118 @@ async fn owns_merchant(state: &AppState, auth: &AuthUser, merchant_id: &str) -> 
         .get(merchant_id)
         .map(|merchant| merchant.owner_user_id == auth.user_id)
         .unwrap_or(false)
+}
+
+/// Gateway ids a merchant offers payers, computed with the SAME
+/// rule as the public payment-link view (`public_link` in
+/// `payment_links.rs`): the merchant's configured gateways when
+/// they have configured any, otherwise every supported gateway in
+/// their registry (unconfigured = unrestricted).
+fn offered_gateway_ids(state: &AppState, merchant_id: &str) -> Vec<GatewayId> {
+    let registry = state.registry_for(merchant_id);
+    let configured = registry.configured_ids();
+    if configured.is_empty() {
+        registry.list()
+    } else {
+        configured
+    }
+}
+
+/// Whether a gateway's `merchant_number` is a pay-to address that
+/// may be shown to a payer (Stream A spec §2.1 EXPOSED set: the
+/// number-based manual / SMS-verified adapters). Credential
+/// gateways (stripe / paypal / razorpay) are excluded — their
+/// `merchant_number` is meaningless and must never be exposed, even
+/// if a stored config carries a value.
+fn receiving_number_exposed(gateway: GatewayId) -> bool {
+    matches!(
+        gateway,
+        GatewayId::Bkash
+            | GatewayId::Nagad
+            | GatewayId::Rocket
+            | GatewayId::Upay
+            | GatewayId::Surecash
+            | GatewayId::Upi
+            | GatewayId::Paytm
+            | GatewayId::Phonepe
+            | GatewayId::Easypaisa
+            | GatewayId::Jazzcash
+            | GatewayId::Manual
+    )
+}
+
+/// Identifier shape check from the gateway's own adapter
+/// (Stream A spec §2.2 rule 5): a number the adapter itself would
+/// reject as invalid configuration must not be shown to a payer.
+fn receiving_identifier_valid(gateway: GatewayId, value: &str) -> bool {
+    match gateway {
+        GatewayId::Upi => miraclepay_gateways::in_manual::valid_vpa(value),
+        GatewayId::Paytm | GatewayId::Phonepe => {
+            miraclepay_gateways::in_manual::valid_in_mobile(value)
+                || miraclepay_gateways::in_manual::valid_vpa(value)
+        }
+        GatewayId::Easypaisa | GatewayId::Jazzcash => {
+            miraclepay_gateways::pk_manual::valid_pk_mobile(value)
+        }
+        _ => true,
+    }
+}
+
+/// The payer-safe receiving number for one gateway from a config
+/// list — the single implementation of Stream A spec §2.2, shared
+/// by every public surface (checkout scalar, checkout list, public
+/// payment-link view). Returns the trimmed number iff the gateway
+/// is in the EXPOSED set, a config exists (last one wins, mirroring
+/// upsert semantics), the config is enabled, the number is
+/// non-blank, and it passes the adapter's own identifier
+/// validation. Only the number string ever leaves through here —
+/// credentials and `extra` config cannot cross.
+pub(crate) fn exposed_receiving_number(
+    configs: &[GatewayConfig],
+    gateway: GatewayId,
+) -> Option<String> {
+    if !receiving_number_exposed(gateway) {
+        return None;
+    }
+    let config = configs.iter().rev().find(|c| c.gateway == gateway)?;
+    if !config.enabled {
+        return None;
+    }
+    let trimmed = config.merchant_number.as_ref()?.trim();
+    if trimmed.is_empty() || !receiving_identifier_valid(gateway, trimmed) {
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
+/// Receiving numbers for the offered gateways, in the same shape
+/// as the public payment-link view (`[{gateway, number}]`): one
+/// entry per offered gateway passing the §2.2 predicate
+/// ([`exposed_receiving_number`]), emitted in offered (`gateways`)
+/// order; offered gateways without an exposable number are
+/// omitted. Only the gateway id and the number are returned —
+/// credentials and `extra` config never leave the server (see
+/// `checkout_details` for the payer-safety rationale).
+async fn receiving_numbers_for(
+    state: &AppState,
+    merchant_id: &str,
+    offered: &[GatewayId],
+) -> Vec<Value> {
+    let all_configs = state.gateway_configs.read().await;
+    match all_configs.get(merchant_id) {
+        Some(configs) => offered
+            .iter()
+            .filter_map(|gateway| {
+                exposed_receiving_number(configs, *gateway).map(|number| {
+                    json!({
+                        "gateway": gateway.as_str(),
+                        "number": number,
+                    })
+                })
+            })
+            .collect(),
+        None => Vec::new(),
+    }
 }
 
 /// Parse a status filter string into a [`TxStatus`].
@@ -392,8 +512,18 @@ pub async fn list_payments(
 ///
 /// Returns only what the hosted checkout page needs to render: the
 /// transaction id, the display amount, the gateway, the current
-/// status, and the merchant's business name. No customer contact
-/// details or internal fields are exposed.
+/// status, the merchant's business name, and the merchant's
+/// receiving number for the gateway (`receiving_number`, `null`
+/// when none is configured — see the lookup below for why that one
+/// config value is payer-safe). It also returns `gateways` — the
+/// gateway ids the merchant offers, computed with the same rule as
+/// the public payment-link view — and `receiving_numbers`, the
+/// per-gateway receiving numbers for those offered gateways, so
+/// the page can offer the payer a real gateway choice and update
+/// the receiving number (and the gateway-specific payment
+/// instructions) when the payer switches gateway. No customer
+/// contact details, credentials, or other internal fields are
+/// exposed.
 pub async fn checkout_details(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -411,6 +541,44 @@ pub async fn checkout_details(
             .map(|merchant| merchant.business_name.clone())
             .unwrap_or_default()
     };
+
+    // The merchant's receiving number for this transaction's
+    // gateway: the account number the payer sends money to for
+    // mobile-money gateways. This is payer-safe by design — it is
+    // the number the merchant publicly asks payers to pay into —
+    // and it is taken ONLY from `GatewayConfig::merchant_number`
+    // through the Stream A spec §2.2 predicate
+    // (`exposed_receiving_number`): EXPOSED gateways only, enabled
+    // config, non-blank, adapter-valid identifier. Credentials
+    // (`api_key` / `api_secret`) and free-form `extra` config are
+    // never exposed on this public surface. `null` whenever the
+    // predicate does not pass.
+    let receiving_number = {
+        let all_configs = state.gateway_configs.read().await;
+        GatewayId::from_str(&transaction.gateway).and_then(|gateway| {
+            all_configs
+                .get(&transaction.merchant_id)
+                .and_then(|configs| exposed_receiving_number(configs, gateway))
+        })
+    };
+
+    // Gateways offered to the payer, and the receiving number for
+    // each of them — the same rule and shape as the public
+    // payment-link view, so /checkout and /pay/<slug> present the
+    // identical gateway choice for the same merchant.
+    let offered = offered_gateway_ids(&state, &transaction.merchant_id);
+    let mut gateways: Vec<String> = offered.iter().map(|id| id.as_str().to_string()).collect();
+    // Plugin-lane gateways are platform-level (not per-merchant):
+    // fold in every gateway a usable plugin provides so the picker
+    // offers exactly the gateways `submit_checkout` accepts
+    // (v0.0.4 Stream B FINDING-1). They carry no receiving number —
+    // `receiving_numbers` below stays native-config only.
+    for id in crate::plugins::plugin_gateway_ids(&state).await {
+        if !gateways.iter().any(|g| g.eq_ignore_ascii_case(&id)) {
+            gateways.push(id);
+        }
+    }
+    let receiving_numbers = receiving_numbers_for(&state, &transaction.merchant_id, &offered).await;
 
     // Wave 98 correction: hosted checkout uses the same merchant
     // branding shape as the public payment-link view. Settings are
@@ -443,6 +611,9 @@ pub async fn checkout_details(
         "amount_minor": transaction.amount.amount_minor,
         "currency": transaction.amount.currency.code(),
         "gateway": transaction.gateway,
+        "gateways": gateways,
+        "receiving_number": receiving_number,
+        "receiving_numbers": receiving_numbers,
         "status": transaction.status,
         "merchant": business_name.clone(),
         "merchant_name": business_name.clone(),
@@ -461,6 +632,37 @@ pub async fn checkout_details(
 /// `Pending` transaction may be submitted; submitting one that has
 /// already moved on is a conflict. On success the transaction is
 /// `Processing`, awaiting verification.
+///
+/// The customer may also name the gateway they actually paid
+/// through (`gateway`, optional). The chosen gateway matters: it
+/// drives the payment instructions the payer followed and the
+/// settlement matching that later pairs the incoming money with
+/// this transaction, so it is recorded on the transaction before
+/// the status moves to `Processing` — and because only a `Pending`
+/// transaction can be submitted, it can never be changed after
+/// submission.
+///
+/// Validation (Stream B spec §2.3, in this order — sender, TrxID,
+/// existence, status, then gateway; a rejected gateway stores
+/// nothing, so the payer can correct the choice and resubmit):
+///
+/// * `gateway` absent, `null`, or blank after trimming keeps the
+///   creation gateway byte-identical.
+/// * A present, non-blank gateway is normalized
+///   (`trim().to_ascii_lowercase()`). Keeping the creation gateway
+///   (candidate == current, normalized) is always accepted — the
+///   no-op rule — and canonicalises a verbatim-stored spelling.
+/// * A gateway an enabled plugin provides is also accepted,
+///   mirroring `create_payment`'s plugin lane — for plugin ids
+///   only; an id that parses as a native gateway must be in the
+///   merchant's offered set (B6 F4 guard).
+/// * Otherwise an id [`GatewayId::from_str`] does not know is
+///   `400 "unknown gateway: {candidate}"`, and a known id outside
+///   the merchant's offered set (the same rule as
+///   `checkout_details`) is `400 "gateway is not offered for this
+///   merchant: {candidate}"`. Validation prevents pointing a
+///   payment at a gateway the merchant doesn't offer, where its
+///   money could never be matched or settled.
 pub async fn submit_checkout(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -477,6 +679,73 @@ pub async fn submit_checkout(
         ));
     }
 
+    // Snapshot the transaction under a read lock: existence (404)
+    // and status (409) are checked BEFORE gateway validation, and
+    // the offered set depends only on the merchant id, so the
+    // (async) gateway validation runs without holding the write
+    // lock. The write-lock status check below stays authoritative.
+    let (merchant_id, status, current_gateway) = {
+        let transactions = state.transactions.read().await;
+        let transaction = transactions
+            .get(&id)
+            .ok_or_else(|| ApiError::NotFound(format!("transaction not found: {id}")))?;
+        (
+            transaction.merchant_id.clone(),
+            transaction.status,
+            transaction.gateway.clone(),
+        )
+    };
+    if status != TxStatus::Pending {
+        return Err(ApiError::Conflict(format!(
+            "transaction {id} is not pending and cannot be submitted"
+        )));
+    }
+
+    // Resolve the optional gateway choice to the value to store.
+    let chosen_gateway: Option<String> = match req.gateway.as_deref() {
+        Some(raw) if !raw.trim().is_empty() => {
+            let candidate = raw.trim().to_ascii_lowercase();
+            let current = current_gateway.trim().to_ascii_lowercase();
+            if candidate == current {
+                // No-op rule: keeping the creation gateway is never
+                // an error; store the canonical spelling when the
+                // id is a native one.
+                Some(
+                    GatewayId::from_str(&candidate)
+                        .map(|gateway| gateway.as_str().to_string())
+                        .unwrap_or(candidate),
+                )
+            } else if GatewayId::from_str(&candidate).is_none()
+                && crate::plugins::plugin_provides_gateway(&state, &candidate).await
+            {
+                // Plugin lane — plugin ids only. An id that parses
+                // as a native gateway must go through the offered
+                // set below, so a plugin can never shadow a native
+                // gateway into an unoffered switch (B6 F4).
+                Some(candidate)
+            } else {
+                match GatewayId::from_str(&candidate) {
+                    None => {
+                        return Err(ApiError::BadRequest(format!(
+                            "unknown gateway: {candidate}"
+                        )));
+                    }
+                    Some(gateway) => {
+                        let offered = offered_gateway_ids(&state, &merchant_id);
+                        if !offered.contains(&gateway) {
+                            return Err(ApiError::BadRequest(format!(
+                                "gateway is not offered for this merchant: {candidate}"
+                            )));
+                        }
+                        Some(gateway.as_str().to_string())
+                    }
+                }
+            }
+        }
+        // Absent, null, or blank: keep the creation gateway.
+        _ => None,
+    };
+
     let mut transactions = state.transactions.write().await;
     let transaction = transactions
         .get_mut(&id)
@@ -488,6 +757,9 @@ pub async fn submit_checkout(
         )));
     }
 
+    if let Some(chosen) = chosen_gateway {
+        transaction.gateway = chosen;
+    }
     transaction.sender_number = Some(req.sender_number.trim().to_string());
     transaction.provider_trx_id = Some(req.provider_trx_id.trim().to_string());
     transaction.status = TxStatus::Processing;

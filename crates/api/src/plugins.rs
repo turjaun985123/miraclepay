@@ -19,6 +19,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
 use serde_json::{json, Value};
 
@@ -27,7 +28,7 @@ use miraclepay_gateways::transport::{HttpTransport, ReqwestTransport};
 use miraclepay_gateways::types::{
     GatewayError, InitiatedPayment, PaymentRequest, RefundRequest, RefundResult, VerifyResult,
 };
-use miraclepay_plugin_spi::{KvStore, PluginEngine, PluginKind, PluginManifest};
+use miraclepay_plugin_spi::{KvStore, PluginEngine, PluginError, PluginKind, PluginManifest};
 use miraclepay_sms_verify::types::ParsedSms;
 
 use crate::state::AppState;
@@ -200,6 +201,25 @@ async fn gateway_plugin<'a>(
 pub async fn plugin_provides_gateway(state: &AppState, gateway_id: &str) -> bool {
     let plugins = state.plugins.read().await;
     gateway_plugin(&plugins, gateway_id).await.is_some()
+}
+
+/// Gateway ids served by usable plugins (the plugin lane's offered
+/// set), sorted and de-duplicated. Public surfaces fold these into
+/// the merchant's offered gateways so that a gateway the API
+/// accepts at submit/create time can always be picked in the UI —
+/// v0.0.4 Stream B FINDING-1: `submit_checkout` accepted plugin
+/// gateways that `checkout_details` never offered, leaving the
+/// picker unable to present a valid choice.
+pub async fn plugin_gateway_ids(state: &AppState) -> Vec<String> {
+    let plugins = state.plugins.read().await;
+    let mut ids: Vec<String> = plugins
+        .values()
+        .filter(|plugin| plugin.usable())
+        .flat_map(|plugin| plugin.provides().iter().cloned())
+        .collect();
+    ids.sort();
+    ids.dedup();
+    ids
 }
 
 fn payment_request_json(req: &PaymentRequest) -> Value {
@@ -446,4 +466,537 @@ pub async fn plugin_parse_sms(
         raw_body: sms.body.clone(),
         received_at: sms.received_at,
     })
+}
+
+// ---------------------------------------------------------------------------
+// Stream D dispatch core (spec: design-audit/v004-stream-d-spec.md
+// §1–§3): notification broadcast + webhook payload transformation.
+// Both kinds are JS lane only (D-8): `PluginKind` is single-valued,
+// so a `kind = "http"` plugin can never be a notification or
+// transformer plugin and no HTTP path exists here. The existing
+// gateway/SMS dispatch above is untouched.
+//
+// Logging: the crate's convention is `eprintln!` (spec §1.2); the
+// exact line formats below are the spec's. Payloads are NEVER
+// logged — ids and event types only.
+// ---------------------------------------------------------------------------
+
+/// Hard cap on how long [`apply_webhook_transformer`] may block a
+/// settle response, in milliseconds (spec §3.4, D-6). The
+/// effective bound is `min(manifest timeout_ms, this cap)`. Note:
+/// the engine's own `Limits` timeout is the *manifest* value, so
+/// when the cap fires first the detached blocking thread keeps
+/// running until the engine interrupts it; the *caller* is
+/// released at the cap with the original payload.
+pub const TRANSFORM_TIMEOUT_CAP_MS: u64 = 2_000;
+
+/// Per-plugin dispatch counters for the Stream D plugin kinds
+/// (spec §1.1). Keyed by plugin id in
+/// `AppState::plugin_dispatch_stats`; in-memory only, reset on
+/// restart. A missing key means all-zero.
+#[derive(Debug, Clone, Copy, Default, serde::Serialize)]
+pub struct DispatchStats {
+    pub notify_attempted: u64,
+    pub notify_succeeded: u64,
+    pub notify_failed: u64,
+    pub notify_timed_out: u64,
+    pub notify_skipped_no_op: u64,
+    pub transform_attempted: u64,
+    pub transform_succeeded: u64,
+    pub transform_failed: u64,
+    pub transform_timed_out: u64,
+    pub transform_skipped_no_op: u64,
+}
+
+/// Increment one counter for `plugin_id` under the stats write
+/// lock, at the moment the outcome is known (spec §1.1).
+async fn bump_dispatch_stat(
+    stats: &std::sync::Arc<tokio::sync::RwLock<std::collections::HashMap<String, DispatchStats>>>,
+    plugin_id: &str,
+    bump: impl FnOnce(&mut DispatchStats),
+) {
+    let mut map = stats.write().await;
+    bump(map.entry(plugin_id.to_string()).or_default());
+}
+
+/// A dispatch target snapshot (spec §1.3): plugin id, engine,
+/// manifest timeout — taken under the plugins read lock, which is
+/// dropped before any call.
+type DispatchTarget = (String, Arc<PluginEngine>, u64);
+
+/// Collect the usable JS-lane plugins of `kind`, sorted by plugin
+/// id so dispatch order is deterministic (spec §1.3).
+async fn collect_targets(state: &AppState, kind: PluginKind) -> Vec<DispatchTarget> {
+    let plugins = state.plugins.read().await;
+    let mut targets: Vec<DispatchTarget> = plugins
+        .values()
+        .filter(|p| p.usable() && p.kind() == Some(kind))
+        .filter_map(|p| {
+            let engine = p.engine.clone()?;
+            let timeout_ms = p.manifest.as_ref()?.timeout_ms();
+            Some((p.id().to_string(), engine, timeout_ms))
+        })
+        .collect();
+    targets.sort_by(|a, b| a.0.cmp(&b.0));
+    targets
+}
+
+/// Build the `notify` argument for a transaction outcome (spec
+/// §2.1) — the ONE constructor every firing site uses, so the
+/// shape is identical everywhere. Deliberately excludes customer
+/// PII (`customer_email`, `customer_phone`, `customer_name`) and
+/// the merchant-supplied `metadata`.
+pub fn notification_arg(
+    event: &str, // "payment.completed" | "payment.failed"
+    event_id: &str,
+    tx: &miraclepay_domain::transaction::Transaction,
+    reason: Option<&str>,
+) -> Value {
+    json!({
+        "event": event,
+        "event_id": event_id,
+        "merchant_id": tx.merchant_id,
+        "transaction_id": tx.id,
+        "gateway": tx.gateway,
+        "amount_minor": tx.amount.amount_minor,
+        "currency": tx.amount.currency.code(),
+        "status": tx.status,
+        "provider_trx_id": tx.provider_trx_id,
+        "sender_number": tx.sender_number,
+        "reference": tx.reference,
+        "reason": reason,
+        "occurred_at": chrono::Utc::now(),
+    })
+}
+
+/// Fire-and-forget notification dispatch (spec §2.3). Collects the
+/// usable JS-lane `notification` plugins (sorted by id) and spawns
+/// ONE detached task that calls each plugin's `notify` operation
+/// sequentially; returns as soon as the task is spawned. Never
+/// returns an error, never awaits a plugin: a notification plugin
+/// that hangs, throws, or returns garbage cannot delay the settle
+/// response beyond the spawn, cannot fail the settlement, and
+/// cannot prevent the webhook event from being stored (call sites
+/// push the webhook event first). Return values are ignored
+/// entirely (spec §2.1).
+pub async fn dispatch_notification(state: &AppState, arg: Value) {
+    let targets = collect_targets(state, PluginKind::Notification).await;
+    if targets.is_empty() {
+        return;
+    }
+    let stats = state.plugin_dispatch_stats.clone();
+    let event = arg
+        .get("event")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?")
+        .to_string();
+    let transaction_id = arg
+        .get("transaction_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?")
+        .to_string();
+    tokio::spawn(async move {
+        for (plugin_id, engine, timeout_ms) in targets {
+            bump_dispatch_stat(&stats, &plugin_id, |s| s.notify_attempted += 1).await;
+            let call_arg = arg.clone();
+            let join = tokio::task::spawn_blocking(move || engine.call("notify", &call_arg));
+            // The engine's own Limits interrupt the interpreter at
+            // timeout_ms; the outer +2 s is a backstop against a
+            // wedged blocking thread (spec §2.3).
+            let bound = Duration::from_millis(timeout_ms) + Duration::from_millis(2_000);
+            match tokio::time::timeout(bound, join).await {
+                Ok(Ok(Ok(_))) => {
+                    bump_dispatch_stat(&stats, &plugin_id, |s| s.notify_succeeded += 1).await;
+                }
+                Ok(Ok(Err(PluginError::NoSuchOperation(_)))) => {
+                    bump_dispatch_stat(&stats, &plugin_id, |s| s.notify_skipped_no_op += 1).await;
+                    eprintln!(
+                        "miraclepay: plugin notify {plugin_id} does not implement notify (event {event} tx {transaction_id})"
+                    );
+                }
+                Ok(Ok(Err(e))) => {
+                    bump_dispatch_stat(&stats, &plugin_id, |s| s.notify_failed += 1).await;
+                    eprintln!(
+                        "miraclepay: plugin notify {plugin_id} failed for {event} tx {transaction_id}: {e}"
+                    );
+                }
+                Ok(Err(_)) | Err(_) => {
+                    bump_dispatch_stat(&stats, &plugin_id, |s| s.notify_timed_out += 1).await;
+                    eprintln!(
+                        "miraclepay: plugin notify {plugin_id} timed out for {event} tx {transaction_id}"
+                    );
+                }
+            }
+        }
+    });
+}
+
+/// Run the merchant's opted-in webhook transformer, if any, over
+/// a payload about to be stored in a `WebhookEvent` (spec §3.3).
+/// Returns the payload to store — the original on no-opt-in, skip,
+/// timeout, error, or invalid return. Awaited but hard-bounded
+/// (§3.4): worst-case added settle latency for an opted-in
+/// merchant is [`TRANSFORM_TIMEOUT_CAP_MS`]; for every
+/// non-opted-in merchant it is zero (step 1 returns immediately,
+/// no stats, no log). The transform can never fail a settlement,
+/// never drop the webhook event, and never store a partial or
+/// invalid payload.
+///
+/// Return contract (spec §3.1): `null` → unchanged (success); a
+/// JSON object → wholesale replacement (success); any other value
+/// → invalid, original kept (`transform_failed`).
+pub async fn apply_webhook_transformer(
+    state: &AppState,
+    merchant_id: &str,
+    event_type: &str,
+    payload: Value,
+) -> Value {
+    // Step 1: the merchant's opt-in (the canonical settings field).
+    let plugin_id = {
+        let settings = state.merchant_settings.read().await;
+        settings
+            .get(merchant_id)
+            .and_then(|s| s.webhook_transformer_plugin_id.clone())
+    };
+    let Some(plugin_id) = plugin_id.filter(|id| !id.trim().is_empty()) else {
+        return payload;
+    };
+    // Step 2: resolve the named plugin per §1.3 (kind
+    // WebhookTransformer, usable, JS engine present).
+    let target = {
+        let plugins = state.plugins.read().await;
+        plugins
+            .values()
+            .find(|p| p.id() == plugin_id)
+            .filter(|p| {
+                p.usable() && p.kind() == Some(PluginKind::WebhookTransformer) && p.engine.is_some()
+            })
+            .map(|p| {
+                (
+                    p.engine.clone().expect("engine checked above"),
+                    p.manifest.as_ref().expect("usable plugin").timeout_ms(),
+                )
+            })
+    };
+    let Some((engine, manifest_timeout_ms)) = target else {
+        eprintln!(
+            "miraclepay: webhook transformer {plugin_id} for merchant {merchant_id} is not usable — original payload kept"
+        );
+        return payload;
+    };
+    // Step 3: bounded call + outcome mapping (§3.1/§3.4).
+    let stats = state.plugin_dispatch_stats.clone();
+    bump_dispatch_stat(&stats, &plugin_id, |s| s.transform_attempted += 1).await;
+    let args = json!({
+        "event_type": event_type,
+        "payload": payload,
+        "merchant_id": merchant_id,
+    });
+    let join = tokio::task::spawn_blocking(move || engine.call("transform_webhook", &args));
+    let effective_ms = manifest_timeout_ms.min(TRANSFORM_TIMEOUT_CAP_MS);
+    match tokio::time::timeout(Duration::from_millis(effective_ms), join).await {
+        Ok(Ok(Ok(Value::Null))) => {
+            bump_dispatch_stat(&stats, &plugin_id, |s| s.transform_succeeded += 1).await;
+            payload
+        }
+        Ok(Ok(Ok(out))) if out.is_object() => {
+            bump_dispatch_stat(&stats, &plugin_id, |s| s.transform_succeeded += 1).await;
+            out
+        }
+        Ok(Ok(Ok(_other))) => {
+            bump_dispatch_stat(&stats, &plugin_id, |s| s.transform_failed += 1).await;
+            eprintln!(
+                "miraclepay: plugin transform_webhook {plugin_id} returned a non-object payload for merchant {merchant_id} event {event_type} — original payload kept"
+            );
+            payload
+        }
+        Ok(Ok(Err(PluginError::NoSuchOperation(_)))) => {
+            bump_dispatch_stat(&stats, &plugin_id, |s| s.transform_skipped_no_op += 1).await;
+            eprintln!(
+                "miraclepay: plugin transform_webhook {plugin_id} does not implement transform_webhook for merchant {merchant_id} event {event_type} — original payload kept"
+            );
+            payload
+        }
+        Ok(Ok(Err(e))) => {
+            bump_dispatch_stat(&stats, &plugin_id, |s| s.transform_failed += 1).await;
+            eprintln!(
+                "miraclepay: plugin transform_webhook {plugin_id} failed for merchant {merchant_id} event {event_type}: {e} — original payload kept"
+            );
+            payload
+        }
+        Ok(Err(_)) | Err(_) => {
+            bump_dispatch_stat(&stats, &plugin_id, |s| s.transform_timed_out += 1).await;
+            eprintln!(
+                "miraclepay: plugin transform_webhook {plugin_id} timed out for merchant {merchant_id} event {event_type} — original payload kept"
+            );
+            payload
+        }
+    }
+}
+
+#[cfg(test)]
+mod dispatch_tests {
+    use super::*;
+    use crate::handlers::merchants::default_merchant_settings;
+    use miraclepay_domain::money::{Currency, Money};
+    use miraclepay_domain::transaction::{Transaction, TxStatus};
+
+    fn manifest(id: &str, kind: &str) -> PluginManifest {
+        PluginManifest::from_toml_str(&format!(
+            "id = \"{id}\"\nname = \"T\"\nversion = \"1.0.0\"\nkind = \"{kind}\"\nmin_api_version = \"1.0\"\n"
+        ))
+        .expect("manifest")
+    }
+
+    async fn insert_plugin(state: &AppState, id: &str, kind: &str, source: &str) {
+        let kv: Arc<dyn KvStore> = Arc::new(StateKvStore::new(state.plugin_kv.clone()));
+        let m = manifest(id, kind);
+        let engine = PluginEngine::from_source(m.clone(), source.to_string(), kv, json!({}))
+            .expect("engine");
+        state.plugins.write().await.insert(
+            id.to_string(),
+            LoadedPlugin {
+                dir_name: id.to_string(),
+                manifest: Some(m),
+                engine: Some(Arc::new(engine)),
+                enabled: true,
+                load_error: None,
+            },
+        );
+    }
+
+    async fn opt_in(state: &AppState, merchant_id: &str, plugin_id: &str) {
+        let mut s = default_merchant_settings(merchant_id);
+        s.webhook_transformer_plugin_id = Some(plugin_id.to_string());
+        state
+            .merchant_settings
+            .write()
+            .await
+            .insert(merchant_id.to_string(), s);
+    }
+
+    fn sample_tx() -> Transaction {
+        Transaction {
+            id: "txn_1".to_string(),
+            merchant_id: "mch_1".to_string(),
+            gateway: "bkash".to_string(),
+            amount: Money {
+                amount_minor: 50_000,
+                currency: Currency::BDT,
+            },
+            status: TxStatus::Completed,
+            customer_email: Some("secret@example.com".to_string()),
+            customer_phone: Some("01700000000".to_string()),
+            provider_trx_id: Some("9HX123".to_string()),
+            sender_number: Some("01711111111".to_string()),
+            reference: Some("order-123".to_string()),
+            metadata: json!({"secret": true}),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        }
+    }
+
+    #[test]
+    fn notification_arg_has_exact_spec_shape_without_pii() {
+        let arg = notification_arg("payment.completed", "evt_1", &sample_tx(), None);
+        let obj = arg.as_object().expect("object");
+        let mut keys: Vec<&str> = obj.keys().map(|k| k.as_str()).collect();
+        keys.sort();
+        assert_eq!(
+            keys,
+            [
+                "amount_minor",
+                "currency",
+                "event",
+                "event_id",
+                "gateway",
+                "merchant_id",
+                "occurred_at",
+                "provider_trx_id",
+                "reason",
+                "reference",
+                "sender_number",
+                "status",
+                "transaction_id",
+            ]
+        );
+        assert_eq!(arg["event"], "payment.completed");
+        assert_eq!(arg["event_id"], "evt_1");
+        assert_eq!(arg["amount_minor"], 50_000);
+        assert_eq!(arg["currency"], "BDT");
+        assert_eq!(arg["status"], "completed");
+        assert_eq!(arg["reason"], Value::Null);
+        assert!(arg.get("customer_email").is_none());
+        assert!(arg.get("customer_phone").is_none());
+        assert!(arg.get("metadata").is_none());
+        // occurred_at parses as RFC 3339.
+        chrono::DateTime::parse_from_rfc3339(arg["occurred_at"].as_str().expect("string"))
+            .expect("rfc3339");
+    }
+
+    #[tokio::test]
+    async fn transform_without_opt_in_returns_payload() {
+        let state = AppState::new("test-secret".to_string());
+        let payload = json!({"a": 1});
+        let out =
+            apply_webhook_transformer(&state, "mch_1", "payment.completed", payload.clone()).await;
+        assert_eq!(out, payload);
+    }
+
+    #[tokio::test]
+    async fn transform_with_unknown_plugin_returns_payload() {
+        let state = AppState::new("test-secret".to_string());
+        opt_in(&state, "mch_1", "nope").await;
+        let payload = json!({"a": 1});
+        let out =
+            apply_webhook_transformer(&state, "mch_1", "payment.completed", payload.clone()).await;
+        assert_eq!(out, payload);
+    }
+
+    #[tokio::test]
+    async fn transform_replaces_payload_and_counts_success() {
+        let state = AppState::new("test-secret".to_string());
+        insert_plugin(
+            &state,
+            "xf",
+            "webhook_transformer",
+            "function transform_webhook(req) { \
+               var p = req.payload; p.transformed = true; p.event = req.event_type; \
+               return p; }",
+        )
+        .await;
+        opt_in(&state, "mch_1", "xf").await;
+        let out =
+            apply_webhook_transformer(&state, "mch_1", "payment.completed", json!({"a": 1})).await;
+        assert_eq!(
+            out,
+            json!({"a": 1, "transformed": true, "event": "payment.completed"})
+        );
+        let stats = state.plugin_dispatch_stats.read().await;
+        let s = stats.get("xf").expect("stats");
+        assert_eq!(s.transform_attempted, 1);
+        assert_eq!(s.transform_succeeded, 1);
+    }
+
+    #[tokio::test]
+    async fn transform_null_means_unchanged_and_succeeds() {
+        let state = AppState::new("test-secret".to_string());
+        insert_plugin(
+            &state,
+            "nullxf",
+            "webhook_transformer",
+            "function transform_webhook(req) { return null; }",
+        )
+        .await;
+        opt_in(&state, "mch_1", "nullxf").await;
+        let payload = json!({"a": 1});
+        let out = apply_webhook_transformer(&state, "mch_1", "x", payload.clone()).await;
+        assert_eq!(out, payload);
+        let stats = state.plugin_dispatch_stats.read().await;
+        assert_eq!(stats.get("nullxf").expect("stats").transform_succeeded, 1);
+    }
+
+    #[tokio::test]
+    async fn transform_keeps_payload_on_error_non_object_and_no_op() {
+        // Throw → failed.
+        let state = AppState::new("test-secret".to_string());
+        insert_plugin(
+            &state,
+            "boom",
+            "webhook_transformer",
+            "function transform_webhook(req) { throw new Error('nope'); }",
+        )
+        .await;
+        opt_in(&state, "mch_1", "boom").await;
+        let payload = json!({"a": 1});
+        let out = apply_webhook_transformer(&state, "mch_1", "x", payload.clone()).await;
+        assert_eq!(out, payload);
+        {
+            let stats = state.plugin_dispatch_stats.read().await;
+            assert_eq!(stats.get("boom").expect("stats").transform_failed, 1);
+        }
+        // Array return → failed (non-object).
+        let state2 = AppState::new("test-secret".to_string());
+        insert_plugin(
+            &state2,
+            "arr",
+            "webhook_transformer",
+            "function transform_webhook(req) { return [1, 2]; }",
+        )
+        .await;
+        opt_in(&state2, "mch_1", "arr").await;
+        let out = apply_webhook_transformer(&state2, "mch_1", "x", payload.clone()).await;
+        assert_eq!(out, payload);
+        // Missing op → skipped_no_op.
+        let state3 = AppState::new("test-secret".to_string());
+        insert_plugin(
+            &state3,
+            "noop",
+            "webhook_transformer",
+            "function something_else(req) { return {}; }",
+        )
+        .await;
+        opt_in(&state3, "mch_1", "noop").await;
+        let out = apply_webhook_transformer(&state3, "mch_1", "x", payload.clone()).await;
+        assert_eq!(out, payload);
+        let stats = state3.plugin_dispatch_stats.read().await;
+        let s = stats.get("noop").expect("stats");
+        assert_eq!(s.transform_skipped_no_op, 1);
+        assert_eq!(s.transform_failed, 0);
+    }
+
+    #[tokio::test]
+    async fn notification_dispatch_reaches_notify_and_counts() {
+        let state = AppState::new("test-secret".to_string());
+        insert_plugin(
+            &state,
+            "notif",
+            "notification",
+            "function notify(event) { kv.set('seen', event.event); }",
+        )
+        .await;
+        insert_plugin(
+            &state,
+            "badnotif",
+            "notification",
+            "function notify(event) { throw new Error('down'); }",
+        )
+        .await;
+        insert_plugin(
+            &state,
+            "noopnotif",
+            "notification",
+            "function other(event) { return 1; }",
+        )
+        .await;
+        let arg = notification_arg("payment.completed", "evt_1", &sample_tx(), None);
+        dispatch_notification(&state, arg).await;
+        // Detached task: poll the shared KV + stats briefly.
+        let key = "notif\u{1}seen";
+        let mut seen = None;
+        for _ in 0..100 {
+            seen = state.plugin_kv.lock().unwrap().get(key).cloned();
+            let stats = state.plugin_dispatch_stats.read().await;
+            let done = stats
+                .get("badnotif")
+                .map(|s| s.notify_failed == 1)
+                .unwrap_or(false)
+                && stats
+                    .get("noopnotif")
+                    .map(|s| s.notify_skipped_no_op == 1)
+                    .unwrap_or(false);
+            if seen.is_some() && done {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert_eq!(seen.as_deref(), Some("\"payment.completed\""));
+        let stats = state.plugin_dispatch_stats.read().await;
+        assert_eq!(stats.get("notif").expect("stats").notify_succeeded, 1);
+        assert_eq!(stats.get("badnotif").expect("stats").notify_failed, 1);
+        assert_eq!(
+            stats.get("noopnotif").expect("stats").notify_skipped_no_op,
+            1
+        );
+    }
 }

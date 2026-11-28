@@ -184,7 +184,7 @@ Gateway IDs are lowercase strings: `bkash`, `nagad`, `rocket`, `upay`, `surecash
 | POST | `/api/v1/payments` | JWT | Create a payment for a merchant the caller owns (admins: any merchant). Body includes `merchant_id` and a `gateway` ID such as `bkash` or `stripe`. Queues a `payment.created` webhook event. |
 | GET | `/api/v1/payments` | JWT | List payments; filters include `merchant_id` and `status` (for example `pending`, `completed`). |
 | GET | `/api/v1/payments/{id}` | JWT | Get one payment. |
-| GET | `/api/v1/checkout/{id}` | Public | Checkout details for a payment, for rendering the checkout page. |
+| GET | `/api/v1/checkout/{id}` | Public | Checkout details for a payment, for rendering the checkout page. Includes `receiving_number` (`string \| null`, payer-safe — see §4.6.1): the merchant's receiving wallet number for the transaction's gateway, or `null` when none is configured for that gateway. |
 | POST | `/api/v1/checkout/{id}/submit` | Public | Submit a checkout payment. Body: `{sender_number, provider_trx_id}` — the number the customer sent from and the provider transaction ID from their confirmation. |
 
 ### 4.6 Payment Links
@@ -195,8 +195,21 @@ Gateway IDs are lowercase strings: `bkash`, `nagad`, `rocket`, `upay`, `surecash
 | GET | `/api/v1/payment-links` | JWT | List payment links; optional `merchant_id` filter. |
 | GET | `/api/v1/payment-links/{id}` | JWT | Get one payment link. |
 | POST | `/api/v1/payment-links/{id}/deactivate` | JWT | Deactivate a payment link so its public page no longer accepts payment. |
-| GET | `/api/v1/payment-links/public/{slug}` | Public | Public pay page data for a link: title, description, fixed amount (or `null` for open-amount), the merchant's trading name, branding, and the gateway ids offered. Payer-safe fields only — no merchant id, credentials, or config. (The browser page itself is `/pay/{slug}`, served by the embedded frontend.) |
+| GET | `/api/v1/payment-links/public/{slug}` | Public | Public pay page data for a link: title, description, fixed amount (or `null` for open-amount), the merchant's trading name, branding, the gateway ids offered, and `receiving_numbers` (payer-safe — see §4.6.1). Payer-safe fields only — no merchant id, credentials, or config. (The browser page itself is `/pay/{slug}`, served by the embedded frontend.) |
 | POST | `/api/v1/payment-links/public/{slug}/pay` | Public | Pay a link. Body: `gateway` (required), `amount_minor` (required for open-amount links, ignored when the link has a fixed amount), optional `customer_phone` / `customer_email`. Returns `{transaction_id, status}` with `status` starting as `pending`. |
+
+#### 4.6.1 Receiving numbers on public responses (v0.0.4)
+
+So a payer knows where to send the money, the two public read endpoints above expose the merchant's **receiving wallet number** — the number configured as `merchant_number` on the merchant's gateway config (`GatewayConfig.merchant_number`). This is payer-safe by design: it is the number the merchant publicly asks payers to send money to.
+
+| Field | Endpoint | Type | Semantics |
+|---|---|---|---|
+| `receiving_number` | `GET /api/v1/checkout/{id}` | `string \| null` | The receiving number for **the transaction's (selected) gateway**. `null` when the merchant has not configured an exposable receiving number for that gateway. |
+| `receiving_numbers` | `GET /api/v1/payment-links/public/{slug}` **and** `GET /api/v1/checkout/{id}` | array of `{gateway, number}` | One entry per **offered** gateway that has an exposable receiving number (on checkout this list powers the gateway picker), for example `{"gateway": "bkash", "number": "01…"}`. Offered gateways **without** a configured number are omitted entirely (never listed with a `null` number); the array is empty when no offered gateway has one. |
+
+> **Exposure rule (all surfaces):** a number is exposable only when the gateway is a number-based manual gateway (bkash, nagad, rocket, upay, surecash, upi, paytm, phonepe, easypaisa, jazzcash, manual), its config is **enabled**, the stored number is non-blank, and it passes the gateway adapter's own identifier validation. Credential gateways (stripe, paypal, razorpay) never expose a number, even if one is stored. These are published pay-to addresses, so listing every offered gateway's number is payer-safe.
+
+> **Security note:** only the receiving number is public. Gateway credentials — `api_key`, `api_secret`, and the rest of the gateway config (`extra`) — are **never** part of any public response, including the two endpoints above. The masked gateway views returned to authenticated merchant endpoints are unchanged.
 
 ### 4.7 Invoices
 

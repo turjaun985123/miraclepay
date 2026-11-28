@@ -107,6 +107,10 @@ pub struct AppState {
     pub plugin_kv: Arc<std::sync::Mutex<HashMap<String, String>>>,
     /// Per-plugin enabled flags set by admins (persisted).
     pub plugin_enabled: Arc<RwLock<HashMap<String, bool>>>,
+    /// Per-plugin dispatch counters for the Stream D plugin kinds
+    /// (notification + webhook transformer). In-memory only
+    /// (spec §5).
+    pub plugin_dispatch_stats: Arc<RwLock<HashMap<String, crate::plugins::DispatchStats>>>,
     /// Merchant KYC profiles (Wave 33), keyed by merchant id.
     pub kyc_profiles: Arc<RwLock<HashMap<String, miraclepay_domain::kyc::KycProfile>>>,
     /// Per-merchant settings incl. checkout branding (Wave 37).
@@ -169,6 +173,7 @@ impl AppState {
             plugin_configs: Arc::new(RwLock::new(HashMap::new())),
             plugin_kv: Arc::new(std::sync::Mutex::new(HashMap::new())),
             plugin_enabled: Arc::new(RwLock::new(HashMap::new())),
+            plugin_dispatch_stats: Arc::new(RwLock::new(HashMap::new())),
             kyc_profiles: Arc::new(RwLock::new(HashMap::new())),
             merchant_settings: Arc::new(RwLock::new(HashMap::new())),
             disputes: Arc::new(RwLock::new(HashMap::new())),

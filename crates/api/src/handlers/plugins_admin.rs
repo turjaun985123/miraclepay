@@ -41,6 +41,9 @@ pub async fn list_plugins(
 ) -> Result<Json<Value>, ApiError> {
     require_admin(&auth)?;
     let plugins = state.plugins.read().await;
+    // Stream D (spec §1.1): additive per-plugin dispatch counters;
+    // all-zero object when the plugin has no stats entry yet.
+    let dispatch_stats = state.plugin_dispatch_stats.read().await;
     let mut list: Vec<Value> = plugins
         .values()
         .map(|p| {
@@ -52,6 +55,10 @@ pub async fn list_plugins(
                 "provides": p.provides(),
                 "enabled": p.enabled,
                 "load_error": p.load_error,
+                "dispatch_stats": dispatch_stats
+                    .get(p.id())
+                    .copied()
+                    .unwrap_or_default(),
                 "config_schema": p
                     .manifest
                     .as_ref()
@@ -288,6 +295,22 @@ pub async fn verify_transaction(
         }
     };
     if !result.verified {
+        // v0.0.4 Stream D (site F1): the platform's one genuine
+        // payment-failure signal — the provider says this payment
+        // did not happen. Notification plugins hear about it
+        // (fire-and-forget); the transaction's status is NOT
+        // mutated (Stream D creates no lifecycle transitions).
+        let event_id = miraclepay_domain::ids::webhook_event_id();
+        plugins::dispatch_notification(
+            &state,
+            plugins::notification_arg(
+                "payment.failed",
+                &event_id,
+                &tx,
+                Some("provider_unverified"),
+            ),
+        )
+        .await;
         return Ok(Json(
             json!({"ok": true, "status": "unverified", "verified": false}),
         ));
@@ -314,11 +337,17 @@ pub async fn verify_transaction(
         }
     };
     if let Some(completed) = completed {
-        state.webhook_events.write().await.push(WebhookEvent {
-            id: miraclepay_domain::ids::webhook_event_id(),
-            merchant_id: completed.merchant_id.clone(),
-            event_type: "payment.completed".to_string(),
-            payload: json!({
+        // v0.0.4 Stream D (site S4): opted-in webhook transformer
+        // first (bounded, original on failure), then the event is
+        // stored, then notification plugins fire (fire-and-forget).
+        // The notification arg is built from the transaction, never
+        // from the transformed payload.
+        let event_id = miraclepay_domain::ids::webhook_event_id();
+        let payload = plugins::apply_webhook_transformer(
+            &state,
+            &completed.merchant_id,
+            "payment.completed",
+            json!({
                 "transaction_id": completed.id,
                 "merchant_id": completed.merchant_id,
                 "gateway": completed.gateway,
@@ -329,8 +358,20 @@ pub async fn verify_transaction(
                 "reference": completed.reference,
                 "via": "verify_endpoint",
             }),
+        )
+        .await;
+        state.webhook_events.write().await.push(WebhookEvent {
+            id: event_id.clone(),
+            merchant_id: completed.merchant_id.clone(),
+            event_type: "payment.completed".to_string(),
+            payload,
             created_at: chrono::Utc::now(),
         });
+        plugins::dispatch_notification(
+            &state,
+            plugins::notification_arg("payment.completed", &event_id, &completed, None),
+        )
+        .await;
         state.audit(
             Some(auth.user_id.clone()),
             Some(completed.merchant_id.clone()),

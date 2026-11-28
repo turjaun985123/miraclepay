@@ -80,12 +80,81 @@ asks an enabled plugin that `provides` it. Native ids always win.
   plugin parse settles a payment only on an exact match against a
   pending transaction, exactly like the native path.
 
-### Notification / webhook transformer
+### Notification (`kind = "notification"`)
 
-Reserved kinds: manifests load and are listed, and operations
-are callable through the admin invoke endpoint; wiring them into
-the dispatch pipeline is future work (they are not silently
-pretending to deliver anything today).
+- `notify(event)` — `event` is an object with exactly these
+  keys: `event` (`"payment.completed"` or `"payment.failed"`),
+  `event_id`, `merchant_id`, `transaction_id`, `gateway`,
+  `amount_minor`, `currency`, `status`, `provider_trx_id`,
+  `sender_number`, `reference`, `reason` (null except on
+  failure), and `occurred_at` (RFC 3339). Customer PII and
+  transaction metadata are deliberately excluded. The return
+  value is ignored by the pipeline; returning a small summary
+  object is still useful, because it is what the admin invoke
+  endpoint shows when an admin calls the operation by hand.
+
+Notification plugins fire when a payment settles or fails —
+`payment.completed` (all four settlement paths: SMS native,
+SMS plugin-fallback, provider webhook, and the transaction
+verify endpoint) and `payment.failed` (the verify endpoint's
+provider-unverified outcome — the platform has no other
+payment-failure transition today). Dispatch is
+**platform-global and fire-and-forget**: every enabled
+notification plugin is called for every merchant's events (there
+is no per-merchant subscription today — a plugin that only cares
+about some merchants must filter on `event.merchant_id`
+itself), the calls run off the payment path, and a plugin that
+throws or exceeds its timeout is logged, counted in the
+plugin's `dispatch_stats` (visible on `GET /admin/plugins`),
+and skipped. A broken notification plugin can never block,
+delay, or fail a payment.
+
+### Webhook transformer (`kind = "webhook_transformer"`)
+
+- `transform_webhook({event_type, payload, merchant_id})` →
+  return a replacement payload object, or `null` to leave the
+  payload unchanged.
+
+Transformers run at the **webhook payload build point** for
+`payment.completed` events (the four settlement paths listed
+above): after the core has built the payload and before the
+event is stored — and therefore before it is signed at
+delivery. The signature covers the transformed payload, so
+receivers verify against what was actually sent. Other event
+types are not transformed today.
+
+Transformation is **opt-in per merchant**: a merchant's
+payloads are transformed only when their merchant settings
+name a transformer in `webhook_transformer_plugin_id` (set via
+`PUT /api/v1/merchants/:id/settings`; the plugin must exist
+and be a loadable `webhook_transformer`). At most **one**
+transformer applies per merchant — the named one; there is no
+chaining. Merchants who never opt in get byte-identical
+payloads to the untransformed pipeline.
+
+Failure semantics are fail-open and strictly bounded: the call
+is capped at the smaller of the plugin's manifest timeout and
+2000 ms; a transformer that throws, times out, or returns a
+non-object leaves the original payload in place, and the
+outcome is counted in the plugin's `dispatch_stats`.
+Transformation can never break webhook delivery; for a merchant who opted in, it can delay that merchant's settlement by at most the 2-second cap.
+
+### Worked example: the two example plugins
+
+`plugins/example-notify/` is a minimal `notification` plugin:
+`notify(event)` writes the event to the plugin log, keeps a
+per-event-type counter (`count:<type>`) in its KV store, and
+returns `{ok, event_type, count}`. It declares no
+`allowed_hosts` — it needs no network, and confinement is the
+default.
+
+`plugins/example-webhook-transform/` is a minimal
+`webhook_transformer`: it returns a copy of the payload with a
+`transformed_by: "example-webhook-transform"` marker and a
+nested `meta: {event_type}` object added — a harmless,
+inspectable example of reshaping an outbound webhook. Returning
+`null` for a non-object payload shows the "leave it unchanged"
+path.
 
 ## Host functions (the ONLY outside access)
 

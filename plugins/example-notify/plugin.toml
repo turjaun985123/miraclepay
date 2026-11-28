@@ -1,0 +1,11 @@
+# Example Notify — example notification plugin.
+# The simplest possible notification plugin: it logs every
+# payment event it is handed and counts events per type in its
+# own KV store. It needs no network access, so allowed_hosts is
+# empty — confinement by default.
+id = "example-notify"
+name = "Example Notify (Plugin)"
+version = "1.0.0"
+kind = "notification"
+min_api_version = "1.0"
+allowed_hosts = []

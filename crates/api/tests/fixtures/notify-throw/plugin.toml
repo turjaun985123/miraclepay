@@ -1,0 +1,8 @@
+# Test fixture (seat D5): notification plugin whose notify() throws
+# immediately. Settlement must be unaffected.
+id = "notify-throw"
+name = "Notify Throw (test fixture)"
+version = "1.0.0"
+kind = "notification"
+min_api_version = "1.0"
+timeout_ms = 1000

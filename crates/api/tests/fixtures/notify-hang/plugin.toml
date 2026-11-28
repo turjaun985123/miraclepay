@@ -1,0 +1,9 @@
+# Test fixture (seat D5): notification plugin whose notify() never
+# returns. Its manifest timeout (300 ms) is the only thing that may
+# cut it off — settlement must not wait for it at all.
+id = "notify-hang"
+name = "Notify Hang (test fixture)"
+version = "1.0.0"
+kind = "notification"
+min_api_version = "1.0"
+timeout_ms = 300

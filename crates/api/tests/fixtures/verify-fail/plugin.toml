@@ -1,0 +1,10 @@
+# Test fixture (coordinator fix round, D6 F5 / spec T-7): gateway
+# plugin whose verify_payment always reports the payment as NOT
+# verified, so the F1 dispatch site (verify_transaction's
+# !verified branch) can be exercised end to end.
+id = "verify-fail"
+name = "Verify Fail (test fixture)"
+version = "1.0.0"
+kind = "gateway"
+provides = ["verify_fail"]
+min_api_version = "1.0"

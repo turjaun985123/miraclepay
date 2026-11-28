@@ -1,0 +1,9 @@
+# Test fixture (seat D5): webhook transformer that loops forever.
+# Its manifest timeout (300 ms) must bound the call and dispatch
+# must fall back to the original payload.
+id = "transform-hang"
+name = "Transform Hang (test fixture)"
+version = "1.0.0"
+kind = "webhook_transformer"
+min_api_version = "1.0"
+timeout_ms = 300

@@ -105,6 +105,13 @@ pub struct MerchantSettings {
     /// (1..=28) schedules.
     #[serde(default)]
     pub payout_day: Option<u8>,
+    /// Webhook transformer plugin (Stream D): the id of a
+    /// `webhook_transformer` plugin whose `transform_webhook`
+    /// operation rewrites this merchant's `payment.completed`
+    /// webhook payloads before they are stored. `None` (and absence
+    /// in old persisted records) means no transformation.
+    #[serde(default)]
+    pub webhook_transformer_plugin_id: Option<String>,
 }
 
 impl MerchantSettings {
@@ -193,6 +200,24 @@ pub fn validate_merchant_settings(settings: &MerchantSettings) -> Result<(), Vec
         }
     }
 
+    // Webhook transformer opt-in (Stream D, spec §3.2): when set
+    // it must be a plausible plugin id (same charset as the plugin
+    // manifest validator). Existence/kind are NOT checked here —
+    // the domain layer cannot see plugins; the API layer does.
+    let is_plugin_id = |id: &str| {
+        !id.is_empty()
+            && id
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    };
+    if let Some(plugin_id) = &settings.webhook_transformer_plugin_id {
+        if !is_plugin_id(plugin_id) {
+            errors.push(
+                "webhook_transformer_plugin_id must be a plugin id (lowercase letters, digits and dashes)"
+                    .to_string(),
+            );
+        }
+    }
     if errors.is_empty() {
         Ok(())
     } else {
@@ -223,6 +248,7 @@ mod tests {
             checkout_message: None,
             payout_schedule: None,
             payout_day: None,
+            webhook_transformer_plugin_id: None,
         }
     }
 
@@ -385,6 +411,7 @@ mod branding_tests {
             checkout_message: None,
             payout_schedule: None,
             payout_day: None,
+            webhook_transformer_plugin_id: None,
         }
     }
 

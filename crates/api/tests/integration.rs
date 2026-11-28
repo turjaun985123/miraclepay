@@ -675,6 +675,7 @@ async fn public_payment_link_flow_settles_via_sms() {
         "collect_phone",
         "collect_email",
         "gateways",
+        "receiving_numbers",
         "branding",
     ];
     for key in object.keys() {

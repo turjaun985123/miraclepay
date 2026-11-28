@@ -1,0 +1,10 @@
+# Example Webhook Transform — example webhook_transformer plugin.
+# Reshapes outbound merchant webhook payloads for merchants who
+# have opted in to webhook transformation. It needs no network
+# access, so allowed_hosts is empty — confinement by default.
+id = "example-webhook-transform"
+name = "Example Webhook Transform (Plugin)"
+version = "1.0.0"
+kind = "webhook_transformer"
+min_api_version = "1.0"
+allowed_hosts = []

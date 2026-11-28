@@ -233,23 +233,66 @@ pub async fn receive_sms(
             }
 
             // Notify the merchant through the webhook pipeline.
+            //
+            // Stream D hooks (D3, spec §3.3 site S1 + §2.2 site S1),
+            // in the spec's fixed order: the transaction is already
+            // mutated above → build the payload → transform → push
+            // the webhook event → fire the notification.
+            //
+            // Transform: only the event's *payload* passes through
+            // the merchant's opted-in webhook transformer via
+            // `apply_webhook_transformer` (D2). The envelope (`id`,
+            // `merchant_id`, `event_type`, `created_at`) is built
+            // here and never transformed. The call is awaited but
+            // hard-bounded (spec §3.4: min(manifest timeout,
+            // 2000 ms)); every failure mode returns the original
+            // payload, so it can never fail or drop this settlement
+            // or its webhook event.
+            let payload = json!({
+                "transaction_id": completed.id,
+                "merchant_id": completed.merchant_id,
+                "gateway": completed.gateway,
+                "amount_minor": completed.amount.amount_minor,
+                "currency": completed.amount.currency.code(),
+                "status": completed.status,
+                "provider_trx_id": completed.provider_trx_id,
+                "sender_number": completed.sender_number,
+                "reference": completed.reference,
+            });
+            let payload = crate::plugins::apply_webhook_transformer(
+                &state,
+                &merchant_id,
+                "payment.completed",
+                payload,
+            )
+            .await;
+            // Hoisted so the notification below can correlate with
+            // this webhook event via `event_id` (spec §2.1).
+            let event_id = ids::webhook_event_id();
             state.webhook_events.write().await.push(WebhookEvent {
-                id: ids::webhook_event_id(),
+                id: event_id.clone(),
                 merchant_id: merchant_id.clone(),
                 event_type: "payment.completed".to_string(),
-                payload: json!({
-                    "transaction_id": completed.id,
-                    "merchant_id": completed.merchant_id,
-                    "gateway": completed.gateway,
-                    "amount_minor": completed.amount.amount_minor,
-                    "currency": completed.amount.currency.code(),
-                    "status": completed.status,
-                    "provider_trx_id": completed.provider_trx_id,
-                    "sender_number": completed.sender_number,
-                    "reference": completed.reference,
-                }),
+                payload,
                 created_at: Utc::now(),
             });
+
+            // Notification: fire-and-forget (spec §2.3).
+            // `dispatch_notification` (D2) spawns the delivery task
+            // and returns as soon as it is spawned — the `.await`
+            // here never waits for a plugin, never surfaces an
+            // error, and holds no state lock (the guards above are
+            // already dropped; the arg is built from the `completed`
+            // clone). The argument comes from D2's
+            // `notification_arg` constructor and is built from the
+            // TRANSACTION, never from the (possibly transformed)
+            // webhook payload, so notification plugins always see
+            // the canonical field set.
+            crate::plugins::dispatch_notification(
+                &state,
+                crate::plugins::notification_arg("payment.completed", &event_id, &completed, None),
+            )
+            .await;
 
             Ok((
                 StatusCode::OK,
@@ -337,24 +380,54 @@ async fn plugin_fallback(
     if let Some(trx_id) = parsed.trx_id {
         state.used_trx.write().await.insert(trx_id);
     }
+    // Stream D hooks (D3, spec §3.3 site S2 + §2.2 site S2): the
+    // same treatment as the native settle path, in the same fixed
+    // order — build the payload → transform → push → notify.
+    //
+    // Transform: only this event's `payload` value (the `json!`
+    // object below, including its `"via": "sms_plugin_parser"`
+    // marker) passes through the merchant's opted-in webhook
+    // transformer via `apply_webhook_transformer` (D2); the
+    // envelope fields are never transformed. Awaited but
+    // hard-bounded (spec §3.4); every failure mode keeps the
+    // original payload.
+    let payload = json!({
+        "transaction_id": completed.id,
+        "merchant_id": completed.merchant_id,
+        "gateway": completed.gateway,
+        "amount_minor": completed.amount.amount_minor,
+        "currency": completed.amount.currency.code(),
+        "status": completed.status,
+        "provider_trx_id": completed.provider_trx_id,
+        "sender_number": completed.sender_number,
+        "reference": completed.reference,
+        "via": "sms_plugin_parser",
+    });
+    let payload =
+        crate::plugins::apply_webhook_transformer(state, merchant_id, "payment.completed", payload)
+            .await;
+    // Hoisted so the notification below can correlate with this
+    // webhook event via `event_id` (spec §2.1).
+    let event_id = ids::webhook_event_id();
     state.webhook_events.write().await.push(WebhookEvent {
-        id: ids::webhook_event_id(),
+        id: event_id.clone(),
         merchant_id: merchant_id.to_string(),
         event_type: "payment.completed".to_string(),
-        payload: json!({
-            "transaction_id": completed.id,
-            "merchant_id": completed.merchant_id,
-            "gateway": completed.gateway,
-            "amount_minor": completed.amount.amount_minor,
-            "currency": completed.amount.currency.code(),
-            "status": completed.status,
-            "provider_trx_id": completed.provider_trx_id,
-            "sender_number": completed.sender_number,
-            "reference": completed.reference,
-            "via": "sms_plugin_parser",
-        }),
+        payload,
         created_at: Utc::now(),
     });
+    // Notification: fire-and-forget, exactly as on the native
+    // settle path (spec §2.3) — `dispatch_notification` (D2)
+    // returns once the delivery task is spawned; the `.await`
+    // never waits for a plugin and holds no state lock. The
+    // argument is built by D2's `notification_arg` constructor
+    // from the TRANSACTION (`completed`), never from the
+    // (possibly transformed) webhook payload.
+    crate::plugins::dispatch_notification(
+        state,
+        crate::plugins::notification_arg("payment.completed", &event_id, &completed, None),
+    )
+    .await;
     Ok((
         StatusCode::OK,
         Json(json!({

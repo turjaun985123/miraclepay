@@ -44,6 +44,8 @@ use miraclepay_domain::{
     stats::{compute_balance, MerchantBalance},
 };
 
+use miraclepay_plugin_spi::PluginKind;
+
 use crate::{auth_middleware::AuthUser, dto::ApiError, state::AppState};
 
 /// Request body for [`update_merchant`].
@@ -261,6 +263,7 @@ pub fn default_merchant_settings(merchant_id: &str) -> settings::MerchantSetting
         checkout_message: None,
         payout_schedule: None,
         payout_day: None,
+        webhook_transformer_plugin_id: None,
     }
 }
 
@@ -310,6 +313,28 @@ pub async fn update_merchant_settings(
     settings::validate_merchant_settings(&body).map_err(|errors| {
         ApiError::BadRequest(format!("invalid merchant settings: {}", errors.join("; ")))
     })?;
+    // Stream D (spec §3.2): the webhook-transformer opt-in must
+    // name a real, loadable `webhook_transformer` plugin. The
+    // domain layer checks only the id charset (it cannot see
+    // plugins); existence, kind and load state are checked here,
+    // after domain validation and before the settings are stored.
+    // `enabled` is deliberately NOT required at PUT time — an
+    // admin may temporarily disable the plugin; dispatch then
+    // skips it and keeps the original payload, so a settings value
+    // survives plugin maintenance.
+    if let Some(plugin_id) = body.webhook_transformer_plugin_id.as_deref() {
+        let plugins = state.plugins.read().await;
+        let names_transformer = plugins.values().any(|plugin| {
+            plugin.id() == plugin_id
+                && plugin.kind() == Some(PluginKind::WebhookTransformer)
+                && plugin.load_error.is_none()
+        });
+        if !names_transformer {
+            return Err(ApiError::BadRequest(format!(
+                "webhook_transformer_plugin_id does not name a webhook_transformer plugin: {plugin_id}"
+            )));
+        }
+    }
     state
         .merchant_settings
         .write()
