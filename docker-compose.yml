@@ -51,7 +51,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: miraclepay-api:0.0.3.3
+    image: miraclepay-api:0.0.4
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://miraclepay:change-me@postgres:5432/miraclepay}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
@@ -70,7 +70,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: miraclepay-api:0.0.3.3
+    image: miraclepay-api:0.0.4
     # Same image as the api service; the worker is its own binary.
     command: ["miraclepay-worker"]
     environment:
@@ -93,7 +93,7 @@ services:
         # The API origin visitors' browsers should call; set
         # PUBLIC_API_URL in .env for any non-localhost deployment.
         PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8080}
-    image: miraclepay-frontend:0.0.3.3
+    image: miraclepay-frontend:0.0.4
     ports:
       - "${FRONTEND_PORT:-4321}:80"
     depends_on:

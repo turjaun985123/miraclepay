@@ -1,6 +1,6 @@
 {
   "name": "miraclepay-frontend",
-  "version": "0.0.3.3",
+  "version": "0.0.4",
   "private": true,
   "type": "module",
   "scripts": {

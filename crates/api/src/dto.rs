@@ -182,7 +182,7 @@ pub struct HealthResponse {
 pub fn health() -> HealthResponse {
     HealthResponse {
         status: "ok",
-        version: "0.0.3.3",
+        version: "0.0.4",
         name: "MiraclePay",
     }
 }
@@ -232,7 +232,7 @@ mod tests {
     fn health_reports_miraclepay_v0_0_1() {
         let health = health();
         assert_eq!(health.status, "ok");
-        assert_eq!(health.version, "0.0.3.3");
+        assert_eq!(health.version, "0.0.4");
         assert_eq!(health.name, "MiraclePay");
     }
 
