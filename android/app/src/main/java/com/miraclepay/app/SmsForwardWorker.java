@@ -129,7 +129,8 @@ public class SmsForwardWorker extends Worker {
         if (sender == null || sender.trim().isEmpty()
                 || body == null || body.trim().isEmpty()) {
             Log.w(TAG, "Dropping SMS forward with missing sender or body");
-            stats.recordFailure("missing sender or body");
+            stats.recordFailure(getApplicationContext()
+                    .getString(R.string.failure_missing_sender_or_body));
             return Result.failure();
         }
 
@@ -148,10 +149,12 @@ public class SmsForwardWorker extends Worker {
             // received after setup is completed are enqueued afresh
             // by the receiver.
             Log.w(TAG, "Not configured; cannot forward SMS from " + sender);
+            String notConfigured = getApplicationContext()
+                    .getString(R.string.failure_app_not_configured);
             if (outbox != null) {
-                outbox.markFailed(outboxId, "app not configured");
+                outbox.markFailed(outboxId, notConfigured);
             }
-            stats.recordFailure("app not configured");
+            stats.recordFailure(notConfigured);
             return Result.failure();
         }
 
@@ -179,10 +182,12 @@ public class SmsForwardWorker extends Worker {
             Log.w(TAG, "Backend rejected SMS from " + sender
                     + " with client error HTTP " + status
                     + ": " + result.errorMessage + "; not retrying");
+            String httpFailure = getApplicationContext()
+                    .getString(R.string.failure_http, status, result.errorMessage);
             if (outbox != null) {
-                outbox.markFailed(outboxId, "HTTP " + status + ": " + result.errorMessage);
+                outbox.markFailed(outboxId, httpFailure);
             }
-            stats.recordFailure("HTTP " + status + ": " + result.errorMessage);
+            stats.recordFailure(httpFailure);
             return Result.failure();
         }
 
@@ -192,7 +197,10 @@ public class SmsForwardWorker extends Worker {
         if (outbox != null) {
             outbox.markAttempt(outboxId,
                     status == ApiClient.NO_STATUS
-                            ? "network error" : "HTTP " + status);
+                            ? getApplicationContext()
+                                    .getString(R.string.failure_network_error)
+                            : getApplicationContext()
+                                    .getString(R.string.failure_http_status, status));
         }
         // Everything else is transient: a 5xx server error, an
         // unexpected status (e.g. a stray 3xx from a proxy in front of

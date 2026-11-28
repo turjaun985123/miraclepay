@@ -42,9 +42,9 @@ final class Notify {
         }
         NotificationChannel channel = new NotificationChannel(
                 CHANNEL_FORWARDING,
-                "SMS forwarding",
+                context.getString(R.string.notify_channel_name),
                 NotificationManager.IMPORTANCE_LOW);
-        channel.setDescription("Shown while MiraclePay forwards a payment SMS.");
+        channel.setDescription(context.getString(R.string.notify_channel_description));
         manager.createNotificationChannel(channel);
     }
 
@@ -53,7 +53,7 @@ final class Notify {
         ensureChannel(context);
         return new NotificationCompat.Builder(context, CHANNEL_FORWARDING)
                 .setContentTitle("MiraclePay")
-                .setContentText("Forwarding payment SMS…")
+                .setContentText(context.getString(R.string.notify_forwarding_text))
                 .setSmallIcon(R.drawable.ic_stat_miraclepay)
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)

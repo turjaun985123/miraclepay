@@ -193,12 +193,13 @@ public class SettingsActivity extends AppCompatActivity {
             final String resultText;
             if (result.isSuccess()) {
                 resultText = result.getStatusCode() > 0
-                        ? getString(R.string.connection_ok) + " (HTTP " + result.getStatusCode() + ")."
+                        ? getString(R.string.connection_ok_http, result.getStatusCode())
                         : getString(R.string.connection_ok) + ".";
             } else if (!isEmpty(result.getErrorMessage())) {
-                resultText = getString(R.string.connection_failed) + ": " + result.getErrorMessage();
+                resultText = getString(R.string.connection_failed_reason,
+                        result.getErrorMessage());
             } else if (result.getStatusCode() > 0) {
-                resultText = getString(R.string.connection_failed) + " (HTTP " + result.getStatusCode() + ").";
+                resultText = getString(R.string.connection_failed_http, result.getStatusCode());
             } else {
                 resultText = getString(R.string.connection_failed) + ".";
             }

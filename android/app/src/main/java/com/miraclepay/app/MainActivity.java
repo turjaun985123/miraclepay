@@ -169,11 +169,11 @@ public class MainActivity extends AppCompatActivity {
         statusText.setText(headline);
         statusDot.setBackgroundResource(dot);
 
-        configSummaryText.setText(
-                getString(R.string.server_label) + ": "
-                        + (isEmpty(serverUrl) ? getString(R.string.not_set) : serverUrl) + "\n"
-                        + getString(R.string.device_id_label) + ": "
-                        + (isEmpty(deviceId) ? getString(R.string.not_set) : deviceId));
+        configSummaryText.setText(getString(R.string.server_device_summary,
+                getString(R.string.server_label),
+                isEmpty(serverUrl) ? getString(R.string.not_set) : serverUrl,
+                getString(R.string.device_id_label),
+                isEmpty(deviceId) ? getString(R.string.not_set) : deviceId));
 
         if (enableSwitch.isChecked() != enabled) {
             // The listener re-saves the same value it was loaded from,
@@ -281,12 +281,13 @@ public class MainActivity extends AppCompatActivity {
             final String resultText;
             if (result.isSuccess()) {
                 resultText = result.getStatusCode() > 0
-                        ? getString(R.string.connection_ok) + " (HTTP " + result.getStatusCode() + ")."
+                        ? getString(R.string.connection_ok_http, result.getStatusCode())
                         : getString(R.string.connection_ok) + ".";
             } else if (!isEmpty(result.getErrorMessage())) {
-                resultText = getString(R.string.connection_failed) + ": " + result.getErrorMessage();
+                resultText = getString(R.string.connection_failed_reason,
+                        result.getErrorMessage());
             } else if (result.getStatusCode() > 0) {
-                resultText = getString(R.string.connection_failed) + " (HTTP " + result.getStatusCode() + ").";
+                resultText = getString(R.string.connection_failed_http, result.getStatusCode());
             } else {
                 resultText = getString(R.string.connection_failed) + ".";
             }
@@ -302,7 +303,7 @@ public class MainActivity extends AppCompatActivity {
                 if (!result.isSuccess()) {
                     Snackbar.make(findViewById(android.R.id.content), resultText,
                                     Snackbar.LENGTH_LONG)
-                            .setAction("Retry", v -> testConnection())
+                            .setAction(R.string.retry, v -> testConnection())
                             .show();
                 }
                 refreshStatus();
@@ -366,7 +367,7 @@ public class MainActivity extends AppCompatActivity {
             intent.setData(android.net.Uri.parse("package:" + getPackageName()));
             startActivity(intent);
         } catch (Exception e) {
-            showSnackbar("Open Settings → Battery and set MiraclePay to Unrestricted.");
+            showSnackbar(getString(R.string.battery_unrestricted_hint));
         }
     }
 
@@ -388,7 +389,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         showSnackbar(allGranted
-                ? "SMS permission granted."
+                ? getString(R.string.sms_permission_granted)
                 : getString(R.string.banner_permission_denied));
         refreshStatus();
     }

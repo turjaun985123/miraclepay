@@ -62,4 +62,28 @@
     <string name="testing">Testing connection…</string>
     <string name="connection_ok">Connection OK</string>
     <string name="connection_failed">Connection failed</string>
+
+    <!-- Layout hints (Stream E / E3: moved from activity_settings.xml) -->
+    <string name="settings_server_url_hint">https://pay.example.com</string>
+    <string name="settings_device_key_hint">mp_live_...</string>
+
+    <!-- Extracted from Java code (Stream E / E2) -->
+    <string name="retry">Retry</string>
+    <string name="battery_unrestricted_hint">Open Settings → Battery and set MiraclePay to Unrestricted.</string>
+    <string name="sms_permission_granted">SMS permission granted.</string>
+    <string name="connection_ok_http">Connection OK (HTTP %1$d).</string>
+    <string name="connection_failed_http">Connection failed (HTTP %1$d).</string>
+    <string name="connection_failed_reason">Connection failed: %1$s</string>
+    <string name="server_device_summary">%1$s: %2$s\n%3$s: %4$s</string>
+    <string name="failure_missing_sender_or_body">missing sender or body</string>
+    <string name="failure_app_not_configured">app not configured</string>
+    <string name="failure_http">HTTP %1$d: %2$s</string>
+    <string name="failure_http_status">HTTP %1$d</string>
+    <string name="failure_network_error">network error</string>
+
+    <!-- Notification channel + foreground notification (Stream E
+         coordinator fix round: moved out of Notify.java) -->
+    <string name="notify_channel_name">SMS forwarding</string>
+    <string name="notify_channel_description">Shown while MiraclePay forwards a payment SMS.</string>
+    <string name="notify_forwarding_text">Forwarding payment SMS…</string>
 </resources>

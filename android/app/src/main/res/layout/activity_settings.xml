@@ -45,7 +45,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:autofillHints="url"
-                    android:hint="https://pay.example.com"
+                    android:hint="@string/settings_server_url_hint"
                     android:importantForAutofill="yes"
                     android:inputType="textUri"
                     android:singleLine="true" />
@@ -65,7 +65,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:autofillHints="password"
-                    android:hint="mp_live_..."
+                    android:hint="@string/settings_device_key_hint"
                     android:importantForAutofill="yes"
                     android:inputType="textPassword"
                     android:singleLine="true" />
