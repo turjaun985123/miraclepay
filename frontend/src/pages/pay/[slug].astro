@@ -108,6 +108,20 @@ import Icon from '../../components/Icon.astro';
           </div>
         </fieldset>
 
+        <!-- Merchant receiving number (v0.0.4): the number for the
+             selected gateway, from `receiving_numbers` on the public
+             link view. Updated by script on selection change; a
+             plain note replaces it when the merchant has not
+             published a number for that gateway. -->
+        <div class="field" id="gateway-receiving" hidden>
+          <p class="label" id="receiving-label"></p>
+          <span class="copy-field" id="receiving-copy" hidden>
+            <code class="copy-value" id="receiving-number"></code>
+            <button type="button" class="btn btn-small btn-ghost" id="copy-receiving">Copy</button>
+          </span>
+          <p class="field-hint" id="receiving-note" hidden></p>
+        </div>
+
         <p id="pay-form-error" class="alert alert-error" role="alert" hidden></p>
 
         <button id="pay-submit" class="btn pay-submit" type="submit" data-i18n="pay_now">
@@ -260,6 +274,9 @@ import Icon from '../../components/Icon.astro';
     collect_phone?: boolean;
     collect_email?: boolean;
     gateways?: string[];
+    // Merchant receiving wallet numbers per offered gateway
+    // (v0.0.4, seat A2); only gateways with one configured appear.
+    receiving_numbers?: { gateway?: unknown; number?: unknown }[] | null;
     amount_minor?: number | null;
     currency?: string;
     amount?: { amount_minor?: number; currency?: string } | null;
@@ -313,6 +330,90 @@ import Icon from '../../components/Icon.astro';
     const v = document.getElementById('success-reference')?.textContent;
     if (v && v !== '—') void copyText(v);
   });
+
+  // ── Merchant receiving number (v0.0.4) ─────────────────────────
+  // Every gateway card on this page is a manual "send money"
+  // method, so the selected gateway either has a published
+  // receiving number (copyable, below) or gets the plain
+  // contact-the-merchant note — never a blank gap.
+  const receivingBlockEl = document.getElementById('gateway-receiving');
+  const receivingLabelEl = document.getElementById('receiving-label');
+  const receivingCopyEl = document.getElementById('receiving-copy');
+  const receivingNumberEl = document.getElementById('receiving-number');
+  const receivingNoteEl = document.getElementById('receiving-note');
+  let receivingNumbers = new Map<string, string>();
+
+  // Page-local bilingual strings, following the lib/i18n en/bn
+  // approach (the shared dictionary lives outside this page).
+  const RECEIVING_STRINGS = {
+    send_to: {
+      en: 'Send money to this {gateway} number',
+      bn: 'এই {gateway} নম্বরে টাকা পাঠান',
+    },
+    not_published: {
+      en: 'The merchant has not published a receiving number for {gateway} yet. Please contact the merchant to get the number to send money to.',
+      bn: 'বিক্রেতা এখনও {gateway}-এর জন্য গ্রহণকারী নম্বর প্রকাশ করেননি। টাকা পাঠানোর নম্বর পেতে অনুগ্রহ করে বিক্রেতার সাথে যোগাযোগ করুন।',
+    },
+  } as const;
+
+  function receivingText(
+    key: keyof typeof RECEIVING_STRINGS,
+    gatewayName: string,
+  ): string {
+    const entry = RECEIVING_STRINGS[key];
+    return (getLang() === 'bn' ? entry.bn : entry.en).replaceAll(
+      '{gateway}',
+      gatewayName,
+    );
+  }
+
+  function selectedGatewayName(gateway: string): string {
+    const checked = document.querySelector<HTMLInputElement>(
+      'input[name="gateway"]:checked',
+    );
+    const cardName = checked
+      ?.closest('label')
+      ?.querySelector('.gateway-name')?.textContent?.trim();
+    return cardName || gateway;
+  }
+
+  function updateReceiving(): void {
+    if (!receivingBlockEl) return;
+    const gateway = gatewayValue().trim().toLowerCase();
+    if (!gateway) {
+      receivingBlockEl.hidden = true;
+      return;
+    }
+    const gatewayName = selectedGatewayName(gateway);
+    const number = receivingNumbers.get(gateway);
+    if (number) {
+      if (receivingLabelEl) {
+        receivingLabelEl.textContent = receivingText('send_to', gatewayName);
+        receivingLabelEl.hidden = false;
+      }
+      if (receivingNumberEl) receivingNumberEl.textContent = number;
+      if (receivingCopyEl) receivingCopyEl.hidden = false;
+      if (receivingNoteEl) receivingNoteEl.hidden = true;
+    } else {
+      if (receivingLabelEl) receivingLabelEl.hidden = true;
+      if (receivingCopyEl) receivingCopyEl.hidden = true;
+      if (receivingNoteEl) {
+        receivingNoteEl.textContent = receivingText('not_published', gatewayName);
+        receivingNoteEl.hidden = false;
+      }
+    }
+    receivingBlockEl.hidden = false;
+  }
+
+  document
+    .querySelectorAll<HTMLInputElement>('input[name="gateway"]')
+    .forEach((input) => input.addEventListener('change', updateReceiving));
+  document.getElementById('copy-receiving')?.addEventListener('click', () => {
+    if (receivingNumberEl?.textContent) void copyText(receivingNumberEl.textContent);
+  });
+  // The label/note are script-set, so refresh them when the
+  // language toggle flips (its own listener above runs first).
+  langToggle?.addEventListener('click', updateReceiving);
   const formErrorEl = document.getElementById('pay-form-error');
   const submitButton = document.getElementById(
     'pay-submit',
@@ -469,6 +570,23 @@ import Icon from '../../components/Icon.astro';
           (firstVisible as HTMLInputElement).checked = true;
         }
       }
+
+      // Receiving numbers for the offered gateways (v0.0.4):
+      // normalised to a lowercase-gateway → number map, then the
+      // instructions block renders for the selected gateway.
+      receivingNumbers = new Map<string, string>();
+      if (Array.isArray(link.receiving_numbers)) {
+        for (const entry of link.receiving_numbers) {
+          const gateway =
+            typeof entry?.gateway === 'string'
+              ? entry.gateway.trim().toLowerCase()
+              : '';
+          const number =
+            typeof entry?.number === 'string' ? entry.number.trim() : '';
+          if (gateway && number) receivingNumbers.set(gateway, number);
+        }
+      }
+      updateReceiving();
 
       if (titleEl) titleEl.textContent = link.title ?? t('pay_title_default');
       document.title = `MiraclePay — Pay — ${link.title ?? 'Payment'}`;

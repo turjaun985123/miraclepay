@@ -122,6 +122,15 @@ import Icon from '../../components/Icon.astro';
 
       <!-- Pending: instructions + submission form -->
       <div id="pending-area" hidden>
+        <!-- Gateway picker (v0.0.4): shown only when the transaction
+             is Pending and more than one gateway is offered. Cards
+             are built by script from `gateways`, reusing the pay
+             page's gateway-card pattern/classes. -->
+        <fieldset class="field" id="gateway-picker" hidden>
+          <legend class="label" id="gateway-picker-label">Choose how you paid</legend>
+          <div class="gateway-grid" id="gateway-picker-grid"></div>
+        </fieldset>
+
         <div class="alert checkout-instructions">
           <h2 class="instructions-heading" data-i18n="co_how_to_pay">How to pay</h2>
           <p id="checkout-instructions">
@@ -129,6 +138,18 @@ import Icon from '../../components/Icon.astro';
             method above, then enter your wallet number and the
             transaction ID from that payment below.
           </p>
+          <!-- Merchant receiving number (v0.0.4): where to send the
+               money for this checkout's gateway. Rendered by script
+               from `receiving_number`; a plain note replaces it when
+               a manual wallet gateway has none published. -->
+          <div id="receiving-block" class="receiving-block" hidden>
+            <p class="label" id="receiving-label"></p>
+            <span class="copy-field" id="receiving-copy" hidden>
+              <code class="copy-value" id="receiving-number"></code>
+              <button type="button" class="btn btn-small btn-ghost" id="copy-receiving">Copy</button>
+            </span>
+            <p id="receiving-note" hidden></p>
+          </div>
         </div>
 
         <form id="checkout-form" novalidate>
@@ -328,6 +349,16 @@ import Icon from '../../components/Icon.astro';
     white-space: pre-line;
   }
 
+  .receiving-block {
+    display: grid;
+    gap: var(--space-1_5);
+    margin-top: var(--space-3);
+  }
+
+  .receiving-block .label {
+    margin-bottom: 0;
+  }
+
   .checkout-submit {
     width: 100%;
   }
@@ -404,6 +435,14 @@ import Icon from '../../components/Icon.astro';
     gateway?: string;
     instructions?: string;
     redirect_url?: string;
+    // Merchant receiving wallet number for this checkout's gateway
+    // (v0.0.4, seat A2): null when the merchant has not published one.
+    receiving_number?: string | null;
+    // Offered gateways + per-gateway receiving numbers (v0.0.4,
+    // seat B2): `gateways` is inherited from `CheckoutDetails`;
+    // `receiving_numbers` carries one entry per gateway that has a
+    // published number.
+    receiving_numbers?: { gateway?: unknown; number?: unknown }[] | null;
     // Merchant branding (Wave 98), mirroring the pay page's shape:
     // the checkout-details response may carry it nested under
     // `branding` (same shape as the public payment-link view) or as
@@ -446,7 +485,15 @@ import Icon from '../../components/Icon.astro';
     'redirect-link',
   ) as HTMLAnchorElement | null;
   const pendingAreaEl = document.getElementById('pending-area');
+  const gatewayPickerEl = document.getElementById('gateway-picker');
+  const gatewayPickerLabelEl = document.getElementById('gateway-picker-label');
+  const gatewayPickerGridEl = document.getElementById('gateway-picker-grid');
   const instructionsEl = document.getElementById('checkout-instructions');
+  const receivingBlockEl = document.getElementById('receiving-block');
+  const receivingLabelEl = document.getElementById('receiving-label');
+  const receivingCopyEl = document.getElementById('receiving-copy');
+  const receivingNumberEl = document.getElementById('receiving-number');
+  const receivingNoteEl = document.getElementById('receiving-note');
   const form = document.getElementById(
     'checkout-form',
   ) as HTMLFormElement | null;
@@ -609,6 +656,335 @@ import Icon from '../../components/Icon.astro';
     if (refEl?.textContent) void copyText(refEl.textContent);
   });
 
+  // ── Merchant receiving number (v0.0.4) ─────────────────────────
+  // Gateways where the payer sends money manually to a merchant
+  // wallet number (the same set the pay page offers as "Send
+  // money" cards, plus the manual/bank-transfer ids). Redirect /
+  // API gateways never show this block — the page already routes
+  // those payers through the redirect area instead.
+  const MANUAL_WALLET_GATEWAYS = new Set([
+    'bkash',
+    'nagad',
+    'rocket',
+    'upay',
+    'surecash',
+    'upi',
+    'paytm',
+    'phonepe',
+    'easypaisa',
+    'jazzcash',
+    'manual',
+    'manual_transfer',
+    'manual_bank_transfer',
+    'manual-bank-transfer',
+    'bank_transfer',
+  ]);
+
+  // Page-local bilingual strings, following the lib/i18n en/bn
+  // approach (the shared dictionary lives outside this page).
+  const RECEIVING_STRINGS = {
+    send_to: {
+      en: 'Send money to this {gateway} number',
+      bn: 'এই {gateway} নম্বরে টাকা পাঠান',
+    },
+    send_to_plain: {
+      en: 'Send money to this number',
+      bn: 'এই নম্বরে টাকা পাঠান',
+    },
+    not_published: {
+      en: 'The merchant has not published a receiving number for {gateway} yet. Please contact the merchant to get the number to send money to.',
+      bn: 'বিক্রেতা এখনও {gateway}-এর জন্য গ্রহণকারী নম্বর প্রকাশ করেননি। টাকা পাঠানোর নম্বর পেতে অনুগ্রহ করে বিক্রেতার সাথে যোগাযোগ করুন।',
+    },
+    not_published_plain: {
+      en: 'The merchant has not published a receiving number yet. Please contact the merchant to get the number to send money to.',
+      bn: 'বিক্রেতা এখনও গ্রহণকারী নম্বর প্রকাশ করেননি। টাকা পাঠানোর নম্বর পেতে অনুগ্রহ করে বিক্রেতার সাথে যোগাযোগ করুন।',
+    },
+  } as const;
+
+  function receivingText(
+    key: keyof typeof RECEIVING_STRINGS,
+    gatewayName: string,
+  ): string {
+    const entry = RECEIVING_STRINGS[key];
+    return (getLang() === 'bn' ? entry.bn : entry.en).replaceAll(
+      '{gateway}',
+      gatewayName,
+    );
+  }
+
+  let lastDetails: CheckoutView | null = null;
+
+  // ── Gateway picker (v0.0.4) ────────────────────────────────────
+  // Page-local bilingual label, following the same en/bn approach
+  // as RECEIVING_STRINGS above (the shared dictionary lives
+  // outside this page and this page may not add keys to it).
+  const PICKER_STRINGS = {
+    choose_how_you_paid: {
+      en: 'Choose how you paid',
+      bn: 'আপনি কীভাবে পেমেন্ট করেছেন তা বেছে নিন',
+    },
+    current_method: {
+      en: 'Current method',
+      bn: 'বর্তমান মাধ্যম',
+    },
+    pay_using: {
+      en: 'Send the amount shown above to the merchant using {gateway}, then enter your wallet number and the transaction ID from that payment below.',
+      bn: 'উপরে দেখানো পরিমাণটি {gateway} ব্যবহার করে মার্চেন্টকে পাঠান, তারপর নিচে আপনার ওয়ালেট নম্বর এবং সেই পেমেন্টের ট্রান্সাকশন আইডি লিখুন।',
+    },
+  } as const;
+
+  function pickerText(key: keyof typeof PICKER_STRINGS): string {
+    const entry = PICKER_STRINGS[key];
+    return getLang() === 'bn' ? entry.bn : entry.en;
+  }
+
+  // Display names / hints for all 14 native gateway ids
+  // (Stream B spec §4.2): manual wallet gateways hint "Send
+  // money", `manual` hints "Bank or cash", API gateways hint
+  // "Online payment".
+  const GATEWAY_CARD_INFO: Record<string, { name: string; hint: string }> = {
+    bkash: { name: 'bKash', hint: 'Send money' },
+    nagad: { name: 'Nagad', hint: 'Send money' },
+    rocket: { name: 'Rocket', hint: 'Send money' },
+    upay: { name: 'Upay', hint: 'Send money' },
+    surecash: { name: 'SureCash', hint: 'Send money' },
+    upi: { name: 'UPI', hint: 'Send money' },
+    paytm: { name: 'Paytm', hint: 'Send money' },
+    phonepe: { name: 'PhonePe', hint: 'Send money' },
+    easypaisa: { name: 'Easypaisa', hint: 'Send money' },
+    jazzcash: { name: 'JazzCash', hint: 'Send money' },
+    razorpay: { name: 'Razorpay', hint: 'Online payment' },
+    stripe: { name: 'Stripe', hint: 'Online payment' },
+    paypal: { name: 'PayPal', hint: 'Online payment' },
+    manual: { name: 'Manual transfer', hint: 'Bank or cash' },
+    manual_transfer: { name: 'Manual transfer', hint: 'Bank or cash' },
+    manual_bank_transfer: { name: 'Manual transfer', hint: 'Bank or cash' },
+    'manual-bank-transfer': { name: 'Manual transfer', hint: 'Bank or cash' },
+    bank_transfer: { name: 'Bank transfer', hint: 'Bank or cash' },
+  };
+
+  function gatewayCardInfo(gateway: string): { name: string; hint: string } {
+    return (
+      GATEWAY_CARD_INFO[gateway.trim().toLowerCase()] ?? {
+        name: prettify(gateway),
+        hint: 'Online payment',
+      }
+    );
+  }
+
+  // Offered gateway ids, normalised: strings only, trimmed,
+  // de-duplicated, order preserved (server order = offer order).
+  function offeredGateways(details: CheckoutView): string[] {
+    const seen = new Set<string>();
+    const offered: string[] = [];
+    for (const raw of details.gateways ?? []) {
+      const id = String(raw ?? '').trim();
+      if (id && !seen.has(id.toLowerCase())) {
+        seen.add(id.toLowerCase());
+        offered.push(id);
+      }
+    }
+    return offered;
+  }
+
+  // The effective card list (Stream B spec §4.3): the offered
+  // gateways, with the transaction's own stored gateway PREPENDED
+  // when it is no longer offered (e.g. the merchant removed its
+  // config after creation). That card is the pre-selection, so an
+  // untouched submit keeps the creation gateway via the API's
+  // no-op rule instead of silently re-pointing the payment at
+  // `gateways[0]` (B6 F1).
+  function effectiveGateways(details: CheckoutView): string[] {
+    const offered = offeredGateways(details);
+    const stored =
+      typeof details.gateway === 'string' ? details.gateway.trim() : '';
+    if (
+      stored &&
+      !offered.some((g) => g.toLowerCase() === stored.toLowerCase())
+    ) {
+      return [stored, ...offered];
+    }
+    return offered;
+  }
+
+  // Lowercase-gateway → number map from `receiving_numbers`.
+  let receivingNumbers = new Map<string, string>();
+
+  function rebuildReceivingNumbers(details: CheckoutView): void {
+    receivingNumbers = new Map<string, string>();
+    if (Array.isArray(details.receiving_numbers)) {
+      for (const entry of details.receiving_numbers) {
+        const gateway =
+          typeof entry?.gateway === 'string' ? entry.gateway.trim().toLowerCase() : '';
+        const number =
+          typeof entry?.number === 'string' ? entry.number.trim() : '';
+        if (gateway && number) receivingNumbers.set(gateway, number);
+      }
+    }
+  }
+
+  // The receiving number for the currently selected gateway. When
+  // the per-gateway list is present it is authoritative for the
+  // selected gateway (switching to a gateway with no published
+  // number must not keep showing the previous gateway's number);
+  // the legacy flat `receiving_number` remains the fallback for
+  // the creation gateway / single-gateway responses without a list.
+  function receivingNumberFor(details: CheckoutView): string | null {
+    const key = currentGateway.trim().toLowerCase();
+    if (receivingNumbers.size > 0) {
+      if (key && receivingNumbers.has(key)) return receivingNumbers.get(key) ?? null;
+      const stored =
+        typeof details.gateway === 'string' ? details.gateway.trim().toLowerCase() : '';
+      if (
+        key &&
+        stored &&
+        key === stored &&
+        typeof details.receiving_number === 'string' &&
+        details.receiving_number.trim()
+      ) {
+        return details.receiving_number.trim();
+      }
+      return null;
+    }
+    return typeof details.receiving_number === 'string' &&
+      details.receiving_number.trim()
+      ? details.receiving_number.trim()
+      : null;
+  }
+
+  function renderGatewayPicker(details: CheckoutView, show: boolean): void {
+    if (!gatewayPickerEl || !gatewayPickerGridEl) return;
+    if (gatewayPickerLabelEl) {
+      gatewayPickerLabelEl.textContent = pickerText('choose_how_you_paid');
+    }
+    if (!show) {
+      gatewayPickerEl.hidden = true;
+      gatewayPickerGridEl.replaceChildren();
+      return;
+    }
+    // Same markup pattern as the pay page: label.gateway-card >
+    // input[type=radio][name=gateway] + span.gateway-name +
+    // span.gateway-hint, inside div.gateway-grid.
+    const offered = offeredGateways(details);
+    gatewayPickerGridEl.replaceChildren();
+    for (const gateway of effectiveGateways(details)) {
+      const info = gatewayCardInfo(gateway);
+      // The prepended stored gateway (no longer offered) is the
+      // payer's current method — label it as such (spec §4.3).
+      const isCurrentMethod =
+        !offered.some((g) => g.toLowerCase() === gateway.toLowerCase());
+      const card = document.createElement('label');
+      card.className = 'gateway-card';
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'gateway';
+      input.value = gateway;
+      input.checked =
+        gateway.toLowerCase() === currentGateway.trim().toLowerCase();
+      input.addEventListener('change', () => {
+        if (!input.checked) return;
+        currentGateway = gateway;
+        // Swap the summary row, the instructions area and the
+        // receiving-number block to the newly selected gateway.
+        if (gatewayEl) gatewayEl.textContent = info.name;
+        if (lastDetails) {
+          renderInstructions(lastDetails);
+          renderReceiving(lastDetails);
+        }
+      });
+      const nameEl = document.createElement('span');
+      nameEl.className = 'gateway-name';
+      nameEl.textContent = info.name;
+      const hintEl = document.createElement('span');
+      hintEl.className = 'gateway-hint';
+      hintEl.textContent = isCurrentMethod
+        ? pickerText('current_method')
+        : info.hint;
+      card.append(input, nameEl, hintEl);
+      gatewayPickerGridEl.append(card);
+    }
+    gatewayPickerEl.hidden = false;
+  }
+
+  // The generic instructions paragraph names the selected gateway
+  // (Stream B spec §4.4). A creation-time `instructions` string
+  // from the merchant is left untouched — it may contain
+  // merchant-specific text that must not be rewritten on switch.
+  function renderInstructions(details: CheckoutView): void {
+    if (!instructionsEl) return;
+    if (
+      typeof details.instructions === 'string' &&
+      details.instructions.trim()
+    ) {
+      instructionsEl.textContent = details.instructions;
+      return;
+    }
+    const name = currentGateway
+      ? gatewayCardInfo(currentGateway).name
+      : '';
+    if (name) {
+      instructionsEl.textContent = pickerText('pay_using').replace(
+        '{gateway}',
+        name,
+      );
+    }
+  }
+
+  function renderReceiving(details: CheckoutView): void {
+    if (!receivingBlockEl) return;
+    const number = receivingNumberFor(details);
+    const gatewayKey = currentGateway.trim().toLowerCase();
+    const gatewayName = currentGateway ? prettify(currentGateway) : '';
+    const hasRedirect =
+      typeof details.redirect_url === 'string' && !!details.redirect_url;
+    // An unpublished number only gets the contact-the-merchant note
+    // on the manual flow: no redirect hand-off, and the gateway is
+    // a manual wallet gateway (or none was named — the pending
+    // form on this page is itself the manual submission flow).
+    const isManual =
+      !hasRedirect && (gatewayKey === '' || MANUAL_WALLET_GATEWAYS.has(gatewayKey));
+
+    if (number) {
+      if (receivingLabelEl) {
+        receivingLabelEl.textContent = receivingText(
+          gatewayName ? 'send_to' : 'send_to_plain',
+          gatewayName,
+        );
+        receivingLabelEl.hidden = false;
+      }
+      if (receivingNumberEl) receivingNumberEl.textContent = number;
+      if (receivingCopyEl) receivingCopyEl.hidden = false;
+      if (receivingNoteEl) receivingNoteEl.hidden = true;
+      receivingBlockEl.hidden = false;
+    } else if (isManual) {
+      if (receivingLabelEl) receivingLabelEl.hidden = true;
+      if (receivingCopyEl) receivingCopyEl.hidden = true;
+      if (receivingNoteEl) {
+        receivingNoteEl.textContent = receivingText(
+          gatewayName ? 'not_published' : 'not_published_plain',
+          gatewayName,
+        );
+        receivingNoteEl.hidden = false;
+      }
+      receivingBlockEl.hidden = false;
+    } else {
+      receivingBlockEl.hidden = true;
+    }
+  }
+
+  document.getElementById('copy-receiving')?.addEventListener('click', () => {
+    if (receivingNumberEl?.textContent) void copyText(receivingNumberEl.textContent);
+  });
+
+  // The label/note are script-set, so re-render them when the
+  // language toggle flips (its own listener above runs first).
+  langToggle?.addEventListener('click', () => {
+    if (gatewayPickerLabelEl) {
+      gatewayPickerLabelEl.textContent = pickerText('choose_how_you_paid');
+    }
+    if (lastDetails) renderReceiving(lastDetails);
+  });
+
   // Status polling (Wave 185): while processing, re-check every 6s
   // (max ~3 minutes) so the payer sees confirmation land without a
   // manual refresh. Stops on any terminal status.
@@ -639,6 +1015,7 @@ import Icon from '../../components/Icon.astro';
   document.getElementById('check-status')?.addEventListener('click', () => void refreshStatus());
 
   function render(details: CheckoutView): void {
+    lastDetails = details;
     const status = String(details.status ?? 'pending').toLowerCase();
     if (submittedAreaEl) submittedAreaEl.hidden = true;
 
@@ -718,12 +1095,33 @@ import Icon from '../../components/Icon.astro';
     fxCurrency = String(details.currency ?? 'BDT').toUpperCase();
     void loadFxRates();
 
-    currentGateway =
-      (typeof details.gateway === 'string' && details.gateway) ||
-      details.gateways?.[0] ||
-      details.methods?.[0] ||
-      '';
-    const gatewayText = gatewayDisplay(details);
+    rebuildReceivingNumbers(details);
+    // No fabricated gateway: the stored creation gateway is the
+    // pre-selection (spec §4.3). When a picker will be shown
+    // (Pending + effective card list > 1), a previous selection is
+    // kept across re-renders; otherwise the stored gateway's card
+    // is selected — including when it is no longer offered, where
+    // it is prepended as the "Current method" card rather than
+    // silently substituted with `gateways[0]` (B6 F1).
+    const storedGateway =
+      typeof details.gateway === 'string' && details.gateway.trim()
+        ? details.gateway.trim()
+        : '';
+    const effective = effectiveGateways(details);
+    const showPicker = status === 'pending' && effective.length > 1;
+    if (showPicker) {
+      const previous = currentGateway.trim().toLowerCase();
+      const kept = effective.find((g) => g.toLowerCase() === previous);
+      const storedCard = effective.find(
+        (g) => g.toLowerCase() === storedGateway.toLowerCase(),
+      );
+      currentGateway = kept ?? storedCard ?? effective[0];
+    } else {
+      currentGateway = storedGateway;
+    }
+    const gatewayText = showPicker
+      ? gatewayCardInfo(currentGateway).name
+      : gatewayDisplay(details);
     if (gatewayRowEl && gatewayEl && gatewayText) {
       gatewayEl.textContent = gatewayText;
       gatewayRowEl.hidden = false;
@@ -751,11 +1149,14 @@ import Icon from '../../components/Icon.astro';
     if (loadingEl) loadingEl.hidden = true;
     if (cardEl) cardEl.hidden = false;
 
+    if (status !== 'pending') renderGatewayPicker(details, false);
     if (status === 'pending') {
-      // Instructions supplied at creation time win over the generic text.
-      if (instructionsEl && typeof details.instructions === 'string' && details.instructions.trim()) {
-        instructionsEl.textContent = details.instructions;
-      }
+      // Instructions supplied at creation time win over the
+      // generic text; otherwise the generic text names the
+      // selected gateway (renderInstructions, spec §4.4).
+      renderInstructions(details);
+      renderGatewayPicker(details, showPicker);
+      renderReceiving(details);
       if (pendingAreaEl) pendingAreaEl.hidden = false;
     } else if (status === 'processing') {
       if (processingAreaEl) processingAreaEl.hidden = false;
@@ -833,6 +1234,9 @@ import Icon from '../../components/Icon.astro';
         provider_trx_id,
         // The API client also accepts the provider transaction id under
         // its canonical name, and needs the gateway when one is known.
+        // With the picker shown, `currentGateway` is the gateway the
+        // payer selected (the server validates it against the
+        // offered set); otherwise it is the stored creation gateway.
         transaction_id: provider_trx_id,
         ...(currentGateway ? { gateway: currentGateway } : {}),
       } as SubmitCheckoutData;
