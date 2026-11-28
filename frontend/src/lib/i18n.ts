@@ -109,6 +109,8 @@ const STRINGS: Record<string, { en: string; bn: string }> = {
   // Dashboard navigation (Wave 133).
   nav_overview: { en: 'Overview', bn: 'ওভারভিউ' },
   nav_transactions: { en: 'Transactions', bn: 'লেনদেন' },
+  nav_disputes: { en: 'Disputes', bn: 'বিরোধ' },
+  nav_payouts: { en: 'Payouts', bn: 'পে-আউট' },
   nav_payment_links: { en: 'Payment Links', bn: 'পেমেন্ট লিংক' },
   nav_invoices: { en: 'Invoices', bn: 'ইনভয়েস' },
   nav_gateways: { en: 'Gateways', bn: 'গেটওয়ে' },

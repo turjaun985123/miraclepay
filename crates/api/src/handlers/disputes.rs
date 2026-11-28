@@ -24,11 +24,70 @@ use serde_json::{json, Value};
 use miraclepay_domain::dispute::{validate_open, Dispute, DisputeReason, DisputeStatus};
 use miraclepay_domain::ids::new_id;
 use miraclepay_domain::money::{Currency, Money};
+use serde::Serialize;
 
 use crate::auth_middleware::AuthUser;
 use crate::dto::ApiError;
 use crate::pagination::{apply_page, PageQuery};
 use crate::state::AppState;
+
+/// Serialised (snake_case) form of a dispute status, used for the
+/// `status` query filter (same approach as `transactions`).
+fn status_label(status: DisputeStatus) -> String {
+    serde_json::to_value(status)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
+/// A dispute plus the display fields a merchant dashboard table /
+/// detail view needs (Stream C, v0.0.4): the owning merchant's
+/// business name and the challenged transaction's reference,
+/// provider id, gateway and customer contact. All pre-existing
+/// `Dispute` fields are preserved verbatim via flattening —
+/// including `evidence_note` and `evidence_files`, so the detail
+/// response carries its evidence entries.
+#[derive(Debug, Clone, Serialize)]
+pub struct DisputeView {
+    #[serde(flatten)]
+    pub dispute: Dispute,
+    /// Business name of `merchant_id`, when the merchant exists.
+    pub merchant_name: Option<String>,
+    /// Merchant/customer reference of the challenged transaction.
+    pub transaction_reference: Option<String>,
+    /// Provider-assigned transaction id of the challenged payment.
+    pub provider_trx_id: Option<String>,
+    /// Gateway that processed the challenged payment.
+    pub gateway: Option<String>,
+    /// Customer email on the challenged transaction, when known.
+    pub customer_email: Option<String>,
+    /// Customer phone on the challenged transaction, when known.
+    pub customer_phone: Option<String>,
+}
+
+/// Build a [`DisputeView`] by joining the transaction + merchant
+/// display fields onto `dispute` (missing joins yield `null`s).
+async fn dispute_view(state: &AppState, dispute: Dispute) -> DisputeView {
+    let merchant_name = {
+        let merchants = state.merchants.read().await;
+        merchants
+            .get(&dispute.merchant_id)
+            .map(|merchant| merchant.business_name.clone())
+    };
+    let tx = {
+        let transactions = state.transactions.read().await;
+        transactions.get(&dispute.transaction_id).cloned()
+    };
+    DisputeView {
+        transaction_reference: tx.as_ref().and_then(|tx| tx.reference.clone()),
+        provider_trx_id: tx.as_ref().and_then(|tx| tx.provider_trx_id.clone()),
+        gateway: tx.as_ref().map(|tx| tx.gateway.clone()),
+        customer_email: tx.as_ref().and_then(|tx| tx.customer_email.clone()),
+        customer_phone: tx.as_ref().and_then(|tx| tx.customer_phone.clone()),
+        merchant_name,
+        dispute,
+    }
+}
 
 /// Whether `auth` may see disputes of `merchant_id`.
 async fn may_access(state: &AppState, auth: &AuthUser, merchant_id: &str) -> bool {
@@ -130,12 +189,33 @@ pub async fn open_dispute(
     Ok((StatusCode::CREATED, Json(dispute)))
 }
 
+/// Query for `GET /disputes` (Stream C, v0.0.4): paging plus the
+/// filters a dashboard table needs. `merchant_id` can only narrow
+/// the caller's own scope — owner-scoping is applied first, so
+/// naming another merchant yields an empty list, never their data.
+/// `status` is the serialised snake_case status (e.g.
+/// `"under_review"`).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ListDisputesQuery {
+    pub merchant_id: Option<String>,
+    pub status: Option<String>,
+    /// Exact dispute reason label (e.g. `"fraudulent"`),
+    /// case-insensitive.
+    pub reason: Option<String>,
+    /// Only disputes opened against this transaction.
+    pub transaction_id: Option<String>,
+    pub page: Option<u32>,
+    pub per_page: Option<u32>,
+}
+
 /// `GET /disputes` — disputes visible to the caller, newest first,
-/// paginated.
+/// paginated. Response: `{ items: [DisputeView], total, page,
+/// per_page, total_pages }` (`items`/`total` are the pre-existing
+/// fields; the page metadata is additive).
 pub async fn list_disputes(
     auth: AuthUser,
     State(state): State<AppState>,
-    Query(page): Query<PageQuery>,
+    Query(query): Query<ListDisputesQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let disputes = state.disputes.read().await;
     let mut visible: Vec<Dispute> = Vec::new();
@@ -144,10 +224,43 @@ pub async fn list_disputes(
             visible.push(dispute.clone());
         }
     }
+    drop(disputes);
+    if let Some(mid) = query.merchant_id.as_deref() {
+        visible.retain(|dispute| dispute.merchant_id == mid);
+    }
+    if let Some(status) = query.status.as_deref() {
+        let wanted = status.trim().to_ascii_lowercase();
+        visible.retain(|dispute| status_label(dispute.status) == wanted);
+    }
+    if let Some(reason) = query.reason.as_deref() {
+        let wanted = reason.trim().to_ascii_lowercase();
+        visible.retain(|dispute| {
+            serde_json::to_value(dispute.reason)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_owned))
+                .unwrap_or_default()
+                == wanted
+        });
+    }
+    if let Some(tid) = query.transaction_id.as_deref() {
+        visible.retain(|dispute| dispute.transaction_id == tid);
+    }
     visible.sort_by_key(|dispute| std::cmp::Reverse(dispute.opened_at));
     let total = visible.len();
-    let items = apply_page(visible, page.page, page.per_page);
-    Ok(Json(json!({ "items": items, "total": total })))
+    let page_query = PageQuery::new(query.page, query.per_page);
+    let paged = apply_page(visible, query.page, query.per_page);
+    let mut items: Vec<DisputeView> = Vec::with_capacity(paged.len());
+    for dispute in paged {
+        items.push(dispute_view(&state, dispute).await);
+    }
+    let meta = crate::pagination::PageMeta::new(total as u64, &page_query);
+    Ok(Json(json!({
+        "items": items,
+        "total": total,
+        "page": meta.page,
+        "per_page": meta.per_page,
+        "total_pages": meta.total_pages,
+    })))
 }
 
 /// Load a dispute the caller may see.
@@ -164,13 +277,16 @@ async fn load_visible(state: &AppState, auth: &AuthUser, id: &str) -> Result<Dis
     }
 }
 
-/// `GET /disputes/:id` — one dispute.
+/// `GET /disputes/:id` — one dispute as a [`DisputeView`]: all
+/// `Dispute` fields (including `evidence_note` + `evidence_files`)
+/// plus the joined transaction/merchant display fields.
 pub async fn get_dispute(
     auth: AuthUser,
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<Json<Dispute>, ApiError> {
-    Ok(Json(load_visible(&state, &auth, &id).await?))
+) -> Result<Json<DisputeView>, ApiError> {
+    let dispute = load_visible(&state, &auth, &id).await?;
+    Ok(Json(dispute_view(&state, dispute).await))
 }
 
 /// Request body for [`add_evidence`].

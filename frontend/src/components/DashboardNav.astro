@@ -15,8 +15,10 @@ interface NavLink { key: string; label: string; href: string; group: string; adm
 const links: NavLink[] = [
   { key: "overview", label: "Overview", href: "/dashboard", group: "Operate" },
   { key: "transactions", label: "Transactions", href: "/dashboard/transactions", group: "Operate" },
+  { key: "disputes", label: "Disputes", href: "/dashboard/disputes", group: "Operate" },
   { key: "payment-links", label: "Payment Links", href: "/dashboard/payment-links", group: "Operate" },
   { key: "invoices", label: "Invoices", href: "/dashboard/invoices", group: "Operate" },
+  { key: "payouts", label: "Payouts", href: "/dashboard/payouts", group: "Operate" },
   { key: "gateways", label: "Gateways", href: "/dashboard/gateways", group: "Configure" },
   { key: "webhooks", label: "Webhooks", href: "/dashboard/webhooks", group: "Configure" },
   { key: "api-keys", label: "API Keys", href: "/dashboard/api-keys", group: "Configure" },

@@ -1,0 +1,706 @@
+---
+// MiraclePay — Dashboard payouts page (Stream C, v0.0.4).
+//
+// Payouts are settlements: the periodic bundles of a merchant's
+// completed payments, minus the platform fee, paid out to the
+// merchant. Data comes from the Wave 18 settlement API:
+//
+//   GET  /api/v1/settlements            -> [ Settlement ] (bare array)
+//   POST /api/v1/settlements/run        -> build settlements for a
+//        merchant + period: { merchant_id, period_start, period_end }
+//        (fee_bps omitted -> platform default fee)
+//   POST /api/v1/settlements/:id/pay    -> { payout_reference };
+//        records that the manual payout was sent. ADMIN-ONLY
+//        since v0.0.4 Stream C (S5): a merchant must not be able
+//        to mark their own settlement paid, so this page does not
+//        call it.
+//
+// Of the write endpoints, only "Run settlement" is exposed here:
+// running a settlement moves no money (it bundles a period's
+// completed payments) and the API resolves the fee for non-admin
+// callers from the merchant's own settings (their fee override
+// when set, else the platform default).
+//
+// A Settlement serialises as:
+//   { id, merchant_id, gross: Money, fee: Money, status,
+//     period_start, period_end, payout_method, payout_reference,
+//     created_at }
+// with Money = { amount_minor, currency }. The list view adds
+// `net` / `net_minor` (gross − fee, null when the gross and fee
+// currencies differ) and `merchant_name`; the table renders the
+// server-provided net. There is no scheduled-at or paid-at
+// timestamp in the API, so the table shows the settlement period
+// and the record's creation date (see the note under the table).
+//
+// The list endpoint accepts merchant_id / status / page / per_page
+// with snake_case status values. The status filter below runs
+// client-side over the fetched window (the 100 most recent
+// settlements for the active merchant) so paging stays instant.
+//
+// The summary cards come from the merchant balance endpoint and
+// the merchant settings — never from summing the fetched window:
+// a page is a window, not the ledger (Stream C spec §6.2).
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import DashboardNav from '../../components/DashboardNav.astro';
+import PageHeader from '../../components/PageHeader.astro';
+import EmptyState from '../../components/EmptyState.astro';
+---
+
+<BaseLayout title="Payouts">
+  <DashboardNav />
+
+  <main id="main" class="container stack">
+    <PageHeader
+      title="Payouts"
+      sub="Settlements for the active merchant — each one bundles a period's completed payments, deducts the platform fee, and pays the net amount out to you."
+    />
+
+    <p id="po-message" class="alert" role="status" hidden></p>
+
+    <section id="no-merchant" class="card empty" hidden>
+      <p><strong>No merchant yet.</strong></p>
+      <p>
+        Payouts live under a merchant, and this account does not have one
+        yet. <a href="/dashboard">Go to the dashboard</a> to create your first
+        merchant.
+      </p>
+    </section>
+
+    <section id="po-panel" class="stack" hidden>
+      <section class="grid" aria-label="Payout summary">
+        <div class="card stat" id="stat-balance-card" hidden>
+          <span class="stat-label">Available balance</span>
+          <span class="stat-value" id="stat-balance">—</span>
+          <span class="stat-hint">Completed payments minus refunds and paid-out settlements</span>
+        </div>
+        <div class="card stat" id="stat-pending-card" hidden>
+          <span class="stat-label">Pending payments</span>
+          <span class="stat-value" id="stat-pending">—</span>
+          <span class="stat-hint">Not yet captured — not yet payable</span>
+        </div>
+        <div class="card stat" id="stat-schedule-card" hidden>
+          <span class="stat-label">Payout schedule</span>
+          <span class="stat-value" id="stat-schedule">—</span>
+          <span class="stat-hint">
+            Schedules are a saved preference — payouts are currently run
+            manually, not automatically.
+            <a href="/dashboard/settings">Edit payout settings</a>
+          </span>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="po-status-heading">
+        <h2 id="po-status-heading">What the statuses mean</h2>
+        <dl class="po-status-grid">
+          <div>
+            <dt>Pending</dt>
+            <dd>The settlement has been calculated and is waiting to be paid out.</dd>
+          </div>
+          <div>
+            <dt>Processing</dt>
+            <dd>The payout has been handed to the bank or wallet provider and is on its way.</dd>
+          </div>
+          <div>
+            <dt>Paid</dt>
+            <dd>The net amount has been paid. The payout reference (bank / wallet transaction ID) is recorded on the settlement.</dd>
+          </div>
+          <div>
+            <dt>On hold</dt>
+            <dd>The payout is held back, for example for a compliance or dispute review. It will not be paid until the hold is released.</dd>
+          </div>
+          <div>
+            <dt>Failed</dt>
+            <dd>The payout failed and needs attention before it can be tried again.</dd>
+          </div>
+        </dl>
+      </section>
+
+      <form id="run-form" class="card" novalidate>
+        <h2 class="po-form-heading">Run a settlement</h2>
+        <p class="muted">
+          Build settlements from this merchant's completed payments in a
+          period. Payments already covered by an earlier settlement are
+          never paid twice. Your configured fee applies (your settings
+          override, or the platform default).
+        </p>
+        <div class="row po-run-row">
+          <div class="po-run-field">
+            <label class="label" for="run-start">Period start</label>
+            <input id="run-start" class="input" type="datetime-local" required />
+          </div>
+          <div class="po-run-field">
+            <label class="label" for="run-end">Period end</label>
+            <input id="run-end" class="input" type="datetime-local" required />
+          </div>
+          <div class="po-run-actions">
+            <button type="submit" id="run-submit" class="btn">Run settlement</button>
+          </div>
+        </div>
+        <p id="run-error" class="alert alert-error" role="alert" hidden></p>
+      </form>
+
+      <form id="po-filters" class="card" novalidate>
+        <div class="row po-filter-row">
+          <div class="po-filter-field">
+            <label class="label" for="filter-status">Status</label>
+            <select id="filter-status" class="input" name="status">
+              <option value="all" selected>All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="processing">Processing</option>
+              <option value="paid">Paid</option>
+              <option value="on_hold">On hold</option>
+              <option value="failed">Failed</option>
+            </select>
+          </div>
+          <div class="po-filter-actions row">
+            <button type="button" id="filter-reset" class="btn btn-ghost">
+              Reset
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <section class="card" id="po-list-card">
+        <p id="po-error" class="alert alert-error" role="alert" hidden></p>
+        <div id="po-error-actions" hidden>
+          <button type="button" id="po-retry" class="btn btn-ghost btn-sm">
+            Retry
+          </button>
+        </div>
+        <div id="po-empty" hidden>
+          <EmptyState
+            title="No payouts yet"
+            body="Run a settlement above for a period with completed payments, and the payout will appear here."
+          />
+        </div>
+        <div id="po-filtered-empty" hidden>
+          <EmptyState title="No payouts match this status." />
+        </div>
+
+        <div class="table-wrap">
+          <table class="table" id="po-table" hidden>
+            <thead>
+              <tr>
+                <th scope="col">ID</th>
+                <th scope="col">Period</th>
+                <th scope="col" class="num">Gross</th>
+                <th scope="col" class="num">Fee</th>
+                <th scope="col" class="num">Net</th>
+                <th scope="col">Status</th>
+                <th scope="col">Payout method</th>
+                <th scope="col">Reference</th>
+                <th scope="col">Created</th>
+              </tr>
+            </thead>
+            <tbody id="po-body"></tbody>
+          </table>
+        </div>
+        <p class="small muted">
+          The API does not expose a scheduled or paid date for a
+          settlement, so this table shows the settlement period and when
+          the record was created. A paid settlement's payout reference is
+          the proof of payment.
+        </p>
+        <p id="po-window-note" class="small muted" hidden></p>
+        <div class="pagination" id="po-pagination" hidden>
+          <button type="button" class="btn btn-ghost btn-sm" id="po-prev">← Previous</button>
+          <span class="small muted" id="po-page-label">Page 1</span>
+          <button type="button" class="btn btn-ghost btn-sm" id="po-next">Next →</button>
+        </div>
+      </section>
+    </section>
+  </main>
+</BaseLayout>
+
+<style>
+  .po-form-heading {
+    margin-top: 0;
+  }
+
+  .po-status-grid {
+    display: grid;
+    gap: var(--space-2) var(--space-4);
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    margin: 0;
+  }
+
+  .po-status-grid dt {
+    font-weight: 700;
+  }
+
+  .po-status-grid dd {
+    color: var(--color-muted);
+    margin: 0;
+  }
+
+  .po-run-row,
+  .po-filter-row {
+    align-items: flex-end;
+  }
+
+  .po-run-field,
+  .po-filter-field {
+    flex: 1 1 200px;
+    min-width: 160px;
+  }
+
+  .po-run-actions,
+  .po-filter-actions {
+    flex: 0 0 auto;
+  }
+
+  .po-panel-error {
+    color: var(--color-danger-text);
+  }
+</style>
+
+<script>
+  import { apiFetch, formatMoney, getToken, listMerchants } from '../../lib/api';
+  import { skeletonAfter, statusBadge } from '../../lib/ui';
+
+  type MoneyLike =
+    | number
+    | { amount_minor?: number; currency?: unknown }
+    | null
+    | undefined;
+
+  type SettlementRecord = {
+    id?: string;
+    merchant_id?: string;
+    gross?: MoneyLike;
+    fee?: MoneyLike;
+    net?: MoneyLike;
+    net_minor?: number | null;
+    status?: string;
+    period_start?: string;
+    period_end?: string;
+    payout_method?: string;
+    payout_reference?: string | null;
+    created_at?: string;
+    [key: string]: unknown;
+  };
+
+  const PAGE_SIZE = 25;
+  const FETCH_WINDOW = 100; // API per_page maximum.
+
+  const messageEl = document.getElementById('po-message');
+  const noMerchantEl = document.getElementById('no-merchant');
+  const panelEl = document.getElementById('po-panel');
+  const listCardEl = document.getElementById('po-list-card');
+  const errorEl = document.getElementById('po-error');
+  const errorActionsEl = document.getElementById('po-error-actions');
+  const retryButton = document.getElementById('po-retry');
+  const emptyEl = document.getElementById('po-empty');
+  const filteredEmptyEl = document.getElementById('po-filtered-empty');
+  const tableEl = document.getElementById('po-table');
+  const bodyEl = document.getElementById('po-body');
+  const windowNoteEl = document.getElementById('po-window-note');
+  const pagerEl = document.getElementById('po-pagination');
+  const pageLabelEl = document.getElementById('po-page-label');
+  const prevButton = document.getElementById('po-prev') as HTMLButtonElement | null;
+  const nextButton = document.getElementById('po-next') as HTMLButtonElement | null;
+  const statusSelect = document.getElementById(
+    'filter-status',
+  ) as HTMLSelectElement | null;
+  const resetButton = document.getElementById('filter-reset');
+  const runForm = document.getElementById('run-form') as HTMLFormElement | null;
+  const runStartInput = document.getElementById(
+    'run-start',
+  ) as HTMLInputElement | null;
+  const runEndInput = document.getElementById('run-end') as HTMLInputElement | null;
+  const runErrorEl = document.getElementById('run-error');
+  const runSubmit = document.getElementById(
+    'run-submit',
+  ) as HTMLButtonElement | null;
+
+  let merchantId: string | null = null;
+  let allSettlements: SettlementRecord[] = [];
+  let page = 0;
+
+  function showMessage(message: string, kind: 'success' | 'error'): void {
+    if (!messageEl) return;
+    messageEl.textContent = message;
+    messageEl.className =
+      kind === 'success' ? 'alert alert-success' : 'alert alert-error';
+    messageEl.hidden = false;
+  }
+
+  function hideMessage(): void {
+    if (!messageEl) return;
+    messageEl.textContent = '';
+    messageEl.hidden = true;
+  }
+
+  function moneyMinor(money: MoneyLike): number {
+    if (money && typeof money === 'object') {
+      return Number(money.amount_minor) || 0;
+    }
+    if (typeof money === 'number') return money;
+    return 0;
+  }
+
+  function moneyCurrency(money: MoneyLike): string | null {
+    if (money && typeof money === 'object') {
+      const raw = money.currency;
+      if (typeof raw === 'string' && raw.trim()) return raw;
+      if (raw && typeof raw === 'object') {
+        const obj = raw as { code?: unknown };
+        if (typeof obj.code === 'string' && obj.code.trim()) return obj.code;
+      }
+    }
+    return null;
+  }
+
+  function settlementCurrency(s: SettlementRecord): string {
+    return moneyCurrency(s.gross) ?? moneyCurrency(s.fee) ?? 'BDT';
+  }
+
+  /** Net payout in minor units, or null when it must not be
+   * shown: the server provides `net_minor` (null when the gross
+   * and fee currencies differ); the local fallback applies the
+   * same currency rule. */
+  function netMinor(s: SettlementRecord): number | null {
+    if (typeof s.net_minor === 'number') return s.net_minor;
+    if (s.net_minor === null) return null;
+    const grossCurrency = moneyCurrency(s.gross);
+    const feeCurrency = moneyCurrency(s.fee);
+    if (grossCurrency && feeCurrency && grossCurrency !== feeCurrency) {
+      return null;
+    }
+    return moneyMinor(s.gross) - moneyMinor(s.fee);
+  }
+
+  function payoutMethodLabel(method: string | undefined): string {
+    if (!method) return '—';
+    if (method === 'manual') return 'Manual payout';
+    return method;
+  }
+
+  function shortId(id: string): string {
+    return id.length > 12 ? `${id.slice(0, 8)}…` : id;
+  }
+
+  function formatDate(value: string | undefined | null): string {
+    if (!value) return '—';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  }
+
+  function formatPeriod(s: SettlementRecord): string {
+    const start = formatDate(s.period_start);
+    const end = formatDate(s.period_end);
+    if (start === '—' && end === '—') return '—';
+    return `${start} → ${end}`;
+  }
+
+  function textCell(text: string, className?: string): HTMLTableCellElement {
+    const cell = document.createElement('td');
+    cell.textContent = text;
+    if (className) cell.className = className;
+    return cell;
+  }
+
+  function setStat(id: string, text: string): void {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  /** Summary cards from the balance endpoint + merchant settings
+   * (Stream C spec §6.2). Totals come from the balance endpoint
+   * only — never from summing the fetched list window. Each card
+   * is omitted silently when its call fails; the list below is
+   * the primary content. */
+  async function loadSummary(): Promise<void> {
+    if (!merchantId) return;
+    try {
+      const balance = await apiFetch<{
+        available_minor?: number;
+        pending_minor?: number;
+        currency?: unknown;
+      }>(`/api/v1/merchants/${encodeURIComponent(merchantId)}/balance`);
+      const currency =
+        typeof balance?.currency === 'string' ? balance.currency : 'BDT';
+      if (typeof balance?.available_minor === 'number') {
+        setStat('stat-balance', formatMoney(balance.available_minor, currency));
+        const card = document.getElementById('stat-balance-card');
+        if (card) card.hidden = false;
+      }
+      if (typeof balance?.pending_minor === 'number') {
+        setStat('stat-pending', formatMoney(balance.pending_minor, currency));
+        const card = document.getElementById('stat-pending-card');
+        if (card) card.hidden = false;
+      }
+    } catch {
+      // Balance unavailable: omit both cards silently.
+    }
+    try {
+      const settings = await apiFetch<{
+        payout_schedule?: string | null;
+        payout_day?: number | null;
+      }>(`/api/v1/merchants/${encodeURIComponent(merchantId)}/settings`);
+      const schedule = settings?.payout_schedule ?? 'manual';
+      let text: string;
+      if (schedule === 'daily') {
+        text = 'Daily (preference)';
+      } else if (schedule === 'weekly') {
+        text = `Weekly, day ${settings?.payout_day ?? '—'} (1 = Monday … 7 = Sunday) (preference)`;
+      } else if (schedule === 'monthly') {
+        text = `Monthly, day ${settings?.payout_day ?? '—'} (preference)`;
+      } else {
+        text = 'Manual — settlements are created when a settlement run is requested';
+      }
+      setStat('stat-schedule', text);
+      const card = document.getElementById('stat-schedule-card');
+      if (card) card.hidden = false;
+    } catch {
+      // Settings unavailable: omit the schedule card silently.
+    }
+  }
+
+  function filteredSettlements(): SettlementRecord[] {
+    const status = statusSelect?.value ?? 'all';
+    if (!status || status === 'all') return allSettlements;
+    return allSettlements.filter(
+      (s) => String(s.status ?? '').toLowerCase() === status,
+    );
+  }
+
+  function renderSettlements(): void {
+    if (!bodyEl || !tableEl || !emptyEl || !filteredEmptyEl) return;
+    bodyEl.replaceChildren();
+
+    const rows = filteredSettlements();
+    const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    if (page > pageCount - 1) page = pageCount - 1;
+    const pageRows = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+    emptyEl.hidden = allSettlements.length !== 0;
+    filteredEmptyEl.hidden = !(allSettlements.length > 0 && rows.length === 0);
+    tableEl.hidden = pageRows.length === 0;
+
+    for (const settlement of pageRows) {
+      const row = document.createElement('tr');
+      const status = String(settlement.status ?? '').toLowerCase();
+      const currency = settlementCurrency(settlement);
+
+      const idCell = textCell(settlement.id ? shortId(settlement.id) : '—', 'mono');
+      if (settlement.id) idCell.title = settlement.id;
+      row.append(idCell);
+
+      row.append(textCell(formatPeriod(settlement)));
+      row.append(textCell(formatMoney(moneyMinor(settlement.gross), currency), 'num'));
+      row.append(textCell(formatMoney(moneyMinor(settlement.fee), currency), 'num'));
+      const net = netMinor(settlement);
+      row.append(textCell(net === null ? '—' : formatMoney(net, currency), 'num'));
+
+      const statusCell = document.createElement('td');
+      statusCell.innerHTML = status ? statusBadge(status) : '—';
+      row.append(statusCell);
+
+      row.append(textCell(payoutMethodLabel(settlement.payout_method)));
+      row.append(textCell(settlement.payout_reference ?? '—', 'mono'));
+      row.append(textCell(formatDate(settlement.created_at)));
+
+      // No merchant action on a settlement row: marking a payout
+      // as paid is admin-only on the API (v0.0.4 Stream C S5 — a
+      // merchant must not be able to record their own payout), so
+      // this page is a read-only view plus the Run form above.
+
+      bodyEl.append(row);
+    }
+
+    if (windowNoteEl) {
+      windowNoteEl.hidden = allSettlements.length < FETCH_WINDOW;
+      windowNoteEl.textContent = `Showing the ${FETCH_WINDOW} most recent settlements for this merchant.`;
+    }
+
+    if (pagerEl && pageLabelEl && prevButton && nextButton) {
+      pagerEl.hidden = rows.length === 0;
+      pageLabelEl.textContent = `Page ${page + 1} of ${pageCount}`;
+      prevButton.disabled = page === 0;
+      nextButton.disabled = page >= pageCount - 1;
+    }
+  }
+
+  async function loadSettlements(): Promise<void> {
+    if (!merchantId) return;
+    hideMessage();
+    if (errorEl) errorEl.hidden = true;
+    if (errorActionsEl) errorActionsEl.hidden = true;
+    const stopSkeleton = listCardEl ? skeletonAfter(listCardEl, 3) : () => {};
+    try {
+      const result = await apiFetch<SettlementRecord[]>(
+        `/api/v1/settlements?merchant_id=${encodeURIComponent(merchantId)}&per_page=${FETCH_WINDOW}`,
+      );
+      allSettlements = Array.isArray(result) ? result : [];
+      renderSettlements();
+    } catch (error) {
+      if (tableEl) tableEl.hidden = true;
+      if (emptyEl) emptyEl.hidden = true;
+      if (filteredEmptyEl) filteredEmptyEl.hidden = true;
+      if (errorEl) {
+        errorEl.textContent =
+          error instanceof Error
+            ? error.message
+            : 'Payouts could not be loaded.';
+        errorEl.hidden = false;
+      }
+      if (errorActionsEl) errorActionsEl.hidden = false;
+    } finally {
+      stopSkeleton();
+    }
+  }
+
+  runForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!merchantId) return;
+    if (runErrorEl) runErrorEl.hidden = true;
+
+    const startRaw = runStartInput?.value ?? '';
+    const endRaw = runEndInput?.value ?? '';
+    const start = startRaw ? new Date(startRaw) : null;
+    const end = endRaw ? new Date(endRaw) : null;
+    if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      if (runErrorEl) {
+        runErrorEl.textContent = 'Please choose both a period start and a period end.';
+        runErrorEl.hidden = false;
+      }
+      return;
+    }
+    if (end <= start) {
+      if (runErrorEl) {
+        runErrorEl.textContent = 'The period end must be after the period start.';
+        runErrorEl.hidden = false;
+      }
+      return;
+    }
+
+    if (runSubmit) runSubmit.disabled = true;
+    try {
+      const result = await apiFetch<{ created?: number }>(
+        '/api/v1/settlements/run',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            merchant_id: merchantId,
+            period_start: start.toISOString(),
+            period_end: end.toISOString(),
+          }),
+        },
+      );
+      const created = typeof result?.created === 'number' ? result.created : 0;
+      showMessage(
+        created > 0
+          ? `Settlement run complete — ${created} new settlement${created === 1 ? '' : 's'} created.`
+          : 'Settlement run complete — no new settlements. Every completed payment in that period was already settled, or there were none.',
+        'success',
+      );
+      page = 0;
+      await loadSettlements();
+    } catch (error) {
+      if (runErrorEl) {
+        runErrorEl.textContent =
+          error instanceof Error ? error.message : 'The settlement run failed.';
+        runErrorEl.hidden = false;
+      }
+    } finally {
+      if (runSubmit) runSubmit.disabled = false;
+    }
+  });
+
+  statusSelect?.addEventListener('change', () => {
+    page = 0;
+    renderSettlements();
+  });
+
+  resetButton?.addEventListener('click', () => {
+    if (statusSelect) statusSelect.value = 'all';
+    page = 0;
+    renderSettlements();
+  });
+
+  prevButton?.addEventListener('click', () => {
+    if (page > 0) {
+      page--;
+      renderSettlements();
+    }
+  });
+  nextButton?.addEventListener('click', () => {
+    page++;
+    renderSettlements();
+  });
+
+  retryButton?.addEventListener('click', () => void loadSettlements());
+
+  /** Merchant id stored under `mp_merchant` (plain id or JSON object). */
+  function storedMerchantId(): string | null {
+    try {
+      const raw = localStorage.getItem('mp_merchant');
+      if (!raw) return null;
+      try {
+        const parsed: unknown = JSON.parse(raw);
+        if (typeof parsed === 'string') return parsed || null;
+        if (parsed && typeof parsed === 'object') {
+          const obj = parsed as { id?: unknown; merchant_id?: unknown };
+          const id = obj.id ?? obj.merchant_id;
+          return typeof id === 'string' && id ? id : null;
+        }
+        return null;
+      } catch {
+        return raw; // Stored as a plain id string.
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  async function resolveMerchant(): Promise<string | null> {
+    const stored = storedMerchantId();
+    if (stored) return stored;
+
+    const result: unknown = await listMerchants();
+    const merchants = Array.isArray(result)
+      ? result
+      : ((result as { merchants?: unknown[] })?.merchants ?? []);
+    const first = merchants[0] as { id?: unknown } | undefined;
+    if (!first || typeof first.id !== 'string' || !first.id) return null;
+
+    try {
+      localStorage.setItem('mp_merchant', first.id);
+    } catch {
+      // Storage unavailable; the fetched id is still usable for this page.
+    }
+    return first.id;
+  }
+
+  async function init(): Promise<void> {
+    // Auth guard: no stored token, no dashboard.
+    if (!getToken()) {
+      window.location.href = '/login';
+      return;
+    }
+
+    try {
+      merchantId = await resolveMerchant();
+    } catch (error) {
+      showMessage(
+        error instanceof Error
+          ? error.message
+          : 'Your merchants could not be loaded.',
+        'error',
+      );
+      return;
+    }
+
+    if (!merchantId) {
+      if (noMerchantEl) noMerchantEl.hidden = false;
+      return;
+    }
+
+    if (panelEl) panelEl.hidden = false;
+    void loadSummary();
+    await loadSettlements();
+  }
+
+  void init();
+</script>

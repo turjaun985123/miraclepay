@@ -1,0 +1,816 @@
+---
+// MiraclePay — Dashboard disputes page (Stream C, v0.0.4).
+//
+// Lists the disputes (chargebacks) opened against the signed-in
+// merchant's transactions and lets the merchant respond with
+// evidence. Data comes from the Wave 38/100 dispute API:
+//
+//   GET  /api/v1/disputes                    -> { items, total }
+//   GET  /api/v1/disputes/:id                -> one dispute + evidence
+//   POST /api/v1/disputes/:id/evidence       -> { note } (1..=2000 chars)
+//   POST /api/v1/disputes/:id/evidence/files -> { name, url } — the
+//        platform stores an HTTPS reference to a hosted file, not
+//        the file bytes, so the form below collects a link, not an
+//        upload.
+//
+// The list endpoint is owner-scoped server-side (a merchant sees
+// only their own merchants' disputes; admins see all) and accepts
+// `page` / `per_page` plus server-side `merchant_id`, `status`,
+// `reason` and `transaction_id` filters. The status and reason
+// filters below still run client-side over the fetched window
+// (the 100 most recent disputes) so paging stays instant.
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import DashboardNav from '../../components/DashboardNav.astro';
+import PageHeader from '../../components/PageHeader.astro';
+import EmptyState from '../../components/EmptyState.astro';
+---
+
+<BaseLayout title="Disputes">
+  <DashboardNav />
+
+  <main id="main" class="container stack">
+    <PageHeader
+      title="Disputes"
+      sub="Payments your customers have challenged through their bank or wallet provider. Open a dispute to review it and add evidence — adding evidence moves it to under review."
+    />
+
+    <p id="dsp-message" class="alert" role="status" hidden></p>
+
+    <section id="dsp-error" class="card" hidden>
+      <p><strong>Disputes could not be loaded.</strong></p>
+      <p id="dsp-error-text" class="muted"></p>
+      <button type="button" id="dsp-retry" class="btn btn-ghost btn-sm">
+        Retry
+      </button>
+    </section>
+
+    <section id="dsp-panel" class="stack" hidden>
+      <form id="dsp-filters" class="card" novalidate>
+        <div class="row dsp-filter-row">
+          <div class="dsp-filter-field">
+            <label class="label" for="filter-status">Status</label>
+            <select id="filter-status" class="input" name="status">
+              <option value="all" selected>All statuses</option>
+              <option value="opened">Opened</option>
+              <option value="under_review">Under review</option>
+              <option value="won">Won</option>
+              <option value="lost">Lost</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+          <div class="dsp-filter-field">
+            <label class="label" for="filter-reason">Reason</label>
+            <select id="filter-reason" class="input" name="reason">
+              <option value="all" selected>All reasons</option>
+              <option value="fraudulent">Fraudulent</option>
+              <option value="product_not_received">Product not received</option>
+              <option value="duplicate">Duplicate charge</option>
+              <option value="credit_not_processed">Credit not processed</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="dsp-filter-actions row">
+            <button type="button" id="filter-reset" class="btn btn-ghost">
+              Reset
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <section class="card" id="dsp-list-card">
+        <div id="dsp-empty" hidden>
+          <EmptyState
+            title="No disputes yet"
+            body="When a customer challenges a payment, the dispute will appear here so you can respond with evidence."
+          />
+        </div>
+        <div id="dsp-filtered-empty" hidden>
+          <EmptyState title="No disputes match these filters." />
+        </div>
+
+        <div class="table-wrap">
+          <table class="table" id="dsp-table" hidden>
+            <thead>
+              <tr>
+                <th scope="col">Opened</th>
+                <th scope="col">ID</th>
+                <th scope="col">Transaction</th>
+                <th scope="col">Merchant</th>
+                <th scope="col" class="num">Amount</th>
+                <th scope="col">Reason</th>
+                <th scope="col">Status</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="dsp-body"></tbody>
+          </table>
+        </div>
+        <p id="dsp-window-note" class="small muted" hidden></p>
+        <div class="pagination" id="dsp-pagination" hidden>
+          <button type="button" class="btn btn-ghost btn-sm" id="dsp-prev">← Previous</button>
+          <span class="small muted" id="dsp-page-label">Page 1</span>
+          <button type="button" class="btn btn-ghost btn-sm" id="dsp-next">Next →</button>
+        </div>
+      </section>
+
+      <section class="card" id="dsp-detail" hidden aria-labelledby="dsp-detail-heading">
+        <div class="row dsp-detail-header">
+          <h2 id="dsp-detail-heading">Dispute detail</h2>
+          <button type="button" id="dsp-detail-close" class="btn btn-ghost btn-sm">
+            Close
+          </button>
+        </div>
+
+        <p id="dsp-detail-loading" class="muted" hidden>Loading dispute…</p>
+        <p id="dsp-detail-error" class="alert alert-error" role="alert" hidden></p>
+
+        <div id="dsp-detail-body" hidden>
+          <dl class="dsp-detail-grid">
+            <div><dt>Dispute ID</dt><dd class="mono" id="dd-id">—</dd></div>
+            <div><dt>Transaction</dt><dd class="mono" id="dd-transaction">—</dd></div>
+            <div><dt>Merchant</dt><dd id="dd-merchant">—</dd></div>
+            <div><dt>Merchant ID</dt><dd class="mono" id="dd-merchant-id">—</dd></div>
+            <div><dt>Amount</dt><dd id="dd-amount">—</dd></div>
+            <div><dt>Reason</dt><dd id="dd-reason">—</dd></div>
+            <div><dt>Status</dt><dd id="dd-status">—</dd></div>
+            <div><dt>Gateway</dt><dd id="dd-gateway">—</dd></div>
+            <div><dt>Provider TrxID</dt><dd class="mono" id="dd-provider-trx">—</dd></div>
+            <div><dt>Reference</dt><dd class="mono" id="dd-reference">—</dd></div>
+            <div><dt>Customer email</dt><dd id="dd-customer-email">—</dd></div>
+            <div><dt>Customer phone</dt><dd id="dd-customer-phone">—</dd></div>
+            <div><dt>Opened</dt><dd id="dd-opened">—</dd></div>
+            <div><dt>Decided</dt><dd id="dd-decided">—</dd></div>
+          </dl>
+
+          <h3>Outcome note</h3>
+          <p id="dd-outcome" class="muted">—</p>
+
+          <h3>Your evidence note</h3>
+          <p id="dd-evidence-note" class="muted">No evidence note yet.</p>
+
+          <h3>Evidence files</h3>
+          <p id="dd-evidence-files-empty" class="muted">No evidence files attached yet.</p>
+          <ul id="dd-evidence-files" class="dsp-file-list"></ul>
+
+          <div id="dsp-evidence-forms" class="stack">
+            <form id="evidence-note-form" class="stack" novalidate>
+              <div>
+                <label class="label" for="evidence-note">Evidence note</label>
+                <textarea
+                  id="evidence-note"
+                  class="input"
+                  rows="4"
+                  maxlength="2000"
+                  placeholder="Explain why this payment is legitimate — delivery proof, customer messages, refund already issued…"
+                ></textarea>
+                <p class="field-hint">Up to 2,000 characters. Submitting evidence moves an opened dispute to under review. Saving replaces your previous note — there is no history, so keep anything you still need before you save.</p>
+              </div>
+              <p id="evidence-note-error" class="alert alert-error" role="alert" hidden></p>
+              <div>
+                <button type="submit" id="evidence-note-submit" class="btn btn-sm">
+                  Submit evidence note
+                </button>
+              </div>
+            </form>
+
+            <form id="evidence-file-form" class="stack" novalidate>
+              <div class="row dsp-file-form-row">
+                <div class="dsp-file-field">
+                  <label class="label" for="evidence-file-name">File name</label>
+                  <input
+                    id="evidence-file-name"
+                    class="input"
+                    type="text"
+                    maxlength="200"
+                    placeholder="e.g. delivery-receipt.pdf"
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="dsp-file-field">
+                  <label class="label" for="evidence-file-url">File link (HTTPS)</label>
+                  <input
+                    id="evidence-file-url"
+                    class="input"
+                    type="url"
+                    placeholder="https://…"
+                    autocomplete="off"
+                  />
+                </div>
+              </div>
+              <p class="field-hint">
+                MiraclePay stores a link to the hosted file, not the file
+                itself — upload the file to your own storage first, then
+                paste its HTTPS link here. A file link can't be removed
+                once attached, so check it before submitting.
+              </p>
+              <p id="evidence-file-error" class="alert alert-error" role="alert" hidden></p>
+              <div>
+                <button type="submit" id="evidence-file-submit" class="btn btn-sm">
+                  Attach evidence file
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <p id="dsp-evidence-closed" class="muted" hidden>
+            This dispute has been decided, so evidence can no longer be added.
+          </p>
+        </div>
+      </section>
+    </section>
+  </main>
+</BaseLayout>
+
+<style>
+  .dsp-filter-row {
+    align-items: flex-end;
+  }
+
+  .dsp-filter-field {
+    flex: 1 1 200px;
+    min-width: 160px;
+  }
+
+  .dsp-filter-actions {
+    flex: 0 0 auto;
+  }
+
+  .dsp-detail-header {
+    justify-content: space-between;
+  }
+
+  .dsp-detail-header h2 {
+    margin: 0;
+  }
+
+  .dsp-detail-grid {
+    display: grid;
+    gap: var(--space-2) var(--space-4);
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    margin: 0 0 var(--space-4);
+  }
+
+  .dsp-detail-grid dt {
+    color: var(--color-muted);
+    font-size: var(--text-sm);
+    font-weight: 600;
+  }
+
+  .dsp-detail-grid dd {
+    margin: 0;
+  }
+
+  .dsp-file-list {
+    margin: 0 0 var(--space-4);
+    padding-left: var(--space-5);
+  }
+
+  .dsp-file-form-row {
+    align-items: flex-end;
+  }
+
+  .dsp-file-field {
+    flex: 1 1 200px;
+    min-width: 160px;
+  }
+</style>
+
+<script>
+  import { apiFetch, formatMoney, getToken } from '../../lib/api';
+  import { skeletonAfter, statusBadge } from '../../lib/ui';
+
+  // Serialised shape of miraclepay_domain::dispute::Dispute. `amount`
+  // is a Money object: { amount_minor, currency } with currency as a
+  // plain code string ("BDT").
+  type EvidenceFile = {
+    name?: string;
+    url?: string;
+    added_at?: string;
+    [key: string]: unknown;
+  };
+
+  type DisputeRecord = {
+    id?: string;
+    merchant_id?: string;
+    merchant_name?: string | null;
+    transaction_id?: string;
+    transaction_reference?: string | null;
+    gateway?: string | null;
+    provider_trx_id?: string | null;
+    customer_email?: string | null;
+    customer_phone?: string | null;
+    amount?: number | { amount_minor?: number; currency?: unknown } | null;
+    amount_minor?: number;
+    currency?: unknown;
+    reason?: string;
+    status?: string;
+    evidence_note?: string | null;
+    evidence_files?: EvidenceFile[];
+    outcome_note?: string | null;
+    opened_at?: string;
+    decided_at?: string | null;
+    [key: string]: unknown;
+  };
+
+  const REASON_LABELS: Record<string, string> = {
+    fraudulent: 'Fraudulent',
+    product_not_received: 'Product not received',
+    duplicate: 'Duplicate charge',
+    credit_not_processed: 'Credit not processed',
+    other: 'Other',
+  };
+
+  const TERMINAL = new Set(['won', 'lost', 'closed']);
+  const PAGE_SIZE = 25;
+  const FETCH_WINDOW = 100; // API per_page maximum.
+
+  const messageEl = document.getElementById('dsp-message');
+  const errorEl = document.getElementById('dsp-error');
+  const errorTextEl = document.getElementById('dsp-error-text');
+  const retryButton = document.getElementById('dsp-retry');
+  const panelEl = document.getElementById('dsp-panel');
+  const listCardEl = document.getElementById('dsp-list-card');
+  const statusSelect = document.getElementById(
+    'filter-status',
+  ) as HTMLSelectElement | null;
+  const reasonSelect = document.getElementById(
+    'filter-reason',
+  ) as HTMLSelectElement | null;
+  const resetButton = document.getElementById('filter-reset');
+  const emptyEl = document.getElementById('dsp-empty');
+  const filteredEmptyEl = document.getElementById('dsp-filtered-empty');
+  const tableEl = document.getElementById('dsp-table');
+  const bodyEl = document.getElementById('dsp-body');
+  const windowNoteEl = document.getElementById('dsp-window-note');
+  const pagerEl = document.getElementById('dsp-pagination');
+  const pageLabelEl = document.getElementById('dsp-page-label');
+  const prevButton = document.getElementById('dsp-prev') as HTMLButtonElement | null;
+  const nextButton = document.getElementById('dsp-next') as HTMLButtonElement | null;
+
+  const detailEl = document.getElementById('dsp-detail');
+  const detailLoadingEl = document.getElementById('dsp-detail-loading');
+  const detailErrorEl = document.getElementById('dsp-detail-error');
+  const detailBodyEl = document.getElementById('dsp-detail-body');
+  const detailCloseButton = document.getElementById('dsp-detail-close');
+  const evidenceFormsEl = document.getElementById('dsp-evidence-forms');
+  const evidenceClosedEl = document.getElementById('dsp-evidence-closed');
+  const noteForm = document.getElementById(
+    'evidence-note-form',
+  ) as HTMLFormElement | null;
+  const noteInput = document.getElementById(
+    'evidence-note',
+  ) as HTMLTextAreaElement | null;
+  const noteErrorEl = document.getElementById('evidence-note-error');
+  const noteSubmit = document.getElementById(
+    'evidence-note-submit',
+  ) as HTMLButtonElement | null;
+  const fileForm = document.getElementById(
+    'evidence-file-form',
+  ) as HTMLFormElement | null;
+  const fileNameInput = document.getElementById(
+    'evidence-file-name',
+  ) as HTMLInputElement | null;
+  const fileUrlInput = document.getElementById(
+    'evidence-file-url',
+  ) as HTMLInputElement | null;
+  const fileErrorEl = document.getElementById('evidence-file-error');
+  const fileSubmit = document.getElementById(
+    'evidence-file-submit',
+  ) as HTMLButtonElement | null;
+
+  let allDisputes: DisputeRecord[] = [];
+  let serverTotal = 0;
+  let page = 0;
+  let selectedId: string | null = null;
+
+  function showMessage(message: string, kind: 'success' | 'error'): void {
+    if (!messageEl) return;
+    messageEl.textContent = message;
+    messageEl.className =
+      kind === 'success' ? 'alert alert-success' : 'alert alert-error';
+    messageEl.hidden = false;
+  }
+
+  function hideMessage(): void {
+    if (!messageEl) return;
+    messageEl.textContent = '';
+    messageEl.hidden = true;
+  }
+
+  function currencyCode(d: DisputeRecord): string {
+    const raw =
+      (d.amount && typeof d.amount === 'object'
+        ? d.amount.currency
+        : undefined) ?? d.currency;
+    if (typeof raw === 'string' && raw.trim()) return raw;
+    if (raw && typeof raw === 'object') {
+      const obj = raw as { code?: unknown };
+      if (typeof obj.code === 'string' && obj.code.trim()) return obj.code;
+    }
+    return 'BDT';
+  }
+
+  function amountMinor(d: DisputeRecord): number {
+    if (d.amount && typeof d.amount === 'object') {
+      return Number(d.amount.amount_minor) || 0;
+    }
+    if (typeof d.amount === 'number') return d.amount;
+    return Number(d.amount_minor) || 0;
+  }
+
+  function shortId(id: string): string {
+    return id.length > 12 ? `${id.slice(0, 8)}…` : id;
+  }
+
+  function formatDate(value: string | undefined | null): string {
+    if (!value) return '—';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  }
+
+  function reasonLabel(reason: string | undefined): string {
+    if (!reason) return '—';
+    return REASON_LABELS[reason] ?? reason.replaceAll('_', ' ');
+  }
+
+  function textCell(text: string, className?: string): HTMLTableCellElement {
+    const cell = document.createElement('td');
+    cell.textContent = text;
+    if (className) cell.className = className;
+    return cell;
+  }
+
+  function filteredDisputes(): DisputeRecord[] {
+    const status = statusSelect?.value ?? 'all';
+    const reason = reasonSelect?.value ?? 'all';
+    return allDisputes.filter((d) => {
+      if (
+        status &&
+        status !== 'all' &&
+        String(d.status ?? '').toLowerCase() !== status
+      ) {
+        return false;
+      }
+      if (
+        reason &&
+        reason !== 'all' &&
+        String(d.reason ?? '').toLowerCase() !== reason
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  function renderList(): void {
+    if (!bodyEl || !tableEl || !emptyEl || !filteredEmptyEl) return;
+    bodyEl.replaceChildren();
+
+    const rows = filteredDisputes();
+    const pageRows = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+    emptyEl.hidden = allDisputes.length !== 0;
+    filteredEmptyEl.hidden = !(allDisputes.length > 0 && rows.length === 0);
+    tableEl.hidden = pageRows.length === 0;
+
+    for (const dispute of pageRows) {
+      const row = document.createElement('tr');
+      const status = String(dispute.status ?? '').toLowerCase();
+
+      row.append(textCell(formatDate(dispute.opened_at)));
+
+      const idCell = textCell(dispute.id ? shortId(dispute.id) : '—', 'mono');
+      if (dispute.id) idCell.title = dispute.id;
+      row.append(idCell);
+
+      const txCell = textCell(
+        dispute.transaction_id ? shortId(dispute.transaction_id) : '—',
+        'mono',
+      );
+      if (dispute.transaction_id) txCell.title = dispute.transaction_id;
+      row.append(txCell);
+
+      row.append(textCell(dispute.merchant_name?.trim() || '—'));
+
+      row.append(
+        textCell(
+          formatMoney(amountMinor(dispute), currencyCode(dispute)),
+          'num',
+        ),
+      );
+      row.append(textCell(reasonLabel(dispute.reason)));
+
+      const statusCell = document.createElement('td');
+      statusCell.innerHTML = status ? statusBadge(status) : '—';
+      row.append(statusCell);
+
+      const actionsCell = document.createElement('td');
+      if (dispute.id) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-ghost btn-sm';
+        button.textContent =
+          selectedId === dispute.id ? 'Viewing' : 'View & respond';
+        button.disabled = selectedId === dispute.id;
+        const id = dispute.id;
+        button.addEventListener('click', () => void openDetail(id));
+        actionsCell.append(button);
+      } else {
+        actionsCell.textContent = '—';
+      }
+      row.append(actionsCell);
+
+      bodyEl.append(row);
+    }
+
+    if (windowNoteEl) {
+      windowNoteEl.hidden = serverTotal <= allDisputes.length;
+      windowNoteEl.textContent = `Showing the ${allDisputes.length} most recent of ${serverTotal} disputes.`;
+    }
+
+    if (pagerEl && pageLabelEl && prevButton && nextButton) {
+      const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+      if (page > pageCount - 1) page = pageCount - 1;
+      pagerEl.hidden = rows.length === 0;
+      pageLabelEl.textContent = `Page ${page + 1} of ${pageCount}`;
+      prevButton.disabled = page === 0;
+      nextButton.disabled = page >= pageCount - 1;
+    }
+  }
+
+  async function loadDisputes(): Promise<void> {
+    hideMessage();
+    if (errorEl) errorEl.hidden = true;
+    if (panelEl) panelEl.hidden = false;
+    const stopSkeleton = listCardEl ? skeletonAfter(listCardEl, 3) : () => {};
+    try {
+      const result = await apiFetch<{ items?: DisputeRecord[]; total?: number }>(
+        `/api/v1/disputes?page=1&per_page=${FETCH_WINDOW}`,
+      );
+      allDisputes = Array.isArray(result?.items) ? result.items : [];
+      serverTotal =
+        typeof result?.total === 'number' ? result.total : allDisputes.length;
+      page = 0;
+      renderList();
+    } catch (error) {
+      if (panelEl) panelEl.hidden = true;
+      if (errorTextEl) {
+        errorTextEl.textContent =
+          error instanceof Error
+            ? error.message
+            : 'Disputes could not be loaded.';
+      }
+      if (errorEl) errorEl.hidden = false;
+    } finally {
+      stopSkeleton();
+    }
+  }
+
+  function setDetailText(id: string, text: string): void {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  function renderDetail(dispute: DisputeRecord): void {
+    if (detailBodyEl) detailBodyEl.hidden = false;
+    setDetailText('dd-id', dispute.id ?? '—');
+    setDetailText('dd-transaction', dispute.transaction_id ?? '—');
+    setDetailText('dd-merchant', dispute.merchant_name?.trim() || '—');
+    setDetailText('dd-merchant-id', dispute.merchant_id ?? '—');
+    setDetailText('dd-gateway', dispute.gateway?.trim() || '—');
+    setDetailText('dd-provider-trx', dispute.provider_trx_id?.trim() || '—');
+    setDetailText('dd-reference', dispute.transaction_reference?.trim() || '—');
+    setDetailText('dd-customer-email', dispute.customer_email?.trim() || '—');
+    setDetailText('dd-customer-phone', dispute.customer_phone?.trim() || '—');
+    setDetailText(
+      'dd-amount',
+      formatMoney(amountMinor(dispute), currencyCode(dispute)),
+    );
+    setDetailText('dd-reason', reasonLabel(dispute.reason));
+    const statusEl = document.getElementById('dd-status');
+    if (statusEl) {
+      const status = String(dispute.status ?? '').toLowerCase();
+      statusEl.innerHTML = status ? statusBadge(status) : '—';
+    }
+    setDetailText('dd-opened', formatDate(dispute.opened_at));
+    setDetailText('dd-decided', formatDate(dispute.decided_at));
+
+    const outcomeEl = document.getElementById('dd-outcome');
+    if (outcomeEl) {
+      outcomeEl.textContent = dispute.outcome_note?.trim()
+        ? dispute.outcome_note
+        : 'Not decided yet.';
+    }
+
+    const noteEl = document.getElementById('dd-evidence-note');
+    if (noteEl) {
+      noteEl.textContent = dispute.evidence_note?.trim()
+        ? dispute.evidence_note
+        : 'No evidence note yet.';
+    }
+
+    const filesEmptyEl = document.getElementById('dd-evidence-files-empty');
+    const filesEl = document.getElementById('dd-evidence-files');
+    if (filesEl) {
+      filesEl.replaceChildren();
+      const files = Array.isArray(dispute.evidence_files)
+        ? dispute.evidence_files
+        : [];
+      if (filesEmptyEl) filesEmptyEl.hidden = files.length > 0;
+      for (const file of files) {
+        const item = document.createElement('li');
+        // Render-time defence in depth: only https:// URLs become
+        // links; anything else renders as plain text (the write API
+        // enforces https too, but stored data is never trusted).
+        if (file.url && file.url.startsWith('https://')) {
+          const link = document.createElement('a');
+          link.href = file.url;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = file.name || file.url;
+          item.append(link);
+        } else {
+          item.textContent = file.name ?? file.url ?? 'Evidence file';
+        }
+        if (file.added_at) {
+          const when = document.createElement('span');
+          when.className = 'small muted';
+          when.textContent = ` — added ${formatDate(file.added_at)}`;
+          item.append(when);
+        }
+        filesEl.append(item);
+      }
+    }
+
+    // Prefill the note form with the current note: saving
+    // replaces it (there is no history), so the merchant must see
+    // what they are about to overwrite.
+    if (noteInput) noteInput.value = dispute.evidence_note ?? '';
+
+    const terminal = TERMINAL.has(String(dispute.status ?? '').toLowerCase());
+    if (evidenceFormsEl) evidenceFormsEl.hidden = terminal;
+    if (evidenceClosedEl) evidenceClosedEl.hidden = !terminal;
+  }
+
+  async function openDetail(id: string): Promise<void> {
+    selectedId = id;
+    renderList();
+    if (detailEl) detailEl.hidden = false;
+    if (detailLoadingEl) detailLoadingEl.hidden = false;
+    if (detailBodyEl) detailBodyEl.hidden = true;
+    if (detailErrorEl) detailErrorEl.hidden = true;
+    detailEl?.scrollIntoView({ block: 'start' });
+    try {
+      const dispute = await apiFetch<DisputeRecord>(
+        `/api/v1/disputes/${encodeURIComponent(id)}`,
+      );
+      renderDetail(dispute);
+    } catch (error) {
+      if (detailErrorEl) {
+        detailErrorEl.textContent =
+          error instanceof Error
+            ? error.message
+            : 'This dispute could not be loaded.';
+        detailErrorEl.hidden = false;
+      }
+    } finally {
+      if (detailLoadingEl) detailLoadingEl.hidden = true;
+    }
+  }
+
+  function closeDetail(): void {
+    selectedId = null;
+    if (detailEl) detailEl.hidden = true;
+    renderList();
+  }
+
+  /** After evidence is accepted, refresh the detail + list (the
+   * dispute may have moved Opened → UnderReview). */
+  async function refreshAfterEvidence(updated: DisputeRecord): Promise<void> {
+    renderDetail(updated);
+    await loadDisputes();
+    if (selectedId) {
+      // Keep the detail selection highlighted after the list reload.
+      renderList();
+    }
+  }
+
+  noteForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!selectedId) return;
+    if (noteErrorEl) noteErrorEl.hidden = true;
+    const note = noteInput?.value.trim() ?? '';
+    if (!note) {
+      if (noteErrorEl) {
+        noteErrorEl.textContent = 'Please write an evidence note first.';
+        noteErrorEl.hidden = false;
+      }
+      return;
+    }
+    if (noteSubmit) noteSubmit.disabled = true;
+    try {
+      const updated = await apiFetch<DisputeRecord>(
+        `/api/v1/disputes/${encodeURIComponent(selectedId)}/evidence`,
+        { method: 'POST', body: JSON.stringify({ note }) },
+      );
+      if (noteInput) noteInput.value = '';
+      showMessage('Evidence note submitted.', 'success');
+      await refreshAfterEvidence(updated);
+    } catch (error) {
+      if (noteErrorEl) {
+        noteErrorEl.textContent =
+          error instanceof Error
+            ? error.message
+            : 'The evidence note could not be submitted.';
+        noteErrorEl.hidden = false;
+      }
+    } finally {
+      if (noteSubmit) noteSubmit.disabled = false;
+    }
+  });
+
+  fileForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!selectedId) return;
+    if (fileErrorEl) fileErrorEl.hidden = true;
+    const name = fileNameInput?.value.trim() ?? '';
+    const url = fileUrlInput?.value.trim() ?? '';
+    if (!name || !url) {
+      if (fileErrorEl) {
+        fileErrorEl.textContent = 'Please give the file a name and its HTTPS link.';
+        fileErrorEl.hidden = false;
+      }
+      return;
+    }
+    if (!url.startsWith('https://')) {
+      if (fileErrorEl) {
+        fileErrorEl.textContent = 'The file link must start with https://.';
+        fileErrorEl.hidden = false;
+      }
+      return;
+    }
+    if (fileSubmit) fileSubmit.disabled = true;
+    try {
+      const updated = await apiFetch<DisputeRecord>(
+        `/api/v1/disputes/${encodeURIComponent(selectedId)}/evidence/files`,
+        { method: 'POST', body: JSON.stringify({ name, url }) },
+      );
+      if (fileNameInput) fileNameInput.value = '';
+      if (fileUrlInput) fileUrlInput.value = '';
+      showMessage('Evidence file attached.', 'success');
+      await refreshAfterEvidence(updated);
+    } catch (error) {
+      if (fileErrorEl) {
+        fileErrorEl.textContent =
+          error instanceof Error
+            ? error.message
+            : 'The evidence file could not be attached.';
+        fileErrorEl.hidden = false;
+      }
+    } finally {
+      if (fileSubmit) fileSubmit.disabled = false;
+    }
+  });
+
+  statusSelect?.addEventListener('change', () => {
+    page = 0;
+    renderList();
+  });
+
+  reasonSelect?.addEventListener('change', () => {
+    page = 0;
+    renderList();
+  });
+
+  resetButton?.addEventListener('click', () => {
+    if (statusSelect) statusSelect.value = 'all';
+    if (reasonSelect) reasonSelect.value = 'all';
+    page = 0;
+    renderList();
+  });
+
+  prevButton?.addEventListener('click', () => {
+    if (page > 0) {
+      page--;
+      renderList();
+    }
+  });
+  nextButton?.addEventListener('click', () => {
+    page++;
+    renderList();
+  });
+
+  retryButton?.addEventListener('click', () => void loadDisputes());
+  detailCloseButton?.addEventListener('click', closeDetail);
+
+  async function init(): Promise<void> {
+    // Auth guard: no stored token, no dashboard.
+    if (!getToken()) {
+      window.location.href = '/login';
+      return;
+    }
+    await loadDisputes();
+  }
+
+  void init();
+</script>

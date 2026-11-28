@@ -258,6 +258,7 @@ pub fn build_router(state: AppState) -> Router {
         // Settlements (Wave 18)
         // ---------------------------------------------------------
         .route("/api/v1/settlements", get(settlements::list_settlements))
+        .route("/api/v1/settlements/:id", get(settlements::get_settlement))
         .route(
             "/api/v1/settlements/run",
             post(settlements::run_settlements),

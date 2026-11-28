@@ -39,6 +39,12 @@ const BADGES: Record<string, { cls: string; label: string }> = {
   deadletter: { cls: "badge-failed", label: "Dead letter" },
   voided: { cls: "badge", label: "Void" },
   resolved: { cls: "badge-success", label: "Resolved" },
+  opened: { cls: "badge-pending", label: "Opened" },
+  under_review: { cls: "badge-info", label: "Under review" },
+  won: { cls: "badge-success", label: "Won" },
+  lost: { cls: "badge-failed", label: "Lost" },
+  closed: { cls: "badge", label: "Closed" },
+  on_hold: { cls: "badge-pending", label: "On hold" },
 };
 
 export function statusBadge(status: string): string {
